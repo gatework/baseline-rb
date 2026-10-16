@@ -253,5 +253,9 @@ RSpec.describe Baseline::Evaluator, "partial configuration evidence" do
     expect(runner.call(configuration: numbered, platform: "cisco_ios", complete: true).findings.first.status).to eq(:pass)
     damaged = numbered.sub("deny 198.51.100.0 0.0.0.255", "deny 198.51.100.--More--")
     expect(runner.call(configuration: damaged, platform: "cisco_ios", complete: true).findings.first.status).to eq(:unknown)
+    [ "access-list 10--More--", "access-list 1--More--", "access-list --More--" ].each do |header|
+      damaged = numbered.sub("access-list 10 deny 198.51.100.0 0.0.0.255", header)
+      expect(runner.call(configuration: damaged, platform: "cisco_ios", complete: true).findings.first.status).to eq(:unknown)
+    end
   end
 end

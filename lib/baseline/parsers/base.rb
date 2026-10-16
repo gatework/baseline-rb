@@ -147,13 +147,23 @@ module Baseline
           line = issue[:line]
           next false unless line
 
-          source ? source.line_range.cover?(line) : /\Aaccess-list\s+#{Regexp.escape(name)}(?:\s|\z)/.match?(cursor.lines.fetch(line - 1).text)
+          source ? source.line_range.cover?(line) : damaged_numbered_acl?(cursor.lines.fetch(line - 1).text, name)
         end
         acl = Acl.new(name: name, line: entries.first&.line, rules: parsed.compact,
           supported: supported && !damaged && parsed.none?(&:nil?))
         if @facts.register_acl(acl, aliases: aliases, lines: entries.map(&:line)).any?
           entries.each { |entry| cursor.mark(entry.index, state: :unsupported) }
         end
+      end
+
+      # 名称被分页截断时，所有匹配其前缀的编号 ACL 都不能声明完整。
+      def damaged_numbered_acl?(text, name)
+        prefix = text.split(/--\s*More\s*--|\e\[/i, 2).first
+        match = /\Aaccess-list(?:\s+(\S*))?(.*)\z/.match(prefix)
+        return false unless match
+
+        identity, suffix = match.captures
+        identity.to_s.empty? || (suffix.empty? ? name.start_with?(identity) : name == identity)
       end
 
       # 归一化 ACL 来源地址；不推测不支持语法的含义。
