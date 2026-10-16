@@ -1,0 +1,47 @@
+# 参考基线：组织批准的服务器、网段和源接口缺失时保持未知。
+# expected 可使用 by_host > by_model > by_site > by_role > by_vendor > default。
+# 此策略仅评估证据，不生成或执行设备配置。
+version: 1
+checks:
+  snmp.enabled: {expected: true}
+  snmp.versions: {expected: [v3], severity: high}
+  snmp.read_only:
+    expected: false
+    severity: high
+    applies_to: {facts: {snmp.enabled: true}}
+  snmp.auth_priv:
+    expected: true
+    severity: high
+    applies_to: {facts: {snmp.enabled: true}}
+  snmp.acl_bound: {expected: true, severity: high}
+  snmp.acl_restricted: {expected: true, severity: high}
+  snmp.sources: {expected: null, severity: high}
+  ntp.minimum_servers: {expected: 2}
+  ntp.servers: {expected: null}
+  ntp.authentication: {expected: true}
+  ntp.source: {expected: null}
+  syslog.minimum_servers: {expected: 2}
+  syslog.servers: {expected: null}
+  syslog.source: {expected: null}
+  ssh.enabled: {expected: true, severity: high}
+  ssh.versions: {expected: ['2'], severity: high}
+  ssh.vty_ssh_only: {expected: true, severity: high}
+  ssh.vty_aaa: {expected: true, severity: high}
+  management.acl_bound: {expected: true, severity: high}
+  management.acl_restricted: {expected: true, severity: high}
+  management.sources: {expected: null, severity: high}
+  services.disabled: {expected: [telnet, http, ftp, tftp], severity: high}
+  credentials.storage:
+    expected: true
+    severity: high
+    applies_to: {facts: {credentials.present: true}}
+  credentials.strength:
+    expected: {min_length: 12, min_classes: 3}
+    severity: high
+    applies_to: {facts: {credentials.present: true}}
+  tacacs.minimum_servers: {expected: 2}
+  tacacs.servers: {expected: null}
+  tacacs.login: {expected: true, severity: high}
+  tacacs.authorization: {expected: true}
+  tacacs.accounting: {expected: true}
+  tacacs.keys: {expected: true, severity: high}
