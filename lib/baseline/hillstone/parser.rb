@@ -1,30 +1,32 @@
 # frozen_string_literal: true
 
+require_relative "../parser"
+
 require "shellwords"
-require_relative "../hillstone_document"
+require_relative "document"
 
 module Baseline
-  module Parsers
+  module Hillstone
     # StoneOS 管理端点与原生主机允许列表不同于路由器 VTY。
-    class Hillstone < Base
+    class Parser < Baseline::Parser
       MANAGEMENT_SERVICES = %w[ssh telnet http https ftp snmp].freeze
       HOST_PROTOCOLS = %w[ssh telnet http https netconf any].freeze
 
       private
 
       # 选择适合当前平台语法的文档词法解析器。
-      def configuration_document_class = HillstoneDocument
+      def document_class = Document
 
-      # 解析管理访问暴露检查使用的有序 ACL 定义。
-      def access_lists
+      # 初始化当前配置的词元缓存，供各领域解析阶段共享。
+      def prepare_configuration
         @tokens = {}
       end
 
       # 已配置主机 ACL 本身不能证明管理监听服务已启用。
       def management
-        interfaces = sections(/\Ainterface\s+/)
+        interfaces = matching_blocks(/\Ainterface\s+/)
         states = interfaces.map do |section|
-          matching(/\A(?:no )?manage\s+/, section.children).each_with_object({}) do |entry, values|
+          matching_blocks(/\A(?:no )?manage\s+/, section.children).each_with_object({}) do |entry, values|
             parts = tokens(entry)
             negative = parts.first == "no"
             parts = parts.drop(1) if negative
@@ -48,7 +50,7 @@ module Baseline
 
       # 信任主机可使用 CIDR、掩码、区间或 any；跨协议按保守并集处理。
       def management_sources
-        entries = matching(/\A(?:no )?admin host\b/)
+        entries = matching_blocks(/\A(?:no )?admin host\b/)
         sources = entries.flat_map do |entry|
           parts = tokens(entry)
           raise ArgumentError unless parts.take(2) == %w[admin host] && HOST_PROTOCOLS.include?(parts.last)
@@ -76,7 +78,7 @@ module Baseline
 
       # 提取时间同步服务器及相关认证配置。
       def ntp
-        entries = matching(/\Antp server\b/)
+        entries = matching_blocks(/\Antp server\b/)
         sources = []
         servers = entries.filter_map do |entry|
           parts = tokens(entry)
@@ -93,14 +95,14 @@ module Baseline
           analyze(entry) { parts[2] }
         end
         record("ntp.servers", servers.uniq, entries)
-        record("ntp.authentication", state(/\Antp authentication\z/, /\Ano ntp authentication\z/))
+        record("ntp.authentication", configured_state(/\Antp authentication\z/, /\Ano ntp authentication\z/))
         record("ntp.source", sources.first) if sources.any? && sources.first && sources.uniq.one?
-        unknown("ntp", matching(/\Ano ntp server\b/)) if matching(/\Ano ntp server\b/).any?
+        unknown("ntp", matching_blocks(/\Ano ntp server\b/)) if matching_blocks(/\Ano ntp server\b/).any?
       end
 
       # 同一目标可供多个日志类别使用，统计时只计一次。
       def syslog
-        entries = matching(/\Alogging syslog\b/)
+        entries = matching_blocks(/\Alogging syslog\b/)
         sources = []
         servers = entries.filter_map do |entry|
           parts = tokens(entry)
@@ -123,13 +125,13 @@ module Baseline
         end
         record("syslog.servers", servers.uniq, entries)
         record("syslog.source", sources.first) if sources.any? && sources.first && sources.uniq.one?
-        unknown("syslog", matching(/\Ano logging syslog\b/)) if matching(/\Ano logging syslog\b/).any?
+        unknown("syslog", matching_blocks(/\Ano logging syslog\b/)) if matching_blocks(/\Ano logging syslog\b/).any?
       end
 
       # 轮询主机权限独立于出站 Trap 接收端。
       def snmp
-        record("snmp.enabled", state(/\Asnmp-server manager\z/, /\Ano snmp-server manager\z/))
-        entries = matching(/\Asnmp-server host\b/)
+        record("snmp.enabled", configured_state(/\Asnmp-server manager\z/, /\Ano snmp-server manager\z/))
+        entries = matching_blocks(/\Asnmp-server host\b/)
         versions, sources, communities = [], [], []
         entries.each do |entry|
           parts = tokens(entry)
@@ -139,7 +141,7 @@ module Baseline
           settings = parts.drop(offset + 1)
           if %w[1 2c].include?(settings.first) && settings[1] == "community" && !settings[2].to_s.empty? &&
               (settings.size == 3 || settings.size == 4 && %w[ro rw].include?(settings[3]))
-            credential("snmp-community", "snmp", secret_format(settings[2]), settings[2], entry)
+            record_credential("snmp-community", "snmp", secret_format(settings[2]), settings[2], entry)
             versions << (settings.first == "1" ? "v1" : "v2c")
             communities << { write: settings[3] == "rw", line: entry.line }
             sources.concat(networks)
@@ -154,7 +156,7 @@ module Baseline
           unknown_snmp_access([ entry ], code: :unsupported_snmp_host)
         end
         record("snmp.versions", versions.uniq, entries)
-        unsupported = matching(/\A(?:snmp-server (?:user|group)\b|no snmp-server (?:host|user|group)\b)/)
+        unsupported = matching_blocks(/\A(?:snmp-server (?:user|group)\b|no snmp-server (?:host|user|group)\b)/)
         unknown_snmp_access(unsupported, code: :unsupported_snmp_security) if unsupported.any? || versions.include?("v3")
         @facts.snmp(communities: communities, users: [])
         @facts.direct_acl(fact: "snmp.acl", sources: sources, bound: true, lines: entries.map(&:line)) if entries.any?
@@ -162,13 +164,13 @@ module Baseline
 
       # 分别记录 TACACS 定义与管理认证引用。
       def authentication
-        definitions = sections(/\Aaaa-server\s+/).filter_map do |section|
+        definitions = matching_blocks(/\Aaaa-server\s+/).filter_map do |section|
           parts = tokens(section)
           unless parts.size == 4 && parts[2..] == %w[type tacacs+]
             unknown("tacacs", [ section ]) if parts.include?("tacacs+")
             next
           end
-          endpoints = matching(/\A(?:host|backup[12])\b/, section.children)
+          endpoints = matching_blocks(/\A(?:host|backup[12])\b/, section.children)
           servers = endpoints.filter_map do |entry|
             values = tokens(entry)
             if server_address?(values[1]) && (values.size == 2 || values.size == 4 && values[2] == "vrouter")
@@ -178,7 +180,7 @@ module Baseline
               nil
             end
           end
-          secrets = matching(/\Asecret\b/, section.children)
+          secrets = matching_blocks(/\Asecret\b/, section.children)
           keys = secrets.map { |entry| stored_secret("tacacs:#{parts[1]}", "tacacs", entry) }
           [ parts[1], { servers: servers.uniq, keys_present: keys.any? && keys.all?, line: section.line,
             declaration: section.children.empty? } ]
@@ -197,7 +199,7 @@ module Baseline
         record("tacacs.servers", schemes.values.flat_map { |scheme| scheme[:servers] }.uniq)
         record("tacacs.keys_present", schemes.values.all? { |scheme| scheme[:keys_present] }) if schemes.any?
         { "authentication-server" => "login", "authorization-mode" => "authorization" }.each do |command, fact|
-          entries = matching(/\Aadmin #{command}\b/)
+          entries = matching_blocks(/\Aadmin #{command}\b/)
           next if entries.empty?
           parts = tokens(entries.last)
           name = parts[3] if parts.size == 4 && parts[2] == "aaa-server"
@@ -207,10 +209,10 @@ module Baseline
             unknown("tacacs.#{fact}", entries, code: :tacacs_scheme_unresolved)
           end
         end
-        sections(/\Aadmin user\s+/).each do |section|
+        matching_blocks(/\Aadmin user\s+/).each do |section|
           owner = tokens(section)[2]
-          passwords = matching(/\Apassword\b/, section.children)
-          credential(owner, "local_user", "unknown", nil, section) if passwords.empty?
+          passwords = matching_blocks(/\Apassword\b/, section.children)
+          record_credential(owner, "local_user", "unknown", nil, section) if passwords.empty?
           passwords.each { |entry| stored_secret(owner, "local_user", entry) }
         end
       end
@@ -224,11 +226,11 @@ module Baseline
         valid = parts.size == 1 && !%w[cipher hash plain].include?(parts.first) || parts.size == 2 && %w[cipher hash plain].include?(parts.first)
         unless valid && !parts.last.to_s.empty?
           @facts.incomplete!(code: :invalid_credential_statement, lines: [ entry.line ])
-          credential(owner, kind, "unknown", nil, entry)
+          record_credential(owner, kind, "unknown", nil, entry)
           return false
         end
         format, secret = parts.size == 2 && %w[cipher hash plain].include?(parts.first) ? parts : [ secret_format(parts.first.to_s), parts.first ]
-        credential(owner, kind, format, secret, entry)
+        record_credential(owner, kind, format, secret, entry)
         true
       end
 
@@ -264,7 +266,7 @@ module Baseline
         if parts.size == 3 && parts.first == "range"
           first, last = parts.drop(1).map { |value| IPAddr.new(value) }
           raise ArgumentError unless first.ipv4? && last.ipv4? && first.prefix == 32 && last.prefix == 32 && first.to_i <= last.to_i
-          Acl.networks([ [ first.to_i, last.to_i ] ])
+          Acl.network_prefixes([ [ first.to_i, last.to_i ] ])
         elsif parts.size == 1 || parts.size == 2
           value = IPAddr.new(parts.join("/"))
           raise ArgumentError unless value.ipv4?

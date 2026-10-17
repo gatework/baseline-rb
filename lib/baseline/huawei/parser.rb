@@ -1,9 +1,11 @@
 # frozen_string_literal: true
 
+require_relative "../comware/parser"
+
 module Baseline
-  module Parsers
+  module Huawei
     # 区分 Huawei VRP 的 AAA 嵌套、模板引用与 Comware 域语法。
-    class Huawei < Comware
+    class Parser < Comware::Parser
       private
 
       # 匹配当前平台显式启用 SSH 的命令。
@@ -21,10 +23,10 @@ module Baseline
       # 返回当前平台修改 SNMP 监听端口的命令模式。
       def snmp_port_command = "snmp-agent udp-port"
       # 从实际所属配置作用域中选取 AAA 声明。
-      def aaa_entries = sections(/\Aaaa\z/).flat_map(&:children)
+      def aaa_entries = matching_blocks(/\Aaaa\z/).flat_map(&:children)
       # 解析认证域引用及其服务器组。
       def authentication_domains
-        name = last(/\Adomain\s+(\S+)\s+admin\z/)
+        name = last_configured_value(/\Adomain\s+(\S+)\s+admin\z/)
         unless name
           %w[login authorization accounting].each { |kind| unknown("tacacs.#{kind}", code: :authentication_domain_unknown) }
           return []
@@ -35,26 +37,26 @@ module Baseline
       # 解析 VRP 认证域引用，避免将 VRP 语法应用到 Comware。
       def vrp_tacacs_references(kind, domains)
         domains.filter_map do |domain|
-          template = last(/\Ahwtacacs-server\s+(\S+)\z/, domain.children)
-          scheme = last(/\A#{kind}-scheme\s+(\S+)\z/, domain.children)
+          template = last_configured_value(/\Ahwtacacs-server\s+(\S+)\z/, domain.children)
+          scheme = last_configured_value(/\A#{kind}-scheme\s+(\S+)\z/, domain.children)
           next unless template && scheme
           definition = aaa_entries.find { |entry| entry.text == "#{kind}-scheme #{scheme}" }
           unless definition
             unknown("tacacs.#{kind == 'authentication' ? 'login' : kind}", [ domain ], code: :tacacs_scheme_unresolved)
             next
           end
-          template if last(/\A#{kind}-mode\s+(.+)\z/, definition.children).to_s.split.first == "hwtacacs"
+          template if last_configured_value(/\A#{kind}-mode\s+(.+)\z/, definition.children).to_s.split.first == "hwtacacs"
         end
       end
 
       # 提取本地账号角色及凭据存储属性。
       def accounts
-        matching(/\Alocal-user\s+\S+\s+password\b/, aaa_entries).each do |entry|
+        matching_blocks(/\Alocal-user\s+\S+\s+password\b/, aaa_entries).each do |entry|
           match = /\Alocal-user\s+(\S+)\s+password\s+(cipher|irreversible-cipher|simple)\s+(.+)\z/.match(entry.text)
           if match
-            credential(match[1], "local_user", match[2], match[3], entry)
+            record_credential(match[1], "local_user", match[2], match[3], entry)
           else
-            credential("local-user", "local_user", "unknown", nil, entry)
+            record_credential("local-user", "local_user", "unknown", nil, entry)
           end
         end
       end

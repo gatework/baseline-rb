@@ -33,7 +33,7 @@ RSpec.describe "Baseline parse sessions" do
       parser = parser_class.new
       first = parser.parse(File.read(File.expand_path("fixtures/baseline/#{platform}.cfg", __dir__)), complete: true)
       first_document = parser.document
-      original = Baseline.immutable(first.to_h)
+      original = CtxParser::Immutable.copy(first.to_h)
       hostname = case platform
       when "palo_alto" then "set deviceconfig system hostname"
       when "h3c", "huawei" then "sysname"
@@ -52,7 +52,7 @@ RSpec.describe "Baseline parse sessions" do
   end
 
   it "captures Comware log hosts after excluding the source-interface command" do
-    parser = Baseline::Parsers::H3c.new
+    parser = Baseline::H3c::Parser.new
     text = "sysname LAB\ninfo-center loghost 192.0.2.10\ninfo-center loghost source LoopBack0\n"
     result = parser.parse(text, complete: true)
 
@@ -64,7 +64,7 @@ RSpec.describe "Baseline parse sessions" do
   end
 end
 
-RSpec.describe Baseline::Parsers::CiscoNxos do
+RSpec.describe Baseline::CiscoNxos::Parser do
   it "shares one frozen reduced fact across its source commands without mixing later parse versions" do
     parser = described_class.new
     source = "hostname LEAF\nntp server 192.0.2.1\nntp server 192.0.2.2\n"

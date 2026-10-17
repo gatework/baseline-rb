@@ -5,7 +5,7 @@ version: 1
 checks:
   snmp.enabled: {expected: true}
   snmp.versions: {expected: [v3], severity: high}
-  snmp.read_only:
+  snmp.write_enabled:
     expected: false
     severity: high
     applies_to: {facts: {snmp.enabled: true}}

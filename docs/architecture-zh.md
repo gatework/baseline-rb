@@ -27,11 +27,11 @@ flowchart LR
 | 对象 | 职责 |
 | --- | --- |
 | `Audit` | 纯文本入口，选择厂商解析器并组织判定 |
-| `Parsers::Base < CtxParser::ConfigurationParser` | 输入边界、语法提取；通过公共 `analyze` / `capture` 管理逐行状态和来源 |
-| `Parsers::Comware` / `Parsers::Cisco` | 分别共享 Comware/VRP 与 IOS/NX-OS 的语法族 |
-| `Parsers::H3c` / `Huawei` / `CiscoIos` / `CiscoNxos` / `Hillstone` / `PaloAlto` | 厂商差异，不把厂商分支散落到规则求值中 |
+| `Parser < CtxParser::Configuration` | 输入边界、语法提取；通过公共 `analyze` / `capture` 管理逐行状态和来源 |
+| `Comware::Parser` / `Cisco::Parser` | 分别共享 Comware/VRP 与 IOS/NX-OS 的语法族 |
+| `H3c::Parser` / `Huawei::Parser` / `CiscoIos::Parser` / `CiscoNxos::Parser` / `Hillstone::Parser` / `PaloAlto::Parser` | 厂商差异，不把厂商分支散落到规则求值中 |
 | `Document < CtxParser::Document` | 使用公共游标和缩进树，隔离 banner、接口子配置及不完整输入 |
-| `QuotedDocument` / `HillstoneDocument` / `PaloAltoDocument` | 隔离跨行字符串、证书和 UI 数据，保留厂商命令边界；注释和 banner 不参与字符串扫描 |
+| `QuotedDocument` / `Hillstone::Document` / `PaloAlto::Document` | 隔离跨行字符串、证书和 UI 数据，保留厂商命令边界；注释和 banner 不参与字符串扫描 |
 | `Facts` | 每次解析独享的事实集合，归约 VTY、SNMP 组引用、命名 ACL 与原生来源列表、凭据；输出独立的结果快照 |
 | `Configuration` | 不可变事实、输入指纹、完整性和局部解析诊断 |
 | `Acl` | IPv4 地址区间与有序规则，按首次匹配计算允许来源 |
@@ -43,9 +43,9 @@ flowchart LR
 
 独立 Ruby 调用只需加载 `baseline`；`Check` 由 Rails 自动加载。持久化使用 `baseline_assessments` 表；纯文本分析不依赖数据库。没有新增外部依赖、HTTP 接口或后台任务。
 
-厂商解析器把命令转换为普通 Ruby 值及 `Acl` / `Credential` 对象；`Facts` 不读取命令文本，也不操作游标。语法解释成功后由 `ConfigurationParser#analyze` 标记当前行，`capture` 关联脱敏数据与来源；未解释的子命令保留原状态。事实中的行号用于判定报告，游标中的捕获用于显式溯源，两者不将原文带入持久化结果。
+厂商解析器把命令转换为普通 Ruby 值及 `Acl` / `Credential` 对象；`Facts` 不读取命令文本，也不操作游标。语法解释成功后由 `Configuration#analyze` 标记当前行，`capture` 关联脱敏数据与来源；未解释的子命令保留原状态。事实中的行号用于判定报告，游标中的捕获用于显式溯源，两者不将原文带入持久化结果。
 
-新增厂商时，有相同语法族才继承 `Comware` 或 `Cisco`；防火墙直接继承 `Base`，独立解释本机管理语法。新增跨厂商归约逻辑放入 `Facts` 或已有领域对象，批准值仍声明在策略 YAML 中。不要在厂商类中重复维护事实字典、诊断列表或引用解析状态。`Facts#direct_acl` 对原生允许来源统一归一化，区分 `nil`（未确认）、`[]`（明确没有允许来源）与 `0.0.0.0/0`（全网）；`incomplete!` 使破损声明无法证明合规的缺省状态。
+新增厂商时，有相同语法族才继承 `Comware::Parser` 或 `Cisco::Parser`；防火墙直接继承 `Baseline::Parser`，独立解释本机管理语法。新增跨厂商归约逻辑放入 `Facts` 或已有领域对象，批准值仍声明在策略 YAML 中。不要在厂商类中重复维护事实字典、诊断列表或引用解析状态。`Facts#direct_acl` 对原生允许来源统一归一化，区分 `nil`（未确认）、`[]`（明确没有允许来源）与 `0.0.0.0/0`（全网）；`incomplete!` 使破损声明无法证明合规的缺省状态。
 
 ## 事实与检查
 
@@ -66,7 +66,7 @@ flowchart LR
 
 `complete: true` 是调用方对**完整配置快照**的声明，不代表每个事实都可识别。分页残留、错误回显、未闭合 banner、无 hostname/sysname、非法编码会阻止合规结论。接口或 banner 内看似合法的全局命令不会变成全局事实。
 
-部分配置可以保留已确认且不依赖未见记录的违规：禁用服务开启、意外集合成员、越界管理来源、弱明文凭据、SNMP 写授权及不安全凭据存储。
+部分配置可以保留已确认且不依赖未见记录的违规：禁用服务开启、意外集合成员、完整输入中可确认的越界管理来源、弱明文凭据、SNMP 写授权及不安全凭据存储。
 缺少批准成员、数量不足、其他标量比较仍保持 unknown；部分证据不会产生 pass，报告仍不完整。
 明确的上下文不匹配先返回 not_applicable；部分集合的“全部满足/不存在”不能用来判定策略适用范围。
 部分输入或分页输入的无终止末行，以及内联分页/错误污染行不进入事实，避免截断密码/地址被当作有效配置；
@@ -104,7 +104,7 @@ PAN-OS 管理 profile 未指定 permitted IP 时没有来源限制，因此必�
 
 ### SNMP 写权限证据
 
-`snmp.read_only` 检查的是配置授予的写权限：任一已知写授权会得到 `fail`；所有授权均明确只读才会通过；缺失组引用、未知角色或不能完整解释的组语法保持 `unknown`。一个授权未知不会抹掉另一个已确认的写授权，也不会阻断 SSH 等无关检查。写视图声明不等于已经成功执行 SNMP SET，MIB 对象可写性、网络可达性和运行时认证需要另行验证。
+`snmp.write_enabled` 检查的是配置授予的写权限：任一已知写授权会得到 `fail`；所有授权均明确只读才会通过；缺失组引用、未知角色或不能完整解释的组语法保持 `unknown`。一个授权未知不会抹掉另一个已确认的写授权，也不会阻断 SSH 等无关检查。写视图声明不等于已经成功执行 SNMP SET，MIB 对象可写性、网络可达性和运行时认证需要另行验证。
 
 默认策略在 `snmp.enabled: true` 时执行写权限检查，因此纯 SNMPv3 配置也纳入检查，不能仅以 community 是否存在决定规则范围。
 

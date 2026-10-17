@@ -21,7 +21,7 @@ gem "baseline-rb", require: "baseline"
 
 Then run `bundle install`, or install directly with `gem install baseline-rb`. The require path is `baseline` and the public namespace is `Baseline`; package names and Ruby namespaces are intentionally separate.
 
-Internal runtime dependencies: [`ctx_parser`](https://github.com/gatework/ctx_parser). The gemspec declares runtime dependencies without version constraints. Applications should commit their own `Gemfile.lock` to make deployments reproducible. No Rails boot or sibling checkout paths are required.
+Internal runtime dependencies: [`ctx_parser`](https://github.com/gatework/ctx_parser). The gemspec requires `ctx_parser ~> 0.2.0` for the shared configuration API. Applications should commit their own `Gemfile.lock` to make deployments reproducible. No Rails boot or sibling checkout paths are required.
 
 Release artifacts and checksums are available from [GitHub Releases](https://github.com/gatework/baseline-rb/releases). Check [RubyGems](https://rubygems.org/gems/baseline-rb) for published versions.
 
@@ -65,7 +65,19 @@ The library performs no device access, backup collection, remediation, or databa
 
 Detailed vendor behavior, historical validation notes, and Motor-only integration are preserved in [the architecture reference](docs/architecture-zh.md). Host integration examples in that reference require Motor; they are not standalone gem APIs. Motor adapters live under `backend/lib/baseline`, `backend/lib/vxlan`, and `backend/lib/wireless` in the [Motor repository](https://github.com/gatework/motor/tree/main/backend/lib).
 
+## Domain vocabulary
+
+`Facts` assembles configuration evidence; `Policy` supplies approved values; `Evaluator` produces compliance findings. `Acl#permitted_source_networks` returns the IPv4 networks permitted by ordered rules for a protocol and destination port: `nil` means unresolved evidence, while `[]` means no permitted sources. `Facts#record_credential` records safe credential attributes. Partial evidence may establish a conclusive violation, but cannot establish compliance.
+
+Vendor-specific code lives in a vendor namespace: `Baseline::Hillstone::Parser` and `Baseline::Hillstone::Document` reside in `baseline/hillstone/`; Palo Alto uses the same layout. The six platform parsers inherit shared behavior from `Baseline::Parser`, `Comware::Parser`, or `Cisco::Parser`. Load only one platform with `require "baseline/hillstone/parser"`, or load the assessment API with `require "baseline"`.
+
+Parser helpers describe the evidence they extract: `matching_blocks`, `configured_values`, `last_configured_value`, `configured_state`, and `acl_source_network`. SNMP write permission uses the policy key `snmp.write_enabled` (`expected: false` to prohibit writes). Update custom policies that used `snmp.read_only`; old class names and rule keys have no compatibility aliases.
+
+`complete: true` asserts that the caller supplied the entire snapshot. Reports retain that assertion as `input_complete`, separately from parser status. A partial ordered ACL cannot prove an out-of-policy source: an unseen earlier deny may change its meaning, so the finding stays `unknown`.
+
 ## Development and tests
+
+Name shared classes by their responsibility and use the namespace for platform context. Preserve filenames and class names that directly match device commands.
 
 ```sh
 bundle install
@@ -75,6 +87,8 @@ bundle exec rake build
 ```
 
 `bundle exec rake` runs RSpec, RuboCop, and the offline examples. Tests live in `spec/`, following the existing project's RSpec convention; fixtures use synthetic or sanitized evidence. Add regression cases for successful, incomplete, unsupported, and malformed inputs when extending a parser. Offline tests do not certify all device versions or replace live integration checks.
+
+Run `bundle exec ruby -Ilib script/benchmark.rb` for synthetic network-coverage, credential-lookup, and rejected-source report timings. It reports the median of three runs at two input sizes; compare revisions on the same runtime and machine.
 
 Use the declared minimum Ruby version for compatibility checks. Document source methods and non-obvious business logic in concise Chinese, preserve public return/error contracts, and never add raw device captures or credentials to examples, fixtures, logs, or release archives.
 

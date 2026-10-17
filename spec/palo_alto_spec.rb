@@ -2,9 +2,9 @@
 
 require_relative "spec_helper"
 require "baseline"
-require "baseline/parsers/palo_alto"
+require "baseline/palo_alto/parser"
 
-RSpec.describe Baseline::Parsers::PaloAlto do
+RSpec.describe Baseline::PaloAlto::Parser do
   let(:fixture) { File.read(File.expand_path("fixtures/baseline/palo_alto.cfg", __dir__)) }
 
   def parse(text = fixture, complete: true)

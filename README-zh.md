@@ -21,7 +21,7 @@ gem "baseline-rb", require: "baseline"
 
 然后执行 `bundle install`；也可直接执行 `gem install baseline-rb`。Ruby 加载入口为 `baseline`，公开命名空间为 `Baseline`；gem 包名与 Ruby 命名空间分别维护。
 
-模块运行依赖：[`ctx_parser`](https://github.com/gatework/ctx_parser)。 gemspec 的运行依赖不添加版本约束；应用应提交自己的 `Gemfile.lock`，保持部署可复现。使用本库不需要启动 Rails 或配置兄弟模块的本地路径。
+模块运行依赖：[`ctx_parser`](https://github.com/gatework/ctx_parser)。 gemspec 要求 `ctx_parser ~> 0.2.0`，以使用共享配置解析 API；应用应提交自己的 `Gemfile.lock`，保持部署可复现。使用本库不需要启动 Rails 或配置兄弟模块的本地路径。
 
 发布产物和校验值见 [GitHub Releases](https://github.com/gatework/baseline-rb/releases)，已发布版本以 [RubyGems](https://rubygems.org/gems/baseline-rb) 为准。
 
@@ -65,7 +65,19 @@ puts report.to_text
 
 详细厂商语义、历史验证记录和 Motor 专用集成说明保留在[架构参考](docs/architecture-zh.md)。其中宿主集成代码需要 Motor，不属于独立 gem API。适配层位于 [Motor 仓库](https://github.com/gatework/motor/tree/main/backend/lib) 的 `backend/lib/baseline`、`backend/lib/vxlan` 和 `backend/lib/wireless`。
 
+## 领域术语
+
+`Facts` 汇总配置证据，`Policy` 提供批准值，`Evaluator` 生成合规判定。`Acl#permitted_source_networks` 按有序规则、协议和目标端口计算允许的 IPv4 来源网段：`nil` 表示证据未解决，`[]` 表示没有允许来源。`Facts#record_credential` 记录安全的凭据属性。部分证据可以证明确定违规，但不能证明合规。
+
+厂商代码按命名空间组织：`Baseline::Hillstone::Parser` 和 `Baseline::Hillstone::Document` 同放在 `baseline/hillstone/`；Palo Alto 使用相同布局。六个平台解析器复用 `Baseline::Parser`、`Comware::Parser` 或 `Cisco::Parser`。单个平台可用 `require "baseline/hillstone/parser"` 独立加载；完整评估入口仍为 `require "baseline"`。
+
+解析辅助方法直接描述提取意图：`matching_blocks`、`configured_values`、`last_configured_value`、`configured_state` 和 `acl_source_network`。SNMP 写权限规则统一为 `snmp.write_enabled`，禁止写入时配置 `expected: false`。自定义策略需迁移旧键 `snmp.read_only`；旧类名与规则键不保留兼容别名。
+
+`complete: true` 表示调用方提供了完整快照。报告通过 `input_complete` 保留这项声明，与解析状态分别记录。不完整的有序 ACL 可能缺少更早的 deny，因此不能仅根据已见 permit 判断来源越界，此时保持 `unknown`。
+
 ## 开发与测试
+
+共享类按实际职责命名，平台信息放在命名空间中。直接对应设备命令的解析器保留文件名和类名。
 
 ```sh
 bundle install
@@ -75,6 +87,8 @@ bundle exec rake build
 ```
 
 `bundle exec rake` 执行 RSpec、RuboCop 及离线示例。测试放在 `spec/`，沿用项目 RSpec 约定；样例采用合成或脱敏证据。新增解析格式时补充成功、不完整、不支持及非法输入回归。离线测试不代表所有设备版本均通过实机验证。
+
+运行 `bundle exec ruby -Ilib script/benchmark.rb` 可测量合成 ACL 覆盖比较、凭据来源行查询及越界来源报告；脚本报告三次运行的中位数，请在同一机器和 Ruby 版本下比较不同修订。
 
 使用声明的最低 Ruby 版本检查兼容性。方法用途统一使用简明中文注释；复杂实现还需说明业务规则、实现思路及关键分支。保持公开返回值与错误契约。真实回显和凭据不可进入示例、fixture、日志或发布包。
 

@@ -1,14 +1,16 @@
 # frozen_string_literal: true
 
+require_relative "../parser"
+
 module Baseline
-  module Parsers
+  module Comware
     # 复用 Comware 与 VRP 结构，由厂商子类选择账号、SSH 和 TACACS 语法。
-    class Comware < Base
+    class Parser < Baseline::Parser
       private
 
       # 解析管理访问暴露检查使用的有序 ACL 定义。
       def access_lists
-        sections(/\Aacl\s+/).each do |section|
+        matching_blocks(/\Aacl\s+/).each do |section|
           # IPv6 ACL 不能误建为名为 ipv6 的 IPv4 ACL，也不能覆盖其别名。
           if /\Aacl\s+ipv6\b/.match?(section.text)
             unknown("ipv6.acls", [ section ], code: :unsupported_acl_family)
@@ -30,13 +32,13 @@ module Baseline
         protocol = %w[ip tcp udp icmp].include?(parts.first) ? parts.shift : "ip"
         network = if parts.first == "source"
           parts.shift
-          source(parts)
+          acl_source_network(parts)
         else
           "0.0.0.0/0"
         end
         if parts.first == "destination"
           parts.shift
-          return unless source(parts) == "0.0.0.0/0"
+          return unless acl_source_network(parts) == "0.0.0.0/0"
         end
         if parts.first == "destination-port"
           return unless %w[tcp udp].include?(protocol)
@@ -54,56 +56,56 @@ module Baseline
 
       # 根据监听服务、认证方式与 ACL 绑定关系归纳管理访问事实。
       def management
-        record("ssh.enabled", state(ssh_enable, ssh_disable), matching(/\A(?:undo )?(?:ssh|stelnet)/))
-        compatible = state(/\Assh server compatible-ssh1x enable\z/, /\A(?:undo ssh server compatible-ssh1x enable|ssh server compatible-ssh1x disable)\z/)
+        record("ssh.enabled", configured_state(ssh_enable, ssh_disable), matching_blocks(/\A(?:undo )?(?:ssh|stelnet)/))
+        compatible = configured_state(/\Assh server compatible-ssh1x enable\z/, /\A(?:undo ssh server compatible-ssh1x enable|ssh server compatible-ssh1x disable)\z/)
         record("ssh.versions", compatible.nil? ? nil : compatible ? [ "1", "2" ] : [ "2" ])
-        ssh_acl = last(/\Assh server acl(?: ipv4)?\s+(?:name\s+)?(\S+)\z/)
-        defaults = sections(/\Aline class vty\z/).flat_map(&:children)
-        vtys = sections(/\A(?:line|user-interface) vty\b/).map do |section|
+        ssh_acl = last_configured_value(/\Assh server acl(?: ipv4)?\s+(?:name\s+)?(\S+)\z/)
+        defaults = matching_blocks(/\Aline class vty\z/).flat_map(&:children)
+        vtys = matching_blocks(/\A(?:line|user-interface) vty\b/).map do |section|
           entries = defaults + section.children
-          { name: section.text, protocols: last(/\Aprotocol inbound\s+(.+)\z/, entries)&.split,
-            authentication: last(/\Aauthentication-mode\s+(\S+)\z/, entries),
-            acl: last(/\Aacl\s+(?:name\s+)?(\S+)(?:\s+inbound)?\z/, entries), line: section.line }
+          { name: section.text, protocols: last_configured_value(/\Aprotocol inbound\s+(.+)\z/, entries)&.split,
+            authentication: last_configured_value(/\Aauthentication-mode\s+(\S+)\z/, entries),
+            acl: last_configured_value(/\Aacl\s+(?:name\s+)?(\S+)(?:\s+inbound)?\z/, entries), line: section.line }
         end
         @facts.management(vtys: vtys, ssh_acl: ssh_acl,
           ssh_port: listener_port("ssh server port", default: 22, scope: "management.acl"),
           telnet_port: listener_port("telnet server port", default: 23, scope: "management.acl"))
         definitions = { "telnet" => "telnet server", "http" => "ip http", "https" => "ip https", "ftp" => "ftp server", "tftp" => "tftp server" }
         record("services", definitions.to_h do |name, command|
-          [ name, state(/\A#{command} enable\z/, /\A(?:undo #{command} enable|#{command} disable)\z/) ]
+          [ name, configured_state(/\A#{command} enable\z/, /\A(?:undo #{command} enable|#{command} disable)\z/) ]
         end)
       end
 
       # 采集明确启用或禁用的管理服务。
       def services
-        record("ntp.servers", values(/\Antp-service unicast-server\s+(\S+)/), matching(/\Antp-service unicast-server/))
-        record("ntp.authentication", state(/\Antp-service authentication enable\z/, /\Aundo ntp-service authentication enable\z/))
-        record("ntp.source", last(/\Antp-service source(?:-interface)?\s+(\S+)\z/))
+        record("ntp.servers", configured_values(/\Antp-service unicast-server\s+(\S+)/), matching_blocks(/\Antp-service unicast-server/))
+        record("ntp.authentication", configured_state(/\Antp-service authentication enable\z/, /\Aundo ntp-service authentication enable\z/))
+        record("ntp.source", last_configured_value(/\Antp-service source(?:-interface)?\s+(\S+)\z/))
         # 从日志服务器中排除 source 子命令，并保留评估所需的归纳事实。
-        hosts = values(/\Ainfo-center loghost\s+(\S+)/) - [ "source" ]
-        record("syslog.servers", hosts, matching(/\Ainfo-center loghost/))
-        record("syslog.source", last(/\Ainfo-center loghost source\s+(\S+)\z/))
-        enabled = state(/\Asnmp-agent(?:\s|\z)/, /\Aundo snmp-agent\z/)
+        hosts = configured_values(/\Ainfo-center loghost\s+(\S+)/) - [ "source" ]
+        record("syslog.servers", hosts, matching_blocks(/\Ainfo-center loghost/))
+        record("syslog.source", last_configured_value(/\Ainfo-center loghost source\s+(\S+)\z/))
+        enabled = configured_state(/\Asnmp-agent(?:\s|\z)/, /\Aundo snmp-agent\z/)
         record("snmp.enabled", enabled.nil? && @facts.complete? ? false : enabled)
-        versions = last(/\Asnmp-agent sys-info version\s+(.+)\z/)&.split
+        versions = last_configured_value(/\Asnmp-agent sys-info version\s+(.+)\z/)&.split
         versions = %w[v1 v2c v3] if versions == [ "all" ]
         record("snmp.versions", versions)
-        communities = matching(/\Asnmp-agent community\b/).filter_map do |entry|
+        communities = matching_blocks(/\Asnmp-agent community\b/).filter_map do |entry|
           match = /\Asnmp-agent community (read|write)\s+(?:(simple|cipher)\s+)?(\S+)(.*)\z/.match(entry.text)
           unless match
             unknown_snmp_access([ entry ])
             next
           end
-          credential("snmp-community", "snmp", match[2] || "plain", match[3], entry)
+          record_credential("snmp-community", "snmp", match[2] || "plain", match[3], entry)
           { write: match[1] == "write", acl: match[4][/\bacl\s+(?:name\s+)?(\S+)/, 1], line: entry.line }
         end
-        groups = snmp_groups(matching(/\Asnmp-agent group v3\s+/)) do |entry|
+        groups = snmp_groups(matching_blocks(/\Asnmp-agent group v3\s+/)) do |entry|
           settings = entry.text.sub(/\Asnmp-agent group v3\s+\S+\s*/, "")
           [ entry.text.split[3], { acl: entry.text[/\bacl\s+(?:name\s+)?(\S+)/, 1], line: entry.line, write: snmp_group_write(settings) } ]
         end
         record("snmp.groups", groups)
         users = {}
-        matching(/\Asnmp-agent usm-user\b/).each do |entry|
+        matching_blocks(/\Asnmp-agent usm-user\b/).each do |entry|
           match = /\Asnmp-agent usm-user v3\s+(\S+)(?:\s+(.*))?\z/.match(entry.text)
           unless match
             unknown_snmp_access([ entry ], code: :unsupported_snmp_user)
@@ -136,15 +138,15 @@ module Baseline
 
       # 解析实际生效的认证方法及外部服务器引用。
       def authentication
-        schemes = sections(tacacs_section).to_h do |section|
-          server_types = matching(tacacs_server, section.children).group_by { |entry| entry.text.split[1] }
-            .transform_values { |entries| values(tacacs_server, entries) }
+        schemes = matching_blocks(tacacs_section).to_h do |section|
+          server_types = matching_blocks(tacacs_server, section.children).group_by { |entry| entry.text.split[1] }
+            .transform_values { |entries| configured_values(tacacs_server, entries) }
           servers = server_types.values.flatten.uniq
           keys = section.children.filter_map do |entry|
             match = tacacs_key.match(entry.text)
             next unless match
             kind, format, secret = match.captures
-            credential("tacacs:#{section.text.split.last}", "tacacs", format, secret, entry)
+            record_credential("tacacs:#{section.text.split.last}", "tacacs", format, secret, entry)
             kind
           end
           [ section.text.split.last, { servers: servers, server_types: server_types, key_types: keys.uniq, line: section.line } ]
@@ -154,8 +156,8 @@ module Baseline
         domains = authentication_domains
         methods = domains.flat_map { |entry| entry.children }
         %w[authentication authorization accounting].each do |kind|
-          relevant = matching(/\A#{kind}\s+login\b/, methods)
-          relevant = matching(/\A#{kind}\s+default\b/, methods) if relevant.empty?
+          relevant = matching_blocks(/\A#{kind}\s+login\b/, methods)
+          relevant = matching_blocks(/\A#{kind}\s+default\b/, methods) if relevant.empty?
           refs = relevant.filter_map { |entry| entry.text[/\A#{kind}\s+(?:login|default)\s+hwtacacs-scheme\s+(\S+)/, 1] }
           refs.concat(vrp_tacacs_references(kind, domains))
           key = kind == "authentication" ? "login" : kind
@@ -172,26 +174,26 @@ module Baseline
         end
         record("tacacs.keys_present", schemes.values.all? { |entry| tacacs_keys_complete?(entry[:key_types]) }) unless schemes.empty?
         accounts
-        sections(/\A(?:line|user-interface)\b/).each do |section|
-          matching(/\A(?:set authentication )?password\b/, section.children).each do |entry|
+        matching_blocks(/\A(?:line|user-interface)\b/).each do |section|
+          matching_blocks(/\A(?:set authentication )?password\b/, section.children).each do |entry|
             match = /\A(?:set authentication )?password\s+(simple|cipher|hash|irreversible-cipher)\s+(.+)\z/.match(entry.text)
-            credential(section.text, "line", match ? match[1] : "unknown", match&.[](2), entry)
+            record_credential(section.text, "line", match ? match[1] : "unknown", match&.[](2), entry)
           end
         end
-        matching(/\Asuper password\b/).each do |entry|
+        matching_blocks(/\Asuper password\b/).each do |entry|
           match = /\Asuper password(?: level \d+)?\s+(simple|cipher|hash)\s+(.+)\z/.match(entry.text)
-          credential("super", "enable", match ? match[1] : "unknown", match&.[](2), entry)
+          record_credential("super", "enable", match ? match[1] : "unknown", match&.[](2), entry)
         end
       end
 
       # 解析认证域引用及其服务器组。
       def authentication_domains
-        name = last(/\Adomain default enable\s+(\S+)\z/)
+        name = last_configured_value(/\Adomain default enable\s+(\S+)\z/)
         unless name
           %w[login authorization accounting].each { |kind| unknown("tacacs.#{kind}", code: :authentication_domain_unknown) }
           return []
         end
-        sections(/\Adomain #{Regexp.escape(name)}\z/)
+        matching_blocks(/\Adomain #{Regexp.escape(name)}\z/)
       end
       # 解析 VRP 认证域引用，避免将 VRP 语法应用到 Comware。
       def vrp_tacacs_references(_kind, _domains) = []
@@ -200,15 +202,15 @@ module Baseline
 
       # 提取本地账号角色及凭据存储属性。
       def accounts
-        sections(/\Alocal-user\s+/).each do |section|
+        matching_blocks(/\Alocal-user\s+/).each do |section|
           next if section.text.start_with?("local-user password-")
           name = section.text.split[1]
-          passwords = matching(/\Apassword\s+/, section.children)
+          passwords = matching_blocks(/\Apassword\s+/, section.children)
           passwords.each do |entry|
             match = /\Apassword\s+(simple|cipher|hash|irreversible-cipher)\s+(.+)\z/.match(entry.text)
-            credential(name, "local_user", match ? match[1] : "unknown", match ? match[2] : nil, entry)
+            record_credential(name, "local_user", match ? match[1] : "unknown", match ? match[2] : nil, entry)
           end
-          credential(name, "local_user", "unknown", nil, section) if passwords.empty? && @facts.complete?
+          record_credential(name, "local_user", "unknown", nil, section) if passwords.empty? && @facts.complete?
         end
       end
     end

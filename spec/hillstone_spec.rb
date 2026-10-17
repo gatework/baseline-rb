@@ -3,7 +3,7 @@
 require_relative "spec_helper"
 require "baseline"
 
-RSpec.describe Baseline::Parsers::Hillstone do
+RSpec.describe Baseline::Hillstone::Parser do
   let(:configuration) { File.read(File.expand_path("fixtures/baseline/hillstone.cfg", __dir__)) }
 
   def parse(text, complete: true)
@@ -101,7 +101,7 @@ RSpec.describe Baseline::Parsers::Hillstone do
 
   it "retains known violations from partial input but never reports compliant absence" do
     policy = Baseline::Policy.new("version" => 1, "checks" => {
-      "snmp.read_only" => { "expected" => false }, "ntp.minimum_servers" => { "expected" => 1 }
+      "snmp.write_enabled" => { "expected" => false }, "ntp.minimum_servers" => { "expected" => 1 }
     })
     report = Baseline::Audit.new(policy: policy).call(platform: "stoneos", complete: false,
       configuration: "hostname LAB\nsnmp-server host 192.0.2.1 version 2c community PRIVATE-FIXTURE rw\n")

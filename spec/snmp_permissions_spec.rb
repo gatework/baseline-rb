@@ -6,7 +6,7 @@ require "baseline"
 RSpec.describe "Baseline SNMP access permissions" do
   let(:policy) do
     Baseline::Policy.new("version" => 1, "checks" => {
-      "snmp.read_only" => { "expected" => false }, "ssh.enabled" => { "expected" => true }
+      "snmp.write_enabled" => { "expected" => false }, "ssh.enabled" => { "expected" => true }
     })
   end
 
@@ -29,7 +29,7 @@ RSpec.describe "Baseline SNMP access permissions" do
     platform == "cisco_ios" ? "snmp-server group OPS v3 priv #{options}".strip : "snmp-agent group v3 OPS privacy #{options}".strip
   end
 
-  def permission(report) = report.findings.find { |finding| finding.id == "snmp.read_only" }
+  def permission(report) = report.findings.find { |finding| finding.id == "snmp.write_enabled" }
 
   %w[cisco_ios h3c huawei].each do |platform|
     context platform do

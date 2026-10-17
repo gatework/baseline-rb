@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "acl"
+require_relative "credential"
+
 require "ctx_parser/result"
 
 module Baseline
@@ -13,6 +16,7 @@ module Baseline
       @complete = complete && issues.empty?
       @values, @sources, @issues, @acls = {}, {}, issues.dup, {}
       @vtys, @communities, @snmp_users, @credentials = [], [], [], []
+      @credential_lines = {}
       @snmp_groups = {}
       @snmp_permission_issues = []
       @ssh_acl = nil
@@ -36,7 +40,7 @@ module Baseline
           (sources.nil? || sources.is_a?(Array))
         raise ArgumentError, "Direct access requires a known scope, binding state and source networks"
       end
-      networks = sources && Acl.networks(sources.map { |source| Acl.range(source) })
+      networks = sources && Acl.network_prefixes(sources.map { |source| Acl.address_range(source) })
       @direct_acls[fact] = true
       record("#{fact}.bound", bound, lines: lines)
       if networks
@@ -51,7 +55,7 @@ module Baseline
     def record(path, value, lines: [])
       return false if value.nil? || (!complete? && value.respond_to?(:empty?) && value.empty?)
 
-      @values[path] = Baseline.immutable(value)
+      @values[path] = CtxParser::Immutable.copy(value)
       @sources[path] = lines.uniq unless lines.empty?
       true
     end
@@ -72,15 +76,15 @@ module Baseline
 
     # 根据监听服务、认证方式与 ACL 绑定关系归纳管理访问事实。
     def management(vtys:, ssh_acl: nil, ssh_port: 22, telnet_port: 23)
-      @vtys, @ssh_acl = Baseline.immutable(vtys), ssh_acl
+      @vtys, @ssh_acl = CtxParser::Immutable.copy(vtys), CtxParser::Immutable.copy(ssh_acl)
       @management_ports = { "ssh" => ssh_port, "stelnet" => ssh_port, "telnet" => telnet_port }
     end
 
     # 根据用户、组和团体字归纳 SNMP 暴露面及凭据事实。
     def snmp(communities:, users:, groups: nil, port: 161)
       @snmp_port = port
-      @communities = Baseline.immutable(communities)
-      @snmp_groups = Baseline.immutable(groups || {})
+      @communities = CtxParser::Immutable.copy(communities)
+      @snmp_groups = CtxParser::Immutable.copy(groups || {})
       @snmp_users = users.map do |user|
         if groups && user[:group]
           if groups.key?(user[:group])
@@ -94,7 +98,7 @@ module Baseline
             unknown("snmp.acl", code: :snmp_group_unresolved)
           end
         end
-        Baseline.immutable(user)
+        CtxParser::Immutable.copy(user)
       end
     end
 
@@ -112,12 +116,14 @@ module Baseline
     end
 
     # 检查此来源行是否已经产生凭据事实。
-    def credential_recorded?(line) = @credentials.any? { |entry| entry[:line] == line }
+    def credential_recorded?(line) = @credential_lines.key?(line)
 
     # 记录凭据属性，不保留凭据秘密值。
-    def credential(credential)
+    def record_credential(credential)
       index = @credentials.size
-      @credentials << credential.to_h
+      attributes = credential.to_h
+      @credentials << attributes
+      @credential_lines[attributes[:line]] = true
       index
     end
 
@@ -131,7 +137,7 @@ module Baseline
       @issues << { code: :input_not_confirmed_complete } unless @confirmed_complete
       status = complete? && @values.key?("hostname") ? :complete : :partial
       CtxParser::Result.new(status: status,
-        records: Baseline.immutable([ { "facts" => @values, "sources" => @sources } ]), issues: Baseline.immutable(@issues.uniq))
+        records: CtxParser::Immutable.copy([ { "facts" => @values, "sources" => @sources } ]), issues: CtxParser::Immutable.copy(@issues.uniq))
     end
 
     # 展示对象身份与状态，避免泄露原始回显或凭据。
@@ -212,7 +218,7 @@ module Baseline
         acl = @acls[name]
         duplicate = @issues.any? { |issue| issue[:fact] == "acls.#{name}" }
         next if !acl || duplicate
-        sources = (binding[:ports] || [ nil ]).map { |port| acl.sources(protocol: protocol, port: port) }
+        sources = (binding[:ports] || [ nil ]).map { |port| acl.permitted_source_networks(protocol: protocol, port: port) }
         sources.flatten unless sources.any?(&:nil?)
       end
       if resolved.any?(&:nil?)
@@ -220,7 +226,7 @@ module Baseline
         unknown("#{fact}.restricted", code: :acl_unresolved)
         return
       end
-      sources = Acl.networks(resolved.flatten.uniq.map { |cidr| Acl.range(cidr) })
+      sources = Acl.network_prefixes(resolved.flatten.uniq.map { |cidr| Acl.address_range(cidr) })
       record("#{fact}.sources", sources)
       record("#{fact}.restricted", !sources.include?("0.0.0.0/0"))
       lines = names.uniq.flat_map { |name| @acls.fetch(name).rules.map { |rule| rule[:line] } }.compact.uniq

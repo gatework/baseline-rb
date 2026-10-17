@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "ctx_parser/immutable"
+
 module Baseline
   # 仅在构造时分析凭据，不保留明文、密文或可枚举的摘要。
   class Credential
@@ -20,7 +22,7 @@ module Baseline
         values.merge!(length: text.length, character_classes: [ /[a-z]/, /[A-Z]/, /\d/, /[^a-zA-Z\d]/ ].count { |pattern| pattern.match?(text) },
           common: COMMON.include?(text.downcase) || text.downcase == owner.to_s.downcase || /\A(.)\1+\z/.match?(text))
       end
-      @attributes = Baseline.immutable(values)
+      @attributes = CtxParser::Immutable.copy(values)
       freeze
     end
 

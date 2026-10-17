@@ -2,10 +2,10 @@
 
 require_relative "spec_helper"
 
-RSpec.describe Baseline::Parsers::CiscoNxos do
+RSpec.describe Baseline::CiscoNxos::Parser do
   it "keeps a deeply nested irrelevant configuration from aborting baseline fact extraction" do
     text = "hostname LAB\n" + (0...4_000).map { |index| "#{' ' * index}unrelated\n" }.join
-    parser = Baseline::Parsers::CiscoNxos.new
+    parser = Baseline::CiscoNxos::Parser.new
 
     expect(text.bytesize).to be < 16 * 1024 * 1024
     result = parser.parse(text, complete: true)

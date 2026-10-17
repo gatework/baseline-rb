@@ -7,6 +7,26 @@ require "json"
 require "bundler"
 
 RSpec.describe "Standalone baseline assessment" do
+  {
+    "h3c" => [ "H3c", "sysname LAB\n" ],
+    "huawei" => [ "Huawei", "sysname LAB\n" ],
+    "cisco_ios" => [ "CiscoIos", "hostname LAB\n" ],
+    "cisco_nxos" => [ "CiscoNxos", "hostname LAB\n" ],
+    "hillstone" => [ "Hillstone", "hostname LAB\n" ],
+    "palo_alto" => [ "PaloAlto", "set deviceconfig system hostname LAB\n" ]
+  }.each do |platform, (namespace, source)|
+    it "loads and parses #{platform} independently of the aggregate entry point" do
+      script = <<~RUBY
+        require "baseline/#{platform}/parser"
+        abort "Aggregate entry loaded" if defined?(Baseline::Audit)
+        result = Baseline::#{namespace}::Parser.parse(#{source.inspect}, complete: true)
+        abort "Missing parsed hostname" unless result.complete? && result.records.first.fetch("facts").fetch("hostname") == "LAB"
+      RUBY
+      _, stderr, status = Open3.capture3(RbConfig.ruby, "-rbundler/setup", "-I", File.expand_path("../lib", __dir__), "-e", script)
+      expect(status).to be_success, stderr
+    end
+  end
+
   it "evaluates text without Rails, Netstack, a connector or a database" do
     script = <<~RUBY
       require "baseline"

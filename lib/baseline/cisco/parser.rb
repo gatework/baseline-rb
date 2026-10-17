@@ -1,9 +1,11 @@
 # frozen_string_literal: true
 
+require_relative "../parser"
+
 module Baseline
-  module Parsers
+  module Cisco
     # 复用 Cisco 管理服务、IPv4 ACL、SNMP 和 AAA 的公共语法。
-    class Cisco < Base
+    class Parser < Baseline::Parser
       SNMP_ROLE_WRITE = { "network-admin" => true, "vdc-admin" => true,
         "network-operator" => false, "vdc-operator" => false }.freeze
 
@@ -11,12 +13,12 @@ module Baseline
 
       # 解析管理访问暴露检查使用的有序 ACL 定义。
       def access_lists
-        sections(/\Aip access-list\s+/).each do |section|
+        matching_blocks(/\Aip access-list\s+/).each do |section|
           name = section.text.split.last
           extended = section.text.start_with?("ip access-list extended ") || nxos?
           register_acl(name, section.children, source: section) { |entry, index| cisco_rule(entry, index, extended: extended) }
         end
-        matching(/\Aaccess-list\s+/).group_by { |entry| entry.text.split[1] }.each do |name, entries|
+        matching_blocks(/\Aaccess-list\s+/).group_by { |entry| entry.text.split[1] }.each do |name, entries|
           extended = name.to_i.between?(100, 199) || name.to_i.between?(2000, 2699)
           register_acl(name, entries) { |entry, index| cisco_rule(entry, index, extended: extended, prefix: /\Aaccess-list\s+\S+\s+/) }
         end
@@ -30,8 +32,8 @@ module Baseline
         parts = match[3].split
         protocol = extended ? parts.shift : "ip"
         return unless %w[ip tcp udp icmp].include?(protocol)
-        network = source(parts)
-        return if extended && source(parts) != "0.0.0.0/0"
+        network = acl_source_network(parts)
+        return if extended && acl_source_network(parts) != "0.0.0.0/0"
         if extended && parts.first == "eq"
           return unless %w[tcp udp].include?(protocol)
           parts.shift
@@ -47,54 +49,54 @@ module Baseline
 
       # 根据监听服务、认证方式与 ACL 绑定关系归纳管理访问事实。
       def management
-        version = last(/\Aip ssh version\s+([12])\z/)
+        version = last_configured_value(/\Aip ssh version\s+([12])\z/)
         record("ssh.versions", [ version ]) if version
-        ssh = nxos? ? state(/\Afeature ssh\z/, /\Ano feature ssh\z/) : version ? true : nil
-        record("ssh.enabled", ssh, matching(/\A(?:ip ssh|(?:no )?feature ssh)/))
-        default_aaa = nxos? || state(/\Aaaa new-model\z/, /\Ano aaa new-model\z/) == true
-        vtys = sections(/\Aline vty(?:\s|\z)/).map do |section|
-          authentication = last(/\Alogin authentication\s+(\S+)\z/, section.children)
+        ssh = nxos? ? configured_state(/\Afeature ssh\z/, /\Ano feature ssh\z/) : version ? true : nil
+        record("ssh.enabled", ssh, matching_blocks(/\A(?:ip ssh|(?:no )?feature ssh)/))
+        default_aaa = nxos? || configured_state(/\Aaaa new-model\z/, /\Ano aaa new-model\z/) == true
+        vtys = matching_blocks(/\Aline vty(?:\s|\z)/).map do |section|
+          authentication = last_configured_value(/\Alogin authentication\s+(\S+)\z/, section.children)
           local = section.children.any? { |entry| entry.text == "login local" }
-          { name: section.text, protocols: last(/\Atransport input\s+(.+)\z/, section.children)&.split,
+          { name: section.text, protocols: last_configured_value(/\Atransport input\s+(.+)\z/, section.children)&.split,
             authentication: local ? "local" : (default_aaa ? "aaa" : nil),
             authentication_list: authentication || (default_aaa ? "default" : nil),
-            acl: last(/\Aaccess-class\s+(\S+)\s+in(?:\s+vrf-also)?\z/, section.children), line: section.line }
+            acl: last_configured_value(/\Aaccess-class\s+(\S+)\s+in(?:\s+vrf-also)?\z/, section.children), line: section.line }
         end
-        rotary = matching(/\A(?:no )?ip ssh port(?:\s|\z)/)
-        rotary.concat(sections(/\Aline vty(?:\s|\z)/).flat_map { |section| matching(/\A(?:no )?rotary(?:\s|\z)/, section.children) })
+        rotary = matching_blocks(/\A(?:no )?ip ssh port(?:\s|\z)/)
+        rotary.concat(matching_blocks(/\Aline vty(?:\s|\z)/).flat_map { |section| matching_blocks(/\A(?:no )?rotary(?:\s|\z)/, section.children) })
         unknown_listener_port("management.acl", rotary) unless rotary.empty?
-        telnet_ports = matching(/\A(?:no )?(?:ip )?telnet(?: server)? port(?:\s|\z)/)
+        telnet_ports = matching_blocks(/\A(?:no )?(?:ip )?telnet(?: server)? port(?:\s|\z)/)
         unknown_listener_port("management.acl", telnet_ports) unless telnet_ports.empty?
         @facts.management(vtys: vtys,
           ssh_port: rotary.empty? ? listener_port("ssh port", default: 22, scope: "management.acl", negate: "no") : nil,
           telnet_port: telnet_ports.empty? ? 23 : nil)
         telnet = if nxos?
-          state(/\Afeature telnet\z/, /\Ano feature telnet\z/)
+          configured_state(/\Afeature telnet\z/, /\Ano feature telnet\z/)
         elsif vtys.any? && vtys.all? { |entry| entry[:protocols] }
           vtys.any? { |entry| (entry[:protocols] & %w[all telnet]).any? }
         end
-        record("services", { "telnet" => telnet, "http" => state(/\Aip http server\z/, /\Ano ip http server\z/),
-          "https" => state(/\Aip http secure-server\z/, /\Ano ip http secure-server\z/),
-          "ftp" => state(/\A(?:feature ftp-server|ftp-server enable)\z/, /\Ano (?:feature ftp-server|ftp-server enable)\z/),
-          "tftp" => state(/\A(?:feature tftp-server|tftp-server\s+.+)\z/, /\Ano (?:feature tftp-server|tftp-server\s+.+)\z/),
-          "finger" => state(/\A(?:ip finger|service finger)\z/, /\Ano (?:ip finger|service finger)\z/) })
+        record("services", { "telnet" => telnet, "http" => configured_state(/\Aip http server\z/, /\Ano ip http server\z/),
+          "https" => configured_state(/\Aip http secure-server\z/, /\Ano ip http secure-server\z/),
+          "ftp" => configured_state(/\A(?:feature ftp-server|ftp-server enable)\z/, /\Ano (?:feature ftp-server|ftp-server enable)\z/),
+          "tftp" => configured_state(/\A(?:feature tftp-server|tftp-server\s+.+)\z/, /\Ano (?:feature tftp-server|tftp-server\s+.+)\z/),
+          "finger" => configured_state(/\A(?:ip finger|service finger)\z/, /\Ano (?:ip finger|service finger)\z/) })
       end
 
       # 采集明确启用或禁用的管理服务。
       def services
-        record("ntp.servers", values(/\Antp server(?: vrf \S+)?\s+(\S+)/), matching(/\Antp server/))
-        record("ntp.authentication", state(/\Antp authenticate\z/, /\Ano ntp authenticate\z/))
-        record("ntp.source", last(/\Antp source(?:-interface)?\s+(\S+)\z/))
-        hosts = values(nxos? ? /\Alogging server\s+(\S+)/ : /\Alogging host(?: ipv6)?\s+(\S+)/)
-        hosts |= values(/\Alogging\s+(\d+(?:\.\d+){3})\z/) unless nxos?
-        record("syslog.servers", hosts, matching(/\Alogging (?:host|server)/))
-        record("syslog.source", last(/\Alogging source-interface\s+(\S+)\z/))
-        snmp = matching(/\Asnmp-server\b/)
-        enabled = nxos? ? state(/\Asnmp-server protocol enable\z/, /\Ano snmp-server protocol enable\z/) : nil
+        record("ntp.servers", configured_values(/\Antp server(?: vrf \S+)?\s+(\S+)/), matching_blocks(/\Antp server/))
+        record("ntp.authentication", configured_state(/\Antp authenticate\z/, /\Ano ntp authenticate\z/))
+        record("ntp.source", last_configured_value(/\Antp source(?:-interface)?\s+(\S+)\z/))
+        hosts = configured_values(nxos? ? /\Alogging server\s+(\S+)/ : /\Alogging host(?: ipv6)?\s+(\S+)/)
+        hosts |= configured_values(/\Alogging\s+(\d+(?:\.\d+){3})\z/) unless nxos?
+        record("syslog.servers", hosts, matching_blocks(/\Alogging (?:host|server)/))
+        record("syslog.source", last_configured_value(/\Alogging source-interface\s+(\S+)\z/))
+        snmp = matching_blocks(/\Asnmp-server\b/)
+        enabled = nxos? ? configured_state(/\Asnmp-server protocol enable\z/, /\Ano snmp-server protocol enable\z/) : nil
         enabled = nxos? || snmp.any? if enabled.nil? && (@facts.complete? || snmp.any?)
         record("snmp.enabled", enabled)
         communities = {}
-        matching(/\Asnmp-server community\b/).each do |entry|
+        matching_blocks(/\Asnmp-server community\b/).each do |entry|
           match = /\Asnmp-server community\s+(\S+)(?:\s+(.*))?\z/.match(entry.text)
           unless match
             unknown_snmp_access([ entry ])
@@ -108,17 +110,17 @@ module Baseline
           community[:write] = SNMP_ROLE_WRITE[role] if role
           acl = nxos? ? settings[/\buse-ipv4acl\s+(\S+)/, 1] : settings[/\A(?:ro|rw)\s+(\S+)\z/i, 1]
           community[:acl] = acl if acl
-          credential("snmp-community", "snmp", "plain", match[1], entry) unless @facts.credential_recorded?(community[:line])
+          record_credential("snmp-community", "snmp", "plain", match[1], entry) unless @facts.credential_recorded?(community[:line])
         end
         versions = communities.any? ? %w[v1 v2c] : []
-        groups = snmp_groups(matching(/\Asnmp-server group\s+.+?\s+v3\b/)) do |entry|
+        groups = snmp_groups(matching_blocks(/\Asnmp-server group\s+.+?\s+v3\b/)) do |entry|
           name, settings = entry.text.match(/\Asnmp-server group\s+(.+?)\s+v3(?:\s+(.*))?\z/).captures
           write = name.include?('"') ? nil : snmp_group_write(settings.to_s)
           [ name, { acl: entry.text[/\baccess\s+(\S+)/, 1], line: entry.line, write: write } ]
         end
         record("snmp.groups", groups)
         users = {}
-        matching(/\Asnmp-server user\b/).each do |entry|
+        matching_blocks(/\Asnmp-server user\b/).each do |entry|
           match = /\Asnmp-server user\s+(\S+)\s+(\S+)(.*)\z/.match(entry.text)
           unless match
             unknown_snmp_access([ entry ])
@@ -153,14 +155,14 @@ module Baseline
           acl = settings[/\b(?:access|use-ipv4acl)\s+(\S+)/, 1]
           user[:acl] = acl if acl
         end
-        port_overrides = matching(/\A(?:no )?snmp-server (?:listen-port|udp-port|port)(?:\s|\z)/)
+        port_overrides = matching_blocks(/\A(?:no )?snmp-server (?:listen-port|udp-port|port)(?:\s|\z)/)
         unknown_listener_port("snmp.acl", port_overrides) unless port_overrides.empty?
         @facts.snmp(communities: communities.values, users: users.values, groups: nxos? ? nil : groups,
           port: port_overrides.empty? ? 161 : nil)
         nxos_snmp_coverage(users, enabled: enabled) if nxos?
         unknown("snmp.v3_auth_priv", code: :snmp_user_unresolved) if users.values.any? { |user| !user.key?(:auth) }
-        versions |= values(/\Asnmp-server group\s+\S+\s+(v1|v2c|v3)\b/)
-        legacy_groups = matching(/\Asnmp-server group\s+\S+\s+v(?:1|2c)\b/)
+        versions |= configured_values(/\Asnmp-server group\s+\S+\s+(v1|v2c|v3)\b/)
+        legacy_groups = matching_blocks(/\Asnmp-server group\s+\S+\s+v(?:1|2c)\b/)
         if legacy_groups.any?
           @facts.unknown_snmp_permission(lines: legacy_groups.map(&:line), code: :unsupported_snmp_group)
           unknown("snmp.acl", legacy_groups, code: :unsupported_snmp_group)
@@ -171,10 +173,10 @@ module Baseline
       # NX-OS 通常会同步 CLI 与 SNMP 账号；缺少证据时不能构造虚拟用户。
       def nxos_snmp_coverage(users, enabled:)
         return if enabled == false
-        sync_disabled = state(/\Asnmp-server disable snmp-aaa sync\z/, /\Ano snmp-server disable snmp-aaa sync\z/)
+        sync_disabled = configured_state(/\Asnmp-server disable snmp-aaa sync\z/, /\Ano snmp-server disable snmp-aaa sync\z/)
         return if sync_disabled == true
 
-        matching(/\Ausername\s+/).group_by { |entry| entry.text.split[1] }.each do |name, entries|
+        matching_blocks(/\Ausername\s+/).group_by { |entry| entry.text.split[1] }.each do |name, entries|
           roles = entries.filter_map { |entry| entry.text[/\brole\s+(\S+)\s*\z/, 1] }.uniq
           covered = users[name]&.fetch(:roles, []) || []
           next if roles.any? && (roles - covered).empty?
@@ -195,9 +197,9 @@ module Baseline
       # 解析实际生效的认证方法及外部服务器引用。
       def authentication
         servers, aliases, keyed = [], {}, []
-        global_key = matching(/\Atacacs-server key\s+/)
+        global_key = matching_blocks(/\Atacacs-server key\s+/)
         global_key.each { |entry| parse_key("tacacs", entry.text.sub(/\Atacacs-server key\s+/, ""), entry) }
-        matching(/\Atacacs-server host\s+/).each do |entry|
+        matching_blocks(/\Atacacs-server host\s+/).each do |entry|
           host = entry.text.split[2]
           servers << host
           key = entry.text[/\bkey\s+(.+)\z/, 1]
@@ -206,17 +208,17 @@ module Baseline
             keyed << host
           end
         end
-        sections(/\Atacacs server\s+/).each do |section|
-          hosts = values(/\Aaddress ipv[46]\s+(\S+)/, section.children)
+        matching_blocks(/\Atacacs server\s+/).each do |section|
+          hosts = configured_values(/\Aaddress ipv[46]\s+(\S+)/, section.children)
           aliases[section.text.split.last] = hosts
           servers |= hosts
-          matching(/\Akey\s+/, section.children).each do |entry|
+          matching_blocks(/\Akey\s+/, section.children).each do |entry|
             parse_key("tacacs:#{section.text.split.last}", entry.text.delete_prefix("key "), entry)
             keyed |= hosts
           end
         end
-        groups = sections(/\Aaaa group server tacacs\+\s+/).to_h do |section|
-          members = values(/\Aserver(?: name)?\s+(\S+)/, section.children)
+        groups = matching_blocks(/\Aaaa group server tacacs\+\s+/).to_h do |section|
+          members = configured_values(/\Aserver(?: name)?\s+(\S+)/, section.children)
           [ section.text.split.last, members.flat_map { |member| aliases.fetch(member, [ member ]) } ]
         end
         record("tacacs.servers", servers.uniq)
@@ -225,14 +227,14 @@ module Baseline
         patterns = { "authorization" => /\Aaaa authorization (?:exec|commands(?: \d+)?) default\s+(.+)\z/,
           "accounting" => /\Aaaa accounting (?:(?:exec|commands(?: \d+)?) )?default\s+(.+)\z/ }
         patterns.each do |kind, pattern|
-          references = values(pattern).flat_map { |methods| methods.scan(/\bgroup\s+(\S+)/).flatten }
+          references = configured_values(pattern).flat_map { |methods| methods.scan(/\bgroup\s+(\S+)/).flatten }
           selected = references.flat_map { |name| name == "tacacs+" ? servers : groups.fetch(name, []) }.uniq
           unresolved = references.any? { |name| name != "radius" && name != "tacacs+" && !groups.key?(name) } || (selected - servers).any?
           if unresolved
-            unknown("tacacs.#{kind}", matching(pattern), code: :tacacs_group_unresolved)
+            unknown("tacacs.#{kind}", matching_blocks(pattern), code: :tacacs_group_unresolved)
           else
             used = selected.any?
-            record("tacacs.#{kind}", used, matching(pattern)) if @facts.complete? || used
+            record("tacacs.#{kind}", used, matching_blocks(pattern)) if @facts.complete? || used
           end
         end
         record("tacacs.keys_present", global_key.any? || (servers - keyed).empty?) unless servers.empty?
@@ -242,7 +244,7 @@ module Baseline
       # 解析各 VTY 实际选用的登录列表，包括命名列表。
       def tacacs_login(servers, groups)
         pattern = /\Aaaa authentication login\s+(\S+)\s+(.+)\z/
-        lists = matching(pattern).each_with_object({}) do |entry, result|
+        lists = matching_blocks(pattern).each_with_object({}) do |entry, result|
           name, methods = analyze(entry) { entry.text.match(pattern).captures }
           result[name] = { methods: methods, entry: entry }
         end
@@ -296,26 +298,26 @@ module Baseline
       # 提取已配置的凭据编码方式，不保留秘密值。
       def parse_key(owner, text, entry)
         match = /\A(?:(\d+)\s+)?(\S+)/.match(text)
-        credential(owner, "tacacs", match&.[](1) || "plain", match&.[](2), entry)
+        record_credential(owner, "tacacs", match&.[](1) || "plain", match&.[](2), entry)
       end
 
       # 提取本地账号角色及凭据存储属性。
       def accounts
-        matching(/\Ausername\s+/).group_by { |entry| entry.text.split[1] }.each do |name, entries|
+        matching_blocks(/\Ausername\s+/).group_by { |entry| entry.text.split[1] }.each do |name, entries|
           passwords = entries.filter_map do |entry|
             match = /\b(?:password|secret)\s+(?:(\d+)\s+)?(\S+)/.match(entry.text)
-            credential(name, "local_user", match[1] || "plain", match[2], entry) if match
+            record_credential(name, "local_user", match[1] || "plain", match[2], entry) if match
           end
-          credential(name, "local_user", "unknown", nil, entries.first) if passwords.empty?
+          record_credential(name, "local_user", "unknown", nil, entries.first) if passwords.empty?
         end
-        matching(/\Aenable (?:password|secret)\s+/).each do |entry|
+        matching_blocks(/\Aenable (?:password|secret)\s+/).each do |entry|
           match = /\Aenable (?:password|secret)(?: level \d+)?\s+(?:(\d+)\s+)?(\S+)/.match(entry.text)
-          credential("enable", "enable", match ? match[1] || "plain" : "unknown", match&.[](2), entry)
+          record_credential("enable", "enable", match ? match[1] || "plain" : "unknown", match&.[](2), entry)
         end
-        sections(/\Aline\b/).each do |section|
-          matching(/\Apassword\b/, section.children).each do |entry|
+        matching_blocks(/\Aline\b/).each do |section|
+          matching_blocks(/\Apassword\b/, section.children).each do |entry|
             match = /\Apassword\s+(?:(\d+)\s+)?(\S+)/.match(entry.text)
-            credential(section.text, "line", match ? match[1] || "plain" : "unknown", match&.[](2), entry)
+            record_credential(section.text, "line", match ? match[1] || "plain" : "unknown", match&.[](2), entry)
           end
         end
       end

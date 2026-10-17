@@ -1,9 +1,11 @@
 # frozen_string_literal: true
 
+require_relative "../comware/parser"
+
 module Baseline
-  module Parsers
+  module H3c
     # 解析 H3C Comware 的 SSH、域认证及三类 TACACS 密钥角色。
-    class H3c < Comware
+    class Parser < Comware::Parser
       private
 
       # 匹配当前平台显式启用 SSH 的命令。

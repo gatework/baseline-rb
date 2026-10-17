@@ -4,6 +4,18 @@ require_relative "spec_helper"
 require "baseline"
 
 RSpec.describe Baseline::Facts do
+  it "tracks credential source lines without collapsing credentials from the same line" do
+    facts = described_class.new(complete: true)
+    expect(facts.credential_recorded?(7)).to be(false)
+    %w[snmp_user tacacs].each do |kind|
+      facts.record_credential(Baseline::Credential.new(owner: "example", kind: kind, format: "cipher", secret: "synthetic", line: 7))
+    end
+    expect(facts.credential_recorded?(7)).to be(true)
+    expect(facts.credential_recorded?(8)).to be(false)
+    values = facts.result.records.first.fetch("facts").fetch("credentials.records")
+    expect(values.map { |value| value[:kind] }).to eq(%w[snmp_user tacacs])
+  end
+
   it "copies configuration identity without freezing caller strings" do
     platform = +"h3c"
     checksum = +"fixture"
@@ -19,10 +31,39 @@ RSpec.describe Baseline::Facts do
     expect(configuration.sha256).to be_frozen
   end
 
+  it "keeps received-input completeness separate from parsed-fact completeness" do
+    partial = CtxParser::Result.new(status: :partial)
+    configuration = Baseline::Configuration.new(platform: "h3c", sha256: "fixture", result: partial, input_complete: true)
+    expect(configuration).to be_input_complete
+    expect(configuration).not_to be_complete
+    expect(configuration.to_h).to include(input_complete: true, status: :partial)
+    expect(Baseline::Configuration.new(platform: "h3c", sha256: "fixture", result: partial)).not_to be_input_complete
+    complete = CtxParser::Result.new(status: :complete)
+    unconfirmed = Baseline::Configuration.new(platform: "h3c", sha256: "fixture", result: complete, input_complete: false)
+    expect(unconfirmed).not_to be_complete
+    expect do
+      Baseline::Configuration.new(platform: "h3c", sha256: "fixture", result: partial, input_complete: "true")
+    end.to raise_error(ArgumentError)
+  end
+
   def access_list(name)
     Baseline::Acl.new(name: name, line: 2, rules: [
       { sequence: 10, action: "permit", protocol: "ip", source: "198.51.100.0/24", line: 3 }
     ])
+  end
+
+  it "owns the SSH ACL binding name throughout fact assembly" do
+    facts = described_class.new(complete: true)
+    facts.record("hostname", "LAB")
+    facts.register_acl(access_list("MGMT"))
+    facts.register_acl(Baseline::Acl.new(name: "OPEN", line: 4, rules: [
+      { sequence: 10, action: "permit", protocol: "ip", source: "0.0.0.0/0" }
+    ]))
+    binding = +"MGMT"
+    facts.management(vtys: [ { protocols: [ "ssh" ], authentication: "aaa", line: 8 } ], ssh_acl: binding)
+    binding.replace("OPEN")
+    expect(facts.result.records.first.fetch("facts").fetch("management.acl.sources")).to eq([ "198.51.100.0/24" ])
+    expect(binding).not_to be_frozen
   end
 
   it "preserves explicit false but does not infer absence from an incomplete configuration" do

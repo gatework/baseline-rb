@@ -28,6 +28,20 @@ RSpec.describe Baseline::Audit do
     end
   end
 
+  {
+    "h3c" => [ "sysname LAB", "ntp-service source" ],
+    "huawei" => [ "sysname LAB", "ntp-service source-interface" ],
+    "cisco_ios" => [ "hostname LAB", "ntp source" ],
+    "cisco_nxos" => [ "hostname LAB", "ntp source-interface" ]
+  }.each do |platform, (hostname, command)|
+    it "retains the NTP source interface from #{platform} CLI syntax" do
+      policy = Baseline::Policy.new("version" => 1, "checks" => { "ntp.source" => { "expected" => "Loopback0" } })
+      report = described_class.new(policy: policy).call(configuration: "#{hostname}\n#{command} Loopback0\n", platform: platform, complete: true)
+      expect(report.configuration.value("ntp.source")).to eq("Loopback0")
+      expect(report.findings.first.status).to eq(:pass)
+    end
+  end
+
   it "keeps nested interface statements and banner text out of global facts" do
     text = "banner motd ^C\nntp-service unicast-server 203.0.113.1\nssh server disable\n^C\n" + fixture("h3c")
     config = parse("h3c", text).configuration

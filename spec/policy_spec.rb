@@ -9,6 +9,17 @@ RSpec.describe Baseline::Policy do
     described_class.new("version" => 1, "checks" => { "ntp.servers" => { "expected" => expected } })
   end
 
+  it "names SNMP write permission with the same boolean meaning as its fact" do
+    policy = described_class.new("version" => 1, "checks" => { "snmp.write_enabled" => { "expected" => false } })
+    audit = Baseline::Audit.new(policy: policy)
+    { "read" => :pass, "write" => :fail }.each do |permission, status|
+      report = audit.call(platform: "h3c", complete: true,
+        configuration: "sysname LAB\nsnmp-agent community #{permission} cipher SYNTHETIC\nreturn\n")
+      expect(report.findings.first.status).to eq(status)
+    end
+    expect { described_class.new("version" => 1, "checks" => { "snmp.read_only" => { "expected" => true } }) }.to raise_error(ArgumentError)
+  end
+
   it "selects approved values by host, model, site, role and vendor in order" do
     selectors = %w[host model site role vendor].to_h { |name| [ "by_#{name}", { "selected" => [ name ] } ] }
     definition = policy(selectors.merge("default" => [ "fallback" ]))

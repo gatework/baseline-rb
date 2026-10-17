@@ -1,13 +1,22 @@
 # frozen_string_literal: true
 
+require_relative "configuration"
+require_relative "evaluator"
+require_relative "h3c/parser"
+require_relative "huawei/parser"
+require_relative "cisco_ios/parser"
+require_relative "cisco_nxos/parser"
+require_relative "hillstone/parser"
+require_relative "palo_alto/parser"
+
 require "digest"
 
 module Baseline
   # 仅分析传入文本，不读取文件、访问数据库、连接设备或执行修复。
   class Audit
-    PARSERS = { "h3c" => Parsers::H3c, "huawei" => Parsers::Huawei,
-      "cisco_ios" => Parsers::CiscoIos, "cisco_nxos" => Parsers::CiscoNxos,
-      "hillstone" => Parsers::Hillstone, "palo_alto" => Parsers::PaloAlto }.freeze
+    PARSERS = { "h3c" => H3c::Parser, "huawei" => Huawei::Parser,
+      "cisco_ios" => CiscoIos::Parser, "cisco_nxos" => CiscoNxos::Parser,
+      "hillstone" => Hillstone::Parser, "palo_alto" => PaloAlto::Parser }.freeze
     ALIASES = { "h3c_wireless" => "h3c", "comware" => "h3c", "huawei_wireless" => "huawei", "vrp" => "huawei",
       "ios" => "cisco_ios", "iosxe" => "cisco_ios", "ios_xe" => "cisco_ios", "cisco_ios_xe" => "cisco_ios",
       "nxos" => "cisco_nxos", "nx_os" => "cisco_nxos", "stoneos" => "hillstone", "stone_os" => "hillstone",
@@ -28,7 +37,7 @@ module Baseline
       parser = PARSERS[name]
       result = parser ? parser.parse(configuration, complete: complete) :
         CtxParser::Result.new(status: :unsupported, issues: [ { code: :unsupported_platform } ])
-      facts = Configuration.new(platform: name, sha256: Digest::SHA256.hexdigest(configuration), result: result)
+      facts = Configuration.new(platform: name, sha256: Digest::SHA256.hexdigest(configuration), result: result, input_complete: complete)
       @evaluator.call(configuration: facts, context: context)
     end
 

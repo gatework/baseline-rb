@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "rule"
+
 require "yaml"
 require "digest"
 require "json"
@@ -8,11 +10,11 @@ module Baseline
   # 按主机、型号、站点、角色或厂商选择批准值；缺少批准值时不回退到当前配置。
   class Policy
     SCOPES = Rule::CONTEXT_FIELDS
-    SELECTORS = Baseline.immutable(SCOPES.map { |scope| "by_#{scope}" } + [ "default" ])
+    SELECTORS = CtxParser::Immutable.copy(SCOPES.map { |scope| "by_#{scope}" } + [ "default" ])
     Resolution = Data.define(:value, :reason, :path) do
       # 冻结解析后的批准值、原因及策略选择路径。
       def initialize(value:, reason:, path:)
-        super(value: Baseline.immutable(value), reason: Baseline.immutable(reason), path: Baseline.immutable(path))
+        super(value: CtxParser::Immutable.copy(value), reason: CtxParser::Immutable.copy(reason), path: CtxParser::Immutable.copy(path))
       end
     end
     attr_reader :rules, :sha256

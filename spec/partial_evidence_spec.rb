@@ -69,6 +69,27 @@ RSpec.describe Baseline::Evaluator, "partial configuration evidence" do
     expect(ambiguous.findings.first.diagnostics).to include(hash_including(code: :acl_unresolved))
   end
 
+  it "does not call incomplete ordered ACL exposure a conclusive violation" do
+    body = <<~CLI
+      hostname LAB
+      ip access-list standard MGMT
+       10 permit 198.51.100.0 0.0.0.255
+       20 permit 192.0.2.0 0.0.0.255
+      line vty 0 4
+       transport input ssh
+       login local
+       access-class MGMT in
+      snmp-server community SYNTHETIC RO MGMT
+      end
+    CLI
+    checks = %w[management.sources snmp.sources].to_h { |name| [ name, { "expected" => [ "192.0.2.0/24" ] } ] }
+    observed = audit(checks, body: body, platform: "cisco_ios")
+    expect(observed.findings.map(&:status)).to eq(%i[unknown unknown])
+    expect(observed.findings.map(&:details)).to eq([ {}, {} ])
+    full = body.sub(" 10 permit", " 5 deny 198.51.100.0 0.0.0.255\n 10 permit")
+    expect(audit(checks, body: full, platform: "cisco_ios", complete: true)).to be_compliant
+  end
+
   it "keeps safe partial network sources unknown" do
     body = File.read(File.expand_path("fixtures/baseline/h3c.cfg", __dir__))
     report = audit({ "management.sources" => { "expected" => [ "198.51.100.0/24" ] } }, body: body)
@@ -97,8 +118,8 @@ RSpec.describe Baseline::Evaluator, "partial configuration evidence" do
     definition = Baseline::Policy.default
     report = Baseline::Audit.new(policy: definition).call(platform: "h3c", complete: true,
       configuration: "sysname LAB\nsnmp-agent\nsnmp-agent community write cipher FIXTURE-COMMUNITY\n--More--\n")
-    expect(finding(report, "snmp.read_only").to_h).to include(status: :fail, actual: true, expected: false)
-    readonly = audit({ "snmp.read_only" => { "expected" => false } },
+    expect(finding(report, "snmp.write_enabled").to_h).to include(status: :fail, actual: true, expected: false)
+    readonly = audit({ "snmp.write_enabled" => { "expected" => false } },
       body: "sysname LAB\nsnmp-agent community read cipher FIXTURE-COMMUNITY\n")
     expect(readonly.findings.first.to_h).to include(status: :unknown, reason: :input_incomplete)
   end
@@ -146,13 +167,13 @@ RSpec.describe Baseline::Evaluator, "partial configuration evidence" do
   end
 
   it "keeps scoped parser uncertainty local while retaining a separate violation" do
-    checks = { "services.disabled" => { "expected" => [ "http" ] }, "snmp.read_only" => { "expected" => false } }
+    checks = { "services.disabled" => { "expected" => [ "http" ] }, "snmp.write_enabled" => { "expected" => false } }
     report = audit(checks, platform: "cisco_ios",
       body: "hostname LAB\nip http server\nsnmp-server group OPS v3 priv unsupported-option VALUE\n--More--\n", complete: true)
     service = finding(report, "services.disabled")
     expect(service.status).to eq(:fail)
     expect(service.diagnostics.map { |issue| issue[:code] }).not_to include(:snmp_permission_unresolved)
-    permission = finding(report, "snmp.read_only")
+    permission = finding(report, "snmp.write_enabled")
     expect(permission.status).to eq(:unknown)
     expect(permission.diagnostics).to include(hash_including(code: :snmp_permission_unresolved))
   end
@@ -191,7 +212,7 @@ RSpec.describe Baseline::Evaluator, "partial configuration evidence" do
 
   it "keeps the original cursor, line numbers and capture source while excluding the incomplete final block" do
     body = "sysname LAB\nntp-service unicast-server 192.0.2.10\nlocal-user observer class manage\n password simple admin"
-    parser = Baseline::Parsers::H3c.new
+    parser = Baseline::H3c::Parser.new
     result = parser.parse(body, complete: false)
     expect(result.status).to eq(:partial)
     expect(parser.cursor.content).to eq(body)
@@ -204,7 +225,7 @@ RSpec.describe Baseline::Evaluator, "partial configuration evidence" do
   end
 
   it "retains the incomplete-line diagnostic when no complete statement remains" do
-    result = Baseline::Parsers::H3c.parse("sysname LA", complete: false)
+    result = Baseline::H3c::Parser.parse("sysname LA", complete: false)
     expect(result.status).to eq(:failed)
     expect(result.issues).to include({ code: :incomplete_final_line, line: 1 }, { code: :empty_configuration })
     expect(result.records).to be_empty
@@ -228,7 +249,7 @@ RSpec.describe Baseline::Evaluator, "partial configuration evidence" do
   end
 
   it "does not leak excluded final-line state into the next parse session" do
-    parser = Baseline::Parsers::H3c.new
+    parser = Baseline::H3c::Parser.new
     prefix = "sysname LAB\nntp-service unicast-server 192.0.2.10"
     first = parser.parse(prefix, complete: false)
     expect(first.records.first.fetch("facts")).not_to have_key("ntp.servers")

@@ -1,5 +1,10 @@
 # frozen_string_literal: true
 
+require_relative "configuration"
+
+require "ctx_parser/immutable"
+require "json"
+
 module Baseline
   # 分别报告评估结果与输入覆盖率；未知项不计分，也不视为合规。
   class Report
@@ -16,7 +21,7 @@ module Baseline
     Finding = Data.define(:id, :title, :severity, :status, :reason, :actual, :expected, :lines, :policy_path, :diagnostics, :details) do
       # 冻结单条检查结果的策略路径、诊断和支持细节。
       def initialize(policy_path: [], diagnostics: [], details: {}, **attributes)
-        super(**Baseline.immutable(attributes.merge(policy_path: policy_path, diagnostics: diagnostics, details: details)))
+        super(**CtxParser::Immutable.copy(attributes.merge(policy_path: policy_path, diagnostics: diagnostics, details: details)))
       end
 
       # 将稳定的结果原因代码转换为易读说明。
@@ -35,7 +40,7 @@ module Baseline
     def initialize(configuration:, policy_sha256:, findings:, context:)
       @configuration, @policy_sha256 = configuration, policy_sha256
       @findings = findings.dup.freeze
-      @context = Baseline.immutable(context)
+      @context = CtxParser::Immutable.copy(context)
       @counts = @findings.map(&:status).tally.freeze
       @applicable = @findings.reject { |finding| finding.status == :not_applicable }.freeze
       freeze
@@ -72,7 +77,7 @@ module Baseline
 
     # 限制摘要大小；完整事实由 to_h 提供，避免 ACL 或账号数量膨胀元数据。
     def summary
-      metadata.merge(configuration: { platform: configuration.platform, sha256: configuration.sha256, status: configuration.status,
+      metadata.merge(configuration: { platform: configuration.platform, sha256: configuration.sha256, status: configuration.status, input_complete: configuration.input_complete?,
         issue_counts: configuration.issues.map { |issue| issue[:code] }.tally },
         findings: findings.map(&:summary))
     end

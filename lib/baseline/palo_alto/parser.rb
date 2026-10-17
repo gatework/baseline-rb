@@ -1,24 +1,26 @@
 # frozen_string_literal: true
 
+require_relative "../parser"
+
 require "shellwords"
-require_relative "../palo_alto_document"
+require_relative "document"
 
 module Baseline
-  module Parsers
+  module PaloAlto
     # 将 PAN-OS set 语法归纳为与配置块平台一致的事实。
-    class PaloAlto < Base
+    class Parser < Baseline::Parser
       MANAGEMENT_SERVICES = %w[ssh telnet http https].freeze
       RELEVANT = /\Aset (?:deviceconfig system |network (?:profiles interface-management-profile |interface )|shared (?:server-profile tacplus |authentication-profile |authentication-sequence |log-settings syslog )|mgt-config users )/
 
       private
 
       # 选择适合当前平台语法的文档词法解析器。
-      def configuration_document_class = PaloAltoDocument
+      def document_class = Document
       # 匹配当前平台显式声明的主机名。
       def hostname_pattern = /\Aset deviceconfig system hostname\s+(\S+)\z/
 
       # 仅对管理配置子集分词一次，不处理无关的安全规则。
-      def access_lists
+      def prepare_configuration
         @statements = roots.filter_map do |entry|
           next unless RELEVANT.match?(entry.text)
           { entry: entry, tokens: Shellwords.shellsplit(entry.text).drop(1) }
@@ -187,7 +189,7 @@ module Baseline
             @facts.incomplete!(code: :invalid_set_statement, lines: [ row[:entry].line ])
             next
           end
-          credential("snmp-community", "snmp", secret_format(row[:tokens].last), row[:tokens].last, row[:entry])
+          record_credential("snmp-community", "snmp", secret_format(row[:tokens].last), row[:tokens].last, row[:entry])
           { write: false, line: row[:entry].line }
         end
         users_prefix = prefix + %w[v3 users]
@@ -202,7 +204,7 @@ module Baseline
               next
             end
             user[key] = !row[:tokens].last.empty?
-            credential("snmp:#{name}", "snmp_user", secret_format(row[:tokens].last), row[:tokens].last, row[:entry])
+            record_credential("snmp:#{name}", "snmp_user", secret_format(row[:tokens].last), row[:tokens].last, row[:entry])
           end
           user
         end
@@ -227,7 +229,7 @@ module Baseline
           keys = servers.values.map do |server|
             secret = server.reverse.find { |row| row[:tokens][6] == "secret" }
             value = secret && scalar(secret[:tokens].take(7))
-            credential("tacacs:#{name}", "tacacs", secret_format(value), value, secret[:entry]) if value
+            record_credential("tacacs:#{name}", "tacacs", secret_format(value), value, secret[:entry]) if value
             !value.to_s.empty?
           end
           [ name, { servers: addresses, keys_present: keys.any? && keys.all?, line: entries.first[:entry].line } ]
@@ -278,7 +280,7 @@ module Baseline
           row = entries.reverse.find { |entry| entry[:tokens][3] == "phash" }
           unless row
             external_profile = scalar([ "mgt-config", "users", name, "authentication-profile" ])
-            credential(name, "local_user", "unknown", nil, entries.first[:entry]) unless external_profile && !external_profile.empty?
+            record_credential(name, "local_user", "unknown", nil, entries.first[:entry]) unless external_profile && !external_profile.empty?
             next
           end
           secret = scalar(row[:tokens].take(4))
@@ -287,7 +289,7 @@ module Baseline
           else
             "unknown"
           end
-          credential(name, "local_user", format, secret, row[:entry])
+          record_credential(name, "local_user", format, secret, row[:entry])
         end
       end
 

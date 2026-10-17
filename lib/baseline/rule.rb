@@ -1,5 +1,9 @@
 # frozen_string_literal: true
 
+require_relative "acl"
+
+require "ctx_parser/immutable"
+
 module Baseline
   # 规则声明事实、比较方式和批准值类型；厂商语法仅由解析器负责。
   class Rule
@@ -7,15 +11,15 @@ module Baseline
     Definition = Data.define(:title, :fact, :operator, :value_type, :allowed_values) do
       # 冻结规则目录条目的事实、比较方式及批准值类型。
       def initialize(title:, fact:, operator:, value_type:, allowed_values: nil)
-        super(title: Baseline.immutable(title), fact: Baseline.immutable(fact), operator: Baseline.immutable(operator),
-          value_type: Baseline.immutable(value_type), allowed_values: Baseline.immutable(allowed_values))
+        super(title: CtxParser::Immutable.copy(title), fact: CtxParser::Immutable.copy(fact), operator: CtxParser::Immutable.copy(operator),
+          value_type: CtxParser::Immutable.copy(value_type), allowed_values: CtxParser::Immutable.copy(allowed_values))
       end
     end
 
     DEFINITIONS = {
       "snmp.enabled" => Definition.new(title: "SNMP 配置", fact: "snmp.enabled", operator: :equals, value_type: :boolean),
       "snmp.versions" => Definition.new(title: "SNMP 允许版本", fact: "snmp.versions", operator: :subset, value_type: :enum_set, allowed_values: %w[v1 v2c v3]),
-      "snmp.read_only" => Definition.new(title: "SNMP 禁止写权限", fact: "snmp.write_enabled", operator: :equals, value_type: :boolean),
+      "snmp.write_enabled" => Definition.new(title: "SNMP 写权限", fact: "snmp.write_enabled", operator: :equals, value_type: :boolean),
       "snmp.auth_priv" => Definition.new(title: "SNMPv3 认证与加密", fact: "snmp.v3_auth_priv", operator: :equals, value_type: :boolean),
       "snmp.acl_bound" => Definition.new(title: "SNMP 来源 ACL 引用", fact: "snmp.acl.bound", operator: :equals, value_type: :boolean),
       "snmp.acl_restricted" => Definition.new(title: "SNMP 来源 ACL 限制", fact: "snmp.acl.restricted", operator: :equals, value_type: :boolean),
@@ -35,7 +39,7 @@ module Baseline
       "management.acl_restricted" => Definition.new(title: "管理来源 ACL 限制", fact: "management.acl.restricted", operator: :equals, value_type: :boolean),
       "management.sources" => Definition.new(title: "管理批准来源", fact: "management.acl.sources", operator: :networks_within, value_type: :network_set),
       "services.disabled" => Definition.new(title: "关闭非必要服务", fact: "services", operator: :all_disabled, value_type: :enum_set, allowed_values: %w[telnet http https ftp tftp finger]),
-      "credentials.storage" => Definition.new(title: "凭据存储方式", fact: "credentials.storage_safe", operator: :equals, value_type: :boolean),
+      "credentials.storage" => Definition.new(title: "凭据安全存储", fact: "credentials.storage_safe", operator: :equals, value_type: :boolean),
       "credentials.strength" => Definition.new(title: "可观察口令强度", fact: "credentials.records", operator: :password_strength, value_type: :password_strength),
       "tacacs.minimum_servers" => Definition.new(title: "TACACS 服务器数量", fact: "tacacs.servers", operator: :count_at_least, value_type: :positive_integer),
       "tacacs.servers" => Definition.new(title: "TACACS 批准服务器", fact: "tacacs.servers", operator: :set_equals, value_type: :string_set),
@@ -60,12 +64,12 @@ module Baseline
           %w[low medium high critical].include?(options.fetch("severity", "medium"))
         raise ArgumentError, "Invalid baseline rule options"
       end
-      @id = Baseline.immutable(id)
+      @id = CtxParser::Immutable.copy(id)
       @title, @fact, @operator = definition.title, definition.fact, definition.operator
       @value_type, @allowed_values = definition.value_type, definition.allowed_values
-      @expected = Baseline.immutable(options["expected"])
-      @enabled, @severity = options.fetch("enabled", true), Baseline.immutable(options.fetch("severity", "medium"))
-      @applies_to = Baseline.immutable(options.fetch("applies_to", {}))
+      @expected = CtxParser::Immutable.copy(options["expected"])
+      @enabled, @severity = options.fetch("enabled", true), CtxParser::Immutable.copy(options.fetch("severity", "medium"))
+      @applies_to = CtxParser::Immutable.copy(options.fetch("applies_to", {}))
       validate_applicability!
       freeze
     end
@@ -86,7 +90,7 @@ module Baseline
       when :string_set, :network_set then string_set?(value)
       end
       raise ArgumentError, "Invalid baseline expected value for #{id}" unless valid
-      value.each { |network| Acl.range(network) } if value_type == :network_set
+      value.each { |network| Acl.address_range(network) } if value_type == :network_set
     end
 
     # 展示对象身份与状态，避免泄露原始回显或凭据。

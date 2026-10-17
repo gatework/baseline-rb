@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require_relative "policy"
+require_relative "report"
+
 module Baseline
   # 根据策略评估归一化事实；厂商语法差异由解析器负责。
   class Evaluator
@@ -43,7 +46,7 @@ module Baseline
       attributes[:actual] = actual
       status, reason = compare(rule.operator, actual, expected)
       # 不完整输入不能证明通过；仅保留补充记录也无法推翻的明确违规。
-      if !configuration.complete? && (status == :pass || status == :fail && !partial_failure?(rule, actual, expected))
+      if !configuration.complete? && (status == :pass || status == :fail && !conclusive_violation?(rule, actual, expected, configuration))
         status, reason = :unknown, :input_incomplete
       end
       if status == :fail
@@ -55,9 +58,10 @@ module Baseline
     end
 
     # 采集尚未完成时，仅报告后续缺失记录也无法推翻的明确违规。
-    def partial_failure?(rule, actual, expected)
+    def conclusive_violation?(rule, actual, expected, configuration)
       case rule.operator
-      when :all_disabled, :subset, :networks_within, :password_strength then true
+      when :all_disabled, :subset, :password_strength then true
+      when :networks_within then configuration.input_complete?
       when :set_equals then (actual - expected).any?
       when :equals
         rule.fact == "snmp.write_enabled" && actual == true && expected == false ||
@@ -81,7 +85,7 @@ module Baseline
       when :set_equals then { missing: expected - actual, unexpected: actual - expected }
       when :subset then { unexpected: actual - expected }
       when :count_at_least then { minimum: expected, actual_count: actual.size }
-      when :networks_within then { outside_approved: actual.reject { |network| Acl.within?([ network ], expected) } }
+      when :networks_within then { outside_approved: Acl.unapproved_networks(actual, expected) }
       when :all_disabled then { enabled: expected.select { |name| actual[name] == true } }
       else {}
       end
@@ -128,7 +132,7 @@ module Baseline
         when :subset then (actual - expected).empty?
         when :set_equals then actual.sort == expected.sort
         when :count_at_least then actual.size >= expected
-        when :networks_within then Acl.within?(actual, expected)
+        when :networks_within then Acl.networks_within?(actual, expected)
         end
       end
       [ passed ? :pass : :fail, passed ? nil : :deviation ]
