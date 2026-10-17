@@ -98,6 +98,20 @@ module Baseline
       analyze(entry) { entry.text[pattern, 1] }
     end
 
+    # 保存最后生效的标量声明及对应来源，不将被覆盖的声明作为当前证据。
+    def record_configured_value(path, pattern, entries = roots)
+      entry = entries.reverse.find { |candidate| !candidate.text[pattern, 1].nil? }
+      return unless entry
+
+      record(path, analyze(entry) { entry.text[pattern, 1] }, [ entry ])
+    end
+
+    # 启用状态可能由正向或撤销声明决定，保留所有参与归约的来源。
+    def record_configured_state(path, on, off)
+      entries = roots.select { |entry| on.match?(entry.text) || off.match?(entry.text) }
+      record(path, configured_state(on, off, entries), entries)
+    end
+
     # 保存归一化事实及其来源证据。
     def record(path, value, entries = [])
       return unless @facts.record(path, value, lines: entries.map(&:line))

@@ -15,6 +15,9 @@ module Baseline
     # 评估适用基线规则，分别报告合规结果与证据覆盖率。
     def call(configuration:, context: {})
       raise ArgumentError, "Invalid baseline context" unless context.is_a?(Hash)
+      unless context.keys.all? { |key| key.is_a?(String) || key.is_a?(Symbol) } && context.keys.map(&:to_s).uniq.size == context.size
+        raise ArgumentError, "Ambiguous baseline context"
+      end
       context = context.transform_keys(&:to_s).merge("vendor" => configuration.platform)
       unless (context.keys - Policy::SCOPES).empty? && context.values.all? { |value| value.is_a?(String) && !value.strip.empty? }
         raise ArgumentError, "Invalid baseline context"

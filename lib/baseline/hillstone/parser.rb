@@ -95,8 +95,8 @@ module Baseline
           analyze(entry) { parts[2] }
         end
         record("ntp.servers", servers.uniq, entries)
-        record("ntp.authentication", configured_state(/\Antp authentication\z/, /\Ano ntp authentication\z/))
-        record("ntp.source", sources.first) if sources.any? && sources.first && sources.uniq.one?
+        record_configured_state("ntp.authentication", /\Antp authentication\z/, /\Ano ntp authentication\z/)
+        record("ntp.source", sources.first, entries) if sources.any? && sources.first && sources.uniq.one?
         unknown("ntp", matching_blocks(/\Ano ntp server\b/)) if matching_blocks(/\Ano ntp server\b/).any?
       end
 
@@ -124,13 +124,13 @@ module Baseline
           analyze(entry) { parts[2] }
         end
         record("syslog.servers", servers.uniq, entries)
-        record("syslog.source", sources.first) if sources.any? && sources.first && sources.uniq.one?
+        record("syslog.source", sources.first, entries) if sources.any? && sources.first && sources.uniq.one?
         unknown("syslog", matching_blocks(/\Ano logging syslog\b/)) if matching_blocks(/\Ano logging syslog\b/).any?
       end
 
       # 轮询主机权限独立于出站 Trap 接收端。
       def snmp
-        record("snmp.enabled", configured_state(/\Asnmp-server manager\z/, /\Ano snmp-server manager\z/))
+        record_configured_state("snmp.enabled", /\Asnmp-server manager\z/, /\Ano snmp-server manager\z/)
         entries = matching_blocks(/\Asnmp-server host\b/)
         versions, sources, communities = [], [], []
         entries.each do |entry|

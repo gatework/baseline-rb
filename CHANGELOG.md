@@ -2,6 +2,10 @@
 
 Changes to the public contract are recorded here. Versions follow Semantic Versioning.
 
+## 0.2.1 (2026-10-17)
+
+- Reject duplicate normalized context keys before policy selection; preserve source lines and cursor captures for scalar NTP and Syslog configuration facts.
+
 ## 0.2.0 (2026-10-17)
 
 ### Changed

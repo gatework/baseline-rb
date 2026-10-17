@@ -73,6 +73,8 @@ puts report.to_text
 
 解析辅助方法直接描述提取意图：`matching_blocks`、`configured_values`、`last_configured_value`、`configured_state` 和 `acl_source_network`。SNMP 写权限规则统一为 `snmp.write_enabled`，禁止写入时配置 `expected: false`。自定义策略需迁移旧键 `snmp.read_only`；旧类名与规则键不保留兼容别名。
 
+上下文允许字符串或符号键，但归一化后重复的键会抛出 `ArgumentError`，避免依赖插入顺序选择设备策略。
+
 `complete: true` 表示调用方提供了完整快照。报告通过 `input_complete` 保留这项声明，与解析状态分别记录。不完整的有序 ACL 可能缺少更早的 deny，因此不能仅根据已见 permit 判断来源越界，此时保持 `unknown`。
 
 ## 开发与测试

@@ -144,9 +144,9 @@ module Baseline
         end
         record("ntp.servers", servers.map { |server| server[:address] }.uniq, entries.map { |row| row[:entry] })
         if servers.any? && servers.none? { |server| server[:authenticated].nil? }
-          record("ntp.authentication", servers.all? { |server| server[:authenticated] })
+          record("ntp.authentication", servers.all? { |server| server[:authenticated] }, entries.map { |row| row[:entry] })
         end
-        record("ntp.source", scalar(%w[deviceconfig system route service ntp source interface]))
+        record_scalar("ntp.source", %w[deviceconfig system route service ntp source interface])
       end
 
       # 仅完整的认证声明才能证明所有服务器均满足认证要求。
@@ -176,7 +176,7 @@ module Baseline
           value
         end
         record("syslog.servers", servers.uniq, entries.map { |row| row[:entry] })
-        record("syslog.source", scalar(%w[deviceconfig system route service syslog source interface]))
+        record_scalar("syslog.source", %w[deviceconfig system route service syslog source interface])
       end
 
       # 轮询用户、团体字与出站 SNMP Trap 配置相互独立。
@@ -319,6 +319,12 @@ module Baseline
 
         @facts.incomplete!(code: :invalid_set_statement, lines: rows(*prefix).map { |row| row[:entry].line })
         nil
+      end
+
+      # 标量语法与事实来源共享同一条最终声明。
+      def record_scalar(path, prefix)
+        row = rows(*prefix).last
+        record(path, scalar(prefix), row ? [ row[:entry] ] : [])
       end
 
       # 严格校验词元数量，避免尾随内容使错误配置被误判为已知事实。

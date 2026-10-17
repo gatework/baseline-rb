@@ -73,6 +73,8 @@ Vendor-specific code lives in a vendor namespace: `Baseline::Hillstone::Parser` 
 
 Parser helpers describe the evidence they extract: `matching_blocks`, `configured_values`, `last_configured_value`, `configured_state`, and `acl_source_network`. SNMP write permission uses the policy key `snmp.write_enabled` (`expected: false` to prohibit writes). Update custom policies that used `snmp.read_only`; old class names and rule keys have no compatibility aliases.
 
+Context accepts string or symbol keys, but rejects duplicate keys after normalization with `ArgumentError` rather than selecting a device policy by insertion order.
+
 `complete: true` asserts that the caller supplied the entire snapshot. Reports retain that assertion as `input_complete`, separately from parser status. A partial ordered ACL cannot prove an out-of-policy source: an unseen earlier deny may change its meaning, so the finding stays `unknown`.
 
 ## Development and tests

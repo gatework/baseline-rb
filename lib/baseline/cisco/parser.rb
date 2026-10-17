@@ -85,12 +85,12 @@ module Baseline
       # 采集明确启用或禁用的管理服务。
       def services
         record("ntp.servers", configured_values(/\Antp server(?: vrf \S+)?\s+(\S+)/), matching_blocks(/\Antp server/))
-        record("ntp.authentication", configured_state(/\Antp authenticate\z/, /\Ano ntp authenticate\z/))
-        record("ntp.source", last_configured_value(/\Antp source(?:-interface)?\s+(\S+)\z/))
+        record_configured_state("ntp.authentication", /\Antp authenticate\z/, /\Ano ntp authenticate\z/)
+        record_configured_value("ntp.source", /\Antp source(?:-interface)?\s+(\S+)\z/)
         hosts = configured_values(nxos? ? /\Alogging server\s+(\S+)/ : /\Alogging host(?: ipv6)?\s+(\S+)/)
         hosts |= configured_values(/\Alogging\s+(\d+(?:\.\d+){3})\z/) unless nxos?
         record("syslog.servers", hosts, matching_blocks(/\Alogging (?:host|server)/))
-        record("syslog.source", last_configured_value(/\Alogging source-interface\s+(\S+)\z/))
+        record_configured_value("syslog.source", /\Alogging source-interface\s+(\S+)\z/)
         snmp = matching_blocks(/\Asnmp-server\b/)
         enabled = nxos? ? configured_state(/\Asnmp-server protocol enable\z/, /\Ano snmp-server protocol enable\z/) : nil
         enabled = nxos? || snmp.any? if enabled.nil? && (@facts.complete? || snmp.any?)

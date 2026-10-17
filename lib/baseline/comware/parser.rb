@@ -79,12 +79,12 @@ module Baseline
       # 采集明确启用或禁用的管理服务。
       def services
         record("ntp.servers", configured_values(/\Antp-service unicast-server\s+(\S+)/), matching_blocks(/\Antp-service unicast-server/))
-        record("ntp.authentication", configured_state(/\Antp-service authentication enable\z/, /\Aundo ntp-service authentication enable\z/))
-        record("ntp.source", last_configured_value(/\Antp-service source(?:-interface)?\s+(\S+)\z/))
+        record_configured_state("ntp.authentication", /\Antp-service authentication enable\z/, /\Aundo ntp-service authentication enable\z/)
+        record_configured_value("ntp.source", /\Antp-service source(?:-interface)?\s+(\S+)\z/)
         # 从日志服务器中排除 source 子命令，并保留评估所需的归纳事实。
         hosts = configured_values(/\Ainfo-center loghost\s+(\S+)/) - [ "source" ]
         record("syslog.servers", hosts, matching_blocks(/\Ainfo-center loghost/))
-        record("syslog.source", last_configured_value(/\Ainfo-center loghost source\s+(\S+)\z/))
+        record_configured_value("syslog.source", /\Ainfo-center loghost source\s+(\S+)\z/)
         enabled = configured_state(/\Asnmp-agent(?:\s|\z)/, /\Aundo snmp-agent\z/)
         record("snmp.enabled", enabled.nil? && @facts.complete? ? false : enabled)
         versions = last_configured_value(/\Asnmp-agent sys-info version\s+(.+)\z/)&.split
