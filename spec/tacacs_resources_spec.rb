@@ -25,7 +25,15 @@ RSpec.describe "TACACS endpoint resources" do
     expect(resources.map { |item| item.identity["role"] }).to match_array(%w[authentication authorization authentication])
     secondary = resources.find { |item| item.identity["priority"] == "secondary" }
     expect(secondary.scope).to eq("group" => "OPS", "vrf" => "MGMT")
-    expect(secondary.attributes).to eq("port" => 149)
+    expect(secondary.attributes).to eq("port" => 149, "single_connection" => false)
+  end
+
+  it "does not certify a default-scope endpoint when the scheme routing context is unmodelled" do
+    text = "sysname LAB\nhwtacacs scheme OPS\n vpn-instance MGMT\n primary authentication 192.0.2.30\n"
+    expected = { "identity" => { "address" => "192.0.2.30", "role" => "authentication", "priority" => "primary" }, "scope" => { "group" => "OPS" } }
+    policy = Baseline::Policy.new("version" => 1, "checks" => { "tacacs.endpoints" => { "expected" => [ expected ] } })
+    report = Baseline::Audit.new(policy: policy).call(configuration: text, platform: "h3c", complete: true)
+    expect(report.findings.first.status).to eq(:unknown)
   end
 
   it "cancels one Comware role without removing another role for the same address" do

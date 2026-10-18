@@ -4,6 +4,10 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+- Generate nonsecret Comware 7 TACACS endpoint changes within existing default-routing schemes, preserving role keys and shared domain references; require explicit targets, scope, external fallback/key verification and capacity evidence.
+- Protect physical primary slots, native endpoint identity, last-role paths and intermediate secondary capacity; verify native command application and repeated planning with an independent test model.
+- Treat unmodelled scheme VPN and same-address multiport inventory as unknown rather than proving a default-scope object.
+
 - Respect vendor name identity: fold Comware HWTACACS scheme reentry/removal, but require exact Huawei template and named AAA scheme references while keeping domain matching separate.
 
 - Add typed TACACS `aaa.domain` binding policies, exact reference-set comparison, selected-domain predicates, and explicit object-only verification scope.

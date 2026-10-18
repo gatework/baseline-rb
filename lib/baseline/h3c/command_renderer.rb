@@ -15,6 +15,7 @@ module Baseline
       EXIT_VIEW = "quit"
       RESOURCE_KINDS = %w[syslog.destination ntp.association].freeze
       NTP_STYLE = :h3c
+      TACACS_STYLE = :h3c
       ACCESS_STYLE = :h3c
       SNMP_GLOBAL_ACL = "snmp-agent acl"
       VTY_PROTOCOL_COMMAND = "protocol inbound ssh"

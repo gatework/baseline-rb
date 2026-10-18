@@ -11,6 +11,7 @@ require_relative "credential_remediation"
 require_relative "tacacs_key_remediation"
 require_relative "authentication_remediation"
 require_relative "resource_binding_remediation"
+require_relative "tacacs_remediation"
 
 module Baseline
   # 每个指标都必须有规划结果；缺少实现或前提时显式受阻。
@@ -62,11 +63,13 @@ module Baseline
         elsif AuthenticationRemediation.applicable?(finding, audit.configuration)
           result = AuthenticationRemediation.new.call(finding, audit.configuration)
           check(finding, :blocked, result.fetch(:reason), requirements: result.fetch(:requirements), details: result.fetch(:details))
-        elsif ResourceBindingRemediation.applicable?(finding, audit.configuration)
+        elsif ResourceBindingRemediation.applicable?(finding, audit.configuration) &&
+            (!@renderer.supports?(finding.id) || finding.details.fetch(:binding_differences, []).any? || finding.reason == :resource_binding_unresolved)
           result = ResourceBindingRemediation.new.call(finding, audit.configuration)
           check(finding, :blocked, result.fetch(:reason), requirements: result.fetch(:requirements), details: result.fetch(:details))
         elsif !audit.configuration.complete? || finding.status == :unknown && !((AccessRemediation::IDS + SnmpAccessRemediation::IDS).include?(finding.id) && finding.reason == :fact_unavailable && !finding.expected.nil?)
           reason = audit.configuration.complete? ? finding.reason : audit.configuration.status == :unsupported ? :unsupported_platform : :input_incomplete
+          reason = :tacacs_context_unresolved if audit.configuration.complete? && TacacsRemediation::IDS.include?(finding.id) && finding.diagnostics.any? { |issue| issue[:code] == :tacacs_context_unresolved }
           check(finding, :blocked, reason)
         elsif @renderer.supports?(finding.id)
           if (AccessRemediation::IDS + SnmpAccessRemediation::IDS).include?(finding.id) && conflicting_access_domains.include?(finding.id.split(".").first)
@@ -90,7 +93,7 @@ module Baseline
             check(finding, :blocked, :unresolved_prerequisites, requirements: required)
           elsif (AccessRemediation::IDS + SnmpAccessRemediation::IDS).include?(finding.id)
             compile_access(finding, audit, operations, steps)
-          elsif (SyslogRemediation::IDS + NtpRemediation::IDS).include?(finding.id)
+          elsif (SyslogRemediation::IDS + NtpRemediation::IDS + TacacsRemediation::IDS).include?(finding.id)
             compile_targets(finding, audit, operations, steps)
           elsif finding.id == "ssh.vty_ssh_only"
             compile_vty(finding, audit, operations, steps)
@@ -165,15 +168,21 @@ module Baseline
 
     # 整个指标的操作全部成功呈现后才加入方案，避免删除后才发现新增语法不支持。
     def compile_targets(finding, audit, operations, steps)
-      handler = NtpRemediation::IDS.include?(finding.id) ? NtpRemediation : SyslogRemediation
+      handler = if TacacsRemediation::IDS.include?(finding.id)
+        TacacsRemediation
+      elsif NtpRemediation::IDS.include?(finding.id)
+        NtpRemediation
+      else
+        SyslogRemediation
+      end
       result = handler.new(policy: @policy).call(finding, audit)
       proposed = result.operations
       rendered = proposed.flat_map { |operation| @renderer.render(operation) }
       operations.concat(proposed)
       steps.concat(rendered)
       check(finding, :planned, nil, operation_ids: proposed.map(&:id), details: result.details)
-    rescue SyslogRemediation::Blocked => error
-      check(finding, :blocked, error.reason)
+    rescue TargetRemediation::Blocked => error
+      check(finding, :blocked, error.reason, requirements: error.requirements)
     rescue CommandRenderer::UnsupportedOperation
       check(finding, :blocked, :unsupported_setting)
     rescue ArgumentError

@@ -304,6 +304,9 @@ module Baseline
         key_slots = []
         schemes = tacacs_sections.to_h do |sections|
           section, children = sections.first, sections.flat_map(&:children)
+          unless tacacs_endpoint_inventory_supported?(children)
+            record_unknown_fact("tacacs.endpoints", sections, code: :tacacs_context_unresolved)
+          end
           server_types = matching_blocks(tacacs_server_family_pattern, children).group_by { |entry| entry.text.delete_prefix("undo ").split[1] }
             .transform_values do |entries|
               entries = tacacs_server_entries(entries)
@@ -316,7 +319,8 @@ module Baseline
           slots = parse_tacacs_keys(section, children)
           key_slots.concat(slots)
           [ section.text.split.last, { servers: servers, server_types: server_types,
-            key_types: slots.select { |slot| slot[:present] }.map { |slot| slot[:role] }, line: section.line } ]
+            key_types: slots.select { |slot| slot[:present] }.map { |slot| slot[:role] },
+            target_context_supported: tacacs_target_context_supported?(children), line: section.line } ]
         end
         record_fact("tacacs.key_slots", key_slots)
         record_fact("tacacs.schemes", schemes)
@@ -373,6 +377,22 @@ module Baseline
       # Comware 方案标识不区分大小写；其他厂商按自己的命名契约覆盖。
       def tacacs_name_key(name) = name.downcase
 
+      # 生成器不能把未建模的方案路由、显式阻断或重叠端点身份当作缺省上下文。
+      def tacacs_target_context_supported?(children)
+        tacacs_endpoint_inventory_supported?(children) && children.none? { |entry| /\A(?:undo )?state(?:\s|\z)/.match?(entry.text) }
+      end
+
+      # 方案 VPN 和同址多端口尚未完整归一化时，对象审计也不能误证缺省作用域。
+      def tacacs_endpoint_inventory_supported?(children)
+        return false if children.any? { |entry| /\A(?:undo )?vpn-instance(?:\s|\z)/.match?(entry.text) }
+
+        endpoints = matching_blocks(/\Asecondary (?:authentication|authorization|accounting)\s+/, children).filter_map do |entry|
+          match = tacacs_server_pattern.match(entry.text)
+          [ entry.text.split[1], match[1], match.post_match[/\A\s*(\d+)(?:\s|\z)/, 1] || "49" ] if match
+        end
+        endpoints.group_by { |role, address, _| [ role, address ] }.values.none? { |values| values.map(&:last).uniq.size > 1 }
+      end
+
       # 每种职责只保留最后状态；仅在归约后分析最终秘密，旧材料不进入报告。
       def parse_tacacs_keys(section, children)
         current = tacacs_key_roles.to_h { |role| [ role, nil ] }
@@ -405,12 +425,13 @@ module Baseline
         tail = match.post_match.strip
         port = tail[/\A(\d+)(?:\s|\z)/, 1]
         tail = tail.sub(/\A\d+(?:\s|\z)/, "") if port
-        options = parse_server_options(tail, flags: [ "secondary" ], names: %w[vpn-instance source-ip])
+        options = parse_server_options(tail, flags: tacacs_server_flags, names: %w[vpn-instance source-ip])
         priority = %w[primary secondary].include?(text.split.first) ? text.split.first : options&.fetch("secondary", false) ? "secondary" : "primary"
-        attributes = {}
+        attributes = tacacs_endpoint_defaults.dup
         attributes["port"] = port.to_i if port && port.to_i.between?(1, 65_535)
         attributes["source"] = options["source-ip"] if options && options["source-ip"]
-        complete = !options.nil? && (!port || attributes.key?("port"))
+        attributes["single_connection"] = true if options && options["single-connection"]
+        complete = !options.nil? && (!port || port.to_i.between?(1, 65_535))
         if options && options["vpn-instance"] == "default"
           complete = false
           record_unknown_fact("tacacs.endpoints", [ entry ], code: :ambiguous_routing_scope)
@@ -419,6 +440,11 @@ module Baseline
           scope: { "group" => section.text.split.last, "vrf" => options&.fetch("vpn-instance", "default") || "default" },
           attributes: complete ? attributes : {}, entry: entry, negative: negative, complete: complete)
       end
+
+      # 可选开关由厂商明确列出，不能跨语法接收同名参数。
+      def tacacs_server_flags = [ "secondary" ]
+      # 只有厂商文档确认的省略值才进入已知对象属性。
+      def tacacs_endpoint_defaults = {}
 
       # 返回当前平台修改 SNMP 监听端口的命令模式。
       def snmp_port_command = "snmp-agent port"

@@ -37,6 +37,9 @@ module Baseline
         elsif supported && NtpRemediation::IDS.include?(id)
           requirements = [ "approved_ntp_associations", "maximum_targets_for_net_additions", "authentication_dependencies" ]
           requirements += [ "managed_scopes" ] if id == "ntp.associations"
+        elsif supported && TacacsRemediation::IDS.include?(id)
+          requirements = %w[approved_tacacs_endpoints managed_scopes syntax_profile local_fallback_access_verified
+            tacacs_key_compatibility_verified existing_scheme_role_key preserved_domain_references maximum_targets_for_net_additions]
         elsif capability[:status] != :unsupported && AuthenticationRemediation::ROLES.key?(id) && %w[h3c huawei].include?(name)
           requirements = AuthenticationRemediation.requirements_for(id)
         end

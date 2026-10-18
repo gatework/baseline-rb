@@ -5,6 +5,7 @@ require "json"
 require "ctx_parser/immutable"
 require_relative "rule"
 require_relative "access_operation_schema"
+require_relative "tacacs_operation_schema"
 
 module Baseline
   # 离线变更意图与厂商命令分离；标识只由不可变领域数据计算。
@@ -25,6 +26,8 @@ module Baseline
         Rule.new(identity.fetch("rule"), { "expected" => after }).validate_expected!(after)
       elsif AccessOperationSchema::KINDS.include?(kind)
         AccessOperationSchema.validate!(kind: kind, identity: identity, scope: scope, before: before, after: after, action: action, phase: phase)
+      elsif TacacsOperationSchema::KINDS.include?(kind)
+        TacacsOperationSchema.validate!(kind: kind, identity: identity, scope: scope, before: before, after: after, action: action, phase: phase)
       else
         valid_shape = action == :add && before.nil? && after.is_a?(Hash) && phase == :create ||
           action == :remove && before.is_a?(Hash) && after.nil? && %i[prepare remove].include?(phase) ||

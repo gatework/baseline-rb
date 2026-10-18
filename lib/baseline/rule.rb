@@ -89,6 +89,8 @@ module Baseline
         %w[access_targets]
       elsif %w[syslog.minimum_servers syslog.servers syslog.destinations ntp.minimum_servers ntp.servers ntp.associations].include?(id)
         %w[maximum_targets order]
+      elsif id == "tacacs.endpoints"
+        %w[maximum_targets order syntax_profile local_fallback_access_verified tacacs_key_compatibility_verified]
       else []
       end
       unless remediation.is_a?(Hash) && (remediation.keys - remediation_keys).empty? &&
@@ -97,6 +99,10 @@ module Baseline
           (!remediation.key?("maximum_targets") || remediation["maximum_targets"].is_a?(Integer) && remediation["maximum_targets"].between?(1, 65_535)) &&
           (!remediation.key?("order") || %w[add_before_remove remove_before_add].include?(remediation["order"]))
         raise ArgumentError, "Invalid baseline remediation options"
+      end
+      unless (!remediation.key?("syntax_profile") || remediation["syntax_profile"] == "comware7") &&
+          %w[local_fallback_access_verified tacacs_key_compatibility_verified].all? { |key| !remediation.key?(key) || [ true, false ].include?(remediation[key]) }
+        raise ArgumentError, "Invalid TACACS remediation approval"
       end
       AccessApproval.validate!(remediation["access_targets"], domain: id.start_with?("snmp.") ? :snmp : :management) if remediation.key?("access_targets")
       validate_applicability!

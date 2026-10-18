@@ -94,7 +94,11 @@ module Baseline
       # 识别方案进入与整组撤销时使用同一完整命令。
       def tacacs_section_command = "hwtacacs scheme"
       # 匹配认证、授权或计费服务器声明。
-      def tacacs_server_pattern = /\A(?:primary|secondary) (?:authentication|authorization|accounting)\s+(\S+)/
+      def tacacs_server_pattern = /\A(?:primary|secondary) (?:authentication|authorization|accounting)\s+(?:ipv6\s+)?(\S+)/
+      # Comware 7 可显式复用 HWTACACS TCP 连接。
+      def tacacs_server_flags = %w[secondary single-connection]
+      # Comware HWTACACS 默认 TCP49，省略 single-connection 表示未开启复用。
+      def tacacs_endpoint_defaults = { "port" => 49, "single_connection" => false }
       # 完整选择服务器命令族，缺失地址也必须保留为损坏证据。
       def tacacs_server_family_pattern = /\A(?:undo )?(?:primary|secondary) (?:authentication|authorization|accounting)(?:\s|\z)/
       # 每种职责只有一个主服务器；多台备服务器仍按地址独立保留。

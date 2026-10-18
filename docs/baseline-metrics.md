@@ -157,3 +157,12 @@ bindings:
 Comware HWTACACS 方案名不区分大小写：重新进入或撤销不同大小写的同名方案时，先合并/撤销同一身份，再归约主服务器与密钥；不能把大小写变体当作两台冗余服务器。Huawei HWTACACS 模板名区分大小写，定义 OPS 与引用 ops 不能借名匹配，两个不同模板也不能互相混入绑定。域名仍按其已支持的不区分大小写规则处理；Huawei 命名 AAA 方案按完整名称匹配，不从域名规则推断方案等价。对应版本如有其他名称规则，须通过明确 profile 扩展，未确认的别名不作为通过证据。
 
 依据：[H3C 方案名称命令参考](https://wwwsg-proxy.h3c.com/en/Support/Resource_Center/HK/Switches/H3C_S5500/H3C_S5500_Series_Switches/Technical_Documents/Reference_Guides/Command_References/H3C_S5500-SI_CM%28V1.01%29/200712/211835_294551_0.htm)、[Huawei 模板名称命令参考](https://info.support.huawei.com/hedex/api/pages/EDOC1100278054/AEL11217/07/resources/dc/hwtacacs-server_template.html)、[Huawei 域及命名授权方案参考](https://support.huawei.com/enterprise/en/doc/EDOC1100412529/c0449dc0/aaa-configuration-commands)。
+
+
+## Comware 7 TACACS 端点修正
+
+H3C 现有方案的缺省路由端点支持物理主槽位替换、逐地址/端口增删备服务器，保留职责密钥及所有已解析域引用。需明确 `tacacs.endpoints` 目标及 `managed_scopes`，批准 `syntax_profile: comware7`，并由外部核实 `local_fallback_access_verified` 与 `tacacs_key_compatibility_verified`。字段未声明时保留旧槽位端口和 single-connection；全新端点使用此 profile 已确认的 TCP 49 和非共享连接缺省值。不能从配置密文证明对端密钥匹配或本地恢复访问可用。
+
+主服务器地址替换直接设置原生槽位；取消 single-connection 需撤销后重建，因此已引用职责必须有另一个端点。备服务器撤销必须带地址及端口，不生成无参数的全量撤销。逐条验证容量和已有引用不失去最后端点；满 16 台备服务器时先增后删受阻，可明确批准先删后增。共享域引用变更、方案 VPN、私有密钥、同址多端口及文本别名迁移仍需独立实现，不能将当前子集视为完整 TACACS 修正支持。仅保留配置中的路径不代表服务器实际可达；人工执行前还需确认移除不影响正在使用的认证过程。
+
+语法及边界依据：[H3C Comware 7 HWTACACS 命令参考](https://www.h3c.com/en/d_202206/1617723_294551_0.htm) 中的 primary/secondary authentication、authorization、accounting 章节，而非同页的 RADIUS 同名命令。通过独立测试状态模型逐条应用原生命令后重新审计，并检查无关配置及第二次零变更；未连接真实设备。

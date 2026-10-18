@@ -200,3 +200,6 @@ Comware/VRP TACACS 密钥按替换、撤销及方案重新进入后的最终状�
 Comware/VRP `aaa.bindings` 描述选中管理域的有序方法、TACACS 职责/组/端点引用、来源行及登录 VTY；本地后备与 `none` 分开记录，均不代表恢复访问已经可用。TACACS 使用检查复用这些证据，拒绝旧值和损坏引用。人工方案列出具体链路证据与批准前提，不自动挑选候选组或生成认证切换命令。`aaa.bindings` 保留选中域视角，`aaa.domain_bindings` 扩展覆盖已建模显式域的共享 TACACS 引用；实际用户路径、其他服务提供者及其他厂商绑定仍待分别补齐。参见[AAA 审核示例](examples/remediation_authentication.rb)。
 
 `tacacs.endpoints` 可声明 `bindings: [{kind: "aaa.domain", domain: "ADMIN", role: "authentication", position: "primary", selected: true}]`，在支持的 Comware/VRP 范围内核验完整域引用集合，包含未选中域的共享使用。position 是方法链优先级，与服务器主备不同。省略 bindings 只查定义；`[]` 需已知未绑定证据。局部/未建模引用保持未知，能力项区分对象与绑定支持。当前方案展示共享引用要求，不生成绑定切换命令。参见[绑定策略示例](examples/resource_bindings.rb)。
+
+
+H3C `tacacs.endpoints` 支持现有缺省路由方案内的非秘密 Comware 7 端点变更。需明确职责/主备目标和 `managed_scopes`，声明 `syntax_profile: comware7`，并在外部核实后设置 `local_fallback_access_verified: true`、`tacacs_key_compatibility_verified: true`。已有职责密钥是前提，净新增需容量证据。主服务器按物理槽位替换；备服务器按地址及端口精确撤销。共享域引用保持原状，方案 VPN、私有密钥、原生身份歧义、绑定迁移及未支持的端口迁移仍受阻。逐步骤检查容量，满 16 台备服务器时可能需要明确批准 `order: remove_before_add`。人工执行审核通过的配置前，仍需确认服务器可用且可安全移除当前认证端点。独立状态模型验证离线命令闭环，不代表真实认证成功。参见[端点修正示例](examples/remediation_tacacs_targets.rb)。
