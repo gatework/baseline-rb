@@ -7,7 +7,7 @@ module Baseline
   class CommandStep < Data.define(:view, :command, :phase, :operation_id)
     # 只接受单行文本，避免将参数里的换行变成额外命令。
     def initialize(view:, command:, phase:, operation_id:)
-      raise ArgumentError, "Invalid configuration command phase" unless %i[create update remove verify].include?(phase)
+      raise ArgumentError, "Invalid configuration command phase" unless %i[prepare create update remove verify].include?(phase)
       unless view.is_a?(Array) && [ *view, command, operation_id ].all? do |value|
         value.is_a?(String) && !value.empty? && !/[[:cntrl:]]/.match?(value)
       end

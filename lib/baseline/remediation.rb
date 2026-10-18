@@ -21,9 +21,14 @@ module Baseline
       renderer = RENDERERS.fetch(name, CommandRenderer).new
       CtxParser::Immutable.copy(Audit.capabilities(platform: name).to_h do |id, capability|
         supported = capability[:status] != :unsupported && renderer.supports?(id)
+        requirements = RemediationPlanner::REQUIREMENTS.fetch(id, [ "supported_rule_handler" ])
+        if supported && SyslogRemediation::IDS.include?(id)
+          requirements = [ "approved_syslog_targets", "maximum_targets_for_additions" ]
+          requirements += [ "managed_scopes" ] if id == "syslog.destinations"
+        end
         [ id, { status: supported ? :conditional : :unsupported,
           reason: supported ? nil : capability[:reason] || :remediation_unmodeled,
-          requirements: RemediationPlanner::REQUIREMENTS.fetch(id, [ "supported_rule_handler" ]), prerequisites: renderer.prerequisites(id) } ]
+          requirements: requirements, prerequisites: renderer.prerequisites(id) } ]
       end)
     end
 

@@ -12,11 +12,23 @@ module Baseline
 
     # 设置操作目前只接受已声明规则，后续资源操作沿用相同身份契约。
     def initialize(kind:, identity:, before:, after:, scope: {}, action: :set, phase: :update, risk: "medium")
-      unless kind == "setting" && identity.is_a?(Hash) && identity.keys == [ "rule" ] && Rule::DEFINITIONS.key?(identity["rule"]) &&
-          action == :set && phase == :update && %w[low medium high critical].include?(risk) && scope == {}
+      unless %w[low medium high critical].include?(risk)
         raise ArgumentError, "Invalid configuration operation"
       end
-      Rule.new(identity.fetch("rule"), { "expected" => after }).validate_expected!(after)
+      if kind == "setting"
+        unless identity.is_a?(Hash) && identity.keys == [ "rule" ] && Rule::DEFINITIONS.key?(identity["rule"]) && action == :set && phase == :update && scope == {}
+          raise ArgumentError, "Invalid setting operation"
+        end
+        Rule.new(identity.fetch("rule"), { "expected" => after }).validate_expected!(after)
+      else
+        valid_shape = action == :add && before.nil? && after.is_a?(Hash) && phase == :create ||
+          action == :remove && before.is_a?(Hash) && after.nil? && %i[prepare remove].include?(phase) ||
+          action == :replace && before.is_a?(Hash) && after.is_a?(Hash) && phase == :update
+        raise ArgumentError, "Invalid resource operation" unless valid_shape && ResourceSchema::FACTS.key?(kind)
+        [ before, after ].compact.each do |attributes|
+          ResourceSchema.validate!(kind: kind, identity: identity, scope: scope, attributes: attributes, lines: [], complete: true)
+        end
+      end
       @kind, @identity, @scope, @before, @after, @risk = CtxParser::Immutable.copy([ kind, identity, scope, before, after, risk ])
       @action, @phase = action, phase
       @id = Digest::SHA256.hexdigest(JSON.generate(canonical([ @kind, @action, @identity, @scope, @before, @after, @phase, @risk ]))).freeze

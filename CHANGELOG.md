@@ -4,6 +4,9 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+- Generate H3C syslog target additions, removals, and attribute replacements with atomic rendering, retained unmanaged options, shared count/address/object constraints, capacity-aware ordering, and independently modelled convergence tests.
+- Expose capacity provenance and early-removal decisions in per-check plan details. Reject ambiguous named-default routing scopes and reserved CLI keywords as destination names.
+
 - Add an offline `Remediation` entry point and immutable manual-review plans containing source/policy identities, a result for every enabled metric, typed setting operations, guarded single-line commands, and explicit unresolved requirements. Partial support remains visible rather than claiming complete remediation.
 - Render selected source-interface, SSHv2, and service changes with separate vendor command classes; reject command injection and invalid PAN-OS interface spellings, and withhold service-route interface changes with unresolved source-address dependencies.
 

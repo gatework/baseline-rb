@@ -12,12 +12,20 @@ module Baseline
       credential_rotation_required: "需要批准的新凭据及人工轮换，普通方案不包含秘密值",
       unsupported_setting: "该厂商或当前设置组合尚无已验证的命令实现",
       invalid_command_parameter: "批准参数不符合厂商命令语法或包含非法字符",
-      unresolved_prerequisites: "相关配置存在依赖，需先核对所列条件"
+      unresolved_prerequisites: "相关配置存在依赖，需先核对所列条件",
+      approved_scope_required: "需要明确批准对象作用域，不能从现有错误配置推导",
+      approved_targets_required: "需要批准的目标对象，不能根据最低数量编造地址",
+      structured_policy_unresolved: "更精确的对象基线尚未解决，不能回退生成较粗的配置",
+      resource_unresolved: "配置对象证据尚未完整解析，不能据此增删",
+      policy_conflict: "同一领域的数量、地址或对象基线互相冲突",
+      capacity_confirmation_required: "新增目标前需要确认设备目标容量，不能假定有空余槽位",
+      capacity_exceeded: "批准的最终目标数量超出已确认容量",
+      capacity_evidence_conflict: "当前对象数量与提供的容量证据不一致"
     ).freeze
-    Check = Data.define(:id, :status, :reason, :operation_ids, :requirements) do
+    Check = Data.define(:id, :status, :reason, :operation_ids, :requirements, :details) do
       # 检查结果不持有调用方可变参数。
-      def initialize(**attributes)
-        super(**CtxParser::Immutable.copy(attributes))
+      def initialize(details: {}, **attributes)
+        super(**CtxParser::Immutable.copy(attributes.merge(details: details)))
       end
 
       # 保留机器原因码，同时为审核者解释当前受阻条件。
@@ -27,7 +35,10 @@ module Baseline
 
     # 所有数据都是独立快照；此对象不执行配置命令。
     def initialize(audit:, checks:, operations:, steps:, renderer:)
-      @audit, @checks, @operations, @steps = audit, checks.dup.freeze, operations.dup.freeze, steps.dup.freeze
+      order = { prepare: -1, create: 0, update: 1, remove: 2, verify: 3 }
+      @audit, @checks = audit, checks.dup.freeze
+      @operations = operations.each_with_index.sort_by { |operation, index| [ order.fetch(operation.phase), index ] }.map(&:first).freeze
+      @steps = steps.each_with_index.sort_by { |step, index| [ order.fetch(step.phase), index ] }.map(&:first).freeze
       @commands = renderer.configuration_commands(@steps).freeze
       freeze
     end
@@ -57,6 +68,7 @@ module Baseline
       checks.each do |check|
         output << "  [#{check.status}] #{check.id}#{check.reason ? " (#{check.reason})" : ''}"
         output << "    #{check.explanation}"
+        output << "    规划依据: #{JSON.generate(check.details)}" if check.details.any?
         output << "    所需条件: #{check.requirements.join(', ')}" if check.requirements.any?
       end
       output.concat([ "配置命令:", *configuration_commands ]) if configuration_commands.any?

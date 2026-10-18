@@ -104,7 +104,9 @@ module Baseline
             names: [ "vpn-instance" ], interfaces: [ "source-interface" ])
           vpn = text[/\Antp-service (?:ipv6 )?unicast-#{role}\s+vpn-instance\s+(\S+)/, 1]
           if options && !(vpn && options.key?("vpn-instance")) && !(options.key?("authkey") && options.key?("authentication-keyid"))
-            record_ntp_resource(address: match[1], role: role, vrf: vpn || options["vpn-instance"], options: options, entry: entry, negative: negative)
+            unambiguous = (vpn || options["vpn-instance"]) != "default"
+            record_unknown_fact("ntp.associations", [ entry ], code: :ambiguous_routing_scope) unless unambiguous
+            record_ntp_resource(address: match[1], role: role, vrf: vpn || options["vpn-instance"], options: options, entry: entry, negative: negative, complete: unambiguous)
             [ match[1], vpn || options["vpn-instance"] ]
           end
         end
@@ -137,8 +139,13 @@ module Baseline
         attributes = (options || {}).reject { |key, _| key == "vpn-instance" }
         complete = !options.nil? && [ *scope.values, *attributes.values.grep(String) ].all? { |value| ResourceSchema.token?(value) }
         complete &&= !(text.start_with?("info-center loghost vpn-instance ") && options.key?("vpn-instance"))
+        if text[/\bvpn-instance\s+(\S+)/, 1] == "default"
+          complete = false
+          record_unknown_fact("syslog.destinations", [ entry ], code: :ambiguous_routing_scope)
+        end
         complete &&= !attributes.key?("facility") || /\Alocal[0-7]\z/.match?(attributes["facility"])
         attributes["port"] = 514 if complete && !attributes.key?("port")
+        attributes["protocol"] = "udp" if complete
         attributes = {} unless complete
         return unless ResourceSchema.token?(scope["vrf"])
 
@@ -289,6 +296,10 @@ module Baseline
         attributes["port"] = port.to_i if port && port.to_i.between?(1, 65_535)
         attributes["source"] = options["source-ip"] if options && options["source-ip"]
         complete = !options.nil? && (!port || attributes.key?("port"))
+        if options && options["vpn-instance"] == "default"
+          complete = false
+          record_unknown_fact("tacacs.endpoints", [ entry ], code: :ambiguous_routing_scope)
+        end
         record_tacacs_resource(identity: { "address" => match[1], "role" => text.split[1], "priority" => priority },
           scope: { "group" => section.text.split.last, "vrf" => options&.fetch("vpn-instance", "default") || "default" },
           attributes: complete ? attributes : {}, entry: entry, negative: negative, complete: complete)

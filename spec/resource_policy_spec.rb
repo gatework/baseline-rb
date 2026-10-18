@@ -124,4 +124,19 @@ RSpec.describe "Structured baseline resources" do
     expect(report).to be_compliant
     expect(report.findings.first.expected.first["scope"]).to eq("vrf" => "default")
   end
+
+  it "withholds Comware object compliance when a named default VPN cannot be distinguished from the public domain" do
+    cases = {
+      "ntp.associations" => [ { "identity" => { "address" => "192.0.2.10", "role" => "server" }, "scope" => { "vrf" => "default" }, "attributes" => { "version" => 4 } },
+        "ntp-service unicast-server 192.0.2.10 version 4 vpn-instance default" ],
+      "tacacs.endpoints" => [ { "identity" => { "address" => "192.0.2.30", "role" => "authentication", "priority" => "primary" },
+        "scope" => { "group" => "OPS", "vrf" => "default" }, "attributes" => { "port" => 49 } },
+        "hwtacacs scheme OPS\n primary authentication 192.0.2.30 49 vpn-instance default" ]
+    }
+    cases.each do |id, (object, commands)|
+      policy = Baseline::Policy.new("version" => 1, "checks" => { id => { "expected" => [ object ] } })
+      report = Baseline::Audit.new(policy: policy).call(configuration: "sysname LAB\n#{commands}\n", platform: "h3c", complete: true)
+      expect(report.findings.first.status).to eq(:unknown)
+    end
+  end
 end

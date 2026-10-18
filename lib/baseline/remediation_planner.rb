@@ -2,6 +2,7 @@
 
 require_relative "configuration_operation"
 require_relative "remediation_plan"
+require_relative "syslog_remediation"
 
 module Baseline
   # 每个指标都必须有规划结果；缺少实现或前提时显式受阻。
@@ -50,6 +51,8 @@ module Baseline
           end.keys
           if missing.any?
             check(finding, :blocked, :unresolved_prerequisites, requirements: missing)
+          elsif SyslogRemediation::IDS.include?(finding.id)
+            compile_syslog(finding, audit, operations, steps)
           else
             compile_setting(finding, operations, steps)
           end
@@ -62,6 +65,22 @@ module Baseline
     end
 
     private
+
+    # 整个指标的操作全部成功呈现后才加入方案，避免删除后才发现新增语法不支持。
+    def compile_syslog(finding, audit, operations, steps)
+      result = SyslogRemediation.new(policy: @policy).call(finding, audit)
+      proposed = result.operations
+      rendered = proposed.flat_map { |operation| @renderer.render(operation) }
+      operations.concat(proposed)
+      steps.concat(rendered)
+      check(finding, :planned, nil, operation_ids: proposed.map(&:id), details: result.details)
+    rescue SyslogRemediation::Blocked => error
+      check(finding, :blocked, error.reason)
+    rescue CommandRenderer::UnsupportedOperation
+      check(finding, :blocked, :unsupported_setting)
+    rescue ArgumentError
+      check(finding, :blocked, :invalid_command_parameter)
+    end
 
     # 任何子命令失败都不把该操作部分加入输出；未知服务状态单独保留。
     def compile_setting(finding, operations, steps)
@@ -83,8 +102,8 @@ module Baseline
     end
 
     # 逐项状态保留原规则标识，便于与审计结果一一核对。
-    def check(finding, status, reason, operation_ids: [], requirements: [])
-      RemediationPlan::Check.new(id: finding.id, status: status, reason: reason, operation_ids: operation_ids, requirements: requirements)
+    def check(finding, status, reason, operation_ids: [], requirements: [], details: {})
+      RemediationPlan::Check.new(id: finding.id, status: status, reason: reason, operation_ids: operation_ids, requirements: requirements, details: details)
     end
   end
 end

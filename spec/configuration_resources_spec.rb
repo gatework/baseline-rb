@@ -74,7 +74,7 @@ RSpec.describe "Baseline configuration resources" do
       item = report.configuration.resources.first
       expect(item.scope).to eq("vrf" => "B")
       expect(item.identity).to eq("address" => "192.0.2.20")
-      expect(item.attributes).to eq("port" => 2514)
+      expect(item.attributes).to eq("port" => 2514, "protocol" => "udp")
       expect(item.lines).to eq([ 3 ])
       expect(item).to be_complete
       expect(report.findings.first.status).to eq(:pass)
@@ -105,7 +105,7 @@ RSpec.describe "Baseline configuration resources" do
     report = Baseline::Audit.new(policy: policy).call(configuration: text, platform: "huawei", complete: true)
     expect(report.configuration.resources.first.scope).to eq("vrf" => "OPS")
     expect(report.configuration.resources.first.identity).to eq("address" => "logs.example.test")
-    expect(report.configuration.resources.first.attributes).to eq("port" => 1514)
+    expect(report.configuration.resources.first.attributes).to eq("port" => 1514, "protocol" => "udp")
   end
 
   {

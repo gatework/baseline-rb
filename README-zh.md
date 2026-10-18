@@ -65,7 +65,9 @@ puts report.to_text
 
 `Remediation.new(policy:).call(configuration:, platform:, complete: false, context: {})` 将同次审计转换为人工审核方案，提供 `audit`、`checks`、`operations`、`steps`、`configuration_commands`、`to_h` 和 `to_text`。状态为 `noop/ready/partial/blocked`；任一受阻指标都保留在方案中。`ready` 表示所选指标有完整的命令方案，不表示已经执行、保存、生效或整机合规。命令不含自动保存或提交。
 
-当前支持 H3C/Huawei/IOS/NX-OS/PAN-OS 的 NTP/Syslog 源接口设置、H3C/Huawei/IOS 的 SSHv2 设置，以及各呈现器明确声明的服务关闭命令；服务种类及设备语法限制仍需检查。PAN-OS 使用原生接口名；存在显式服务路由源地址时，接口切换会受阻，需先核对地址依赖。对象增删、ACL、SNMP 与认证链的完整命令生成仍在开发，未实现项会明确返回 `remediation_unmodeled`，不会当作完成。
+当前支持 H3C/Huawei/IOS/NX-OS/PAN-OS 的 NTP/Syslog 源接口设置、H3C/Huawei/IOS 的 SSHv2 设置，以及各呈现器明确声明的服务关闭命令；服务种类及设备语法限制仍需检查。PAN-OS 使用原生接口名；存在显式服务路由源地址时，接口切换会受阻，需先核对地址依赖。H3C 另支持日志目标增删及属性替换，其他对象、ACL、SNMP 与认证链的完整命令生成仍在开发，未实现项会明确返回 `remediation_unmodeled`，不会当作完成。
+
+H3C 日志目标规划会同时检查数量、地址和对象规则，拒绝冲突批准值，并保留未受管属性及其他作用域。地址清单仅在对象均为公共路由域时生成简单增删；其他作用域需使用对象规则及 `managed_scopes`。增加净目标数需要规则内 `remediation: {maximum_targets: 4}` 等已核实的设备容量参数，不能照搬示例中的容量。纯替换没有容量参数时，只使用当前对象占用量作为容量下限，必要时先删除错误目标再新增，不将该下限称为设备上限。显式 `order: remove_before_add` 可优先撤销未批准目标；规划依据和提前删除步骤会保留在方案中。容量满时的提前删除与同对象替换可能短暂中断日志输出，需人工审核。
 
 `Remediation.capabilities(platform:)` 独立查询生成覆盖及前提，不与 `Audit.capabilities` 的解析能力混淆。运行 `bundle exec ruby -Ilib examples/remediation.rb` 查看合成示例；真实配置及凭据不得写入示例。
 

@@ -14,6 +14,7 @@ module Baseline
     LEAVE = nil
     EXIT_VIEW = "exit"
     PREREQUISITES = {}.freeze
+    RESOURCE_KINDS = [].freeze
 
     # 原生命令依赖的独立事实由规划器核验，而非在命令里假定成立。
     def prerequisites(id) = self.class::PREREQUISITES.fetch(id, {})
@@ -21,11 +22,13 @@ module Baseline
     # 查询当前呈现器确实可生成的设置类型。
     def supports?(id)
       self.class::SOURCE_COMMANDS.key?(id) || id == "services.disabled" && self.class::DISABLE_COMMANDS.any? ||
-        id == "ssh.versions" && !self.class::SSH_VERSION_TWO.nil?
+        id == "ssh.versions" && !self.class::SSH_VERSION_TWO.nil? ||
+        self.class::RESOURCE_KINDS.include?(ResourceSchema::FACTS.key(id) || (%w[syslog.servers syslog.minimum_servers].include?(id) ? "syslog.destination" : nil))
     end
 
     # 将完整操作转换为命令；任何一个子命令不受支持则整体拒绝该操作。
     def render(operation)
+      return render_resource(operation) unless operation.kind == "setting"
       id = operation.identity.fetch("rule")
       commands = if self.class::SOURCE_COMMANDS.key?(id)
         value = source_interface(operation.after)
@@ -61,6 +64,11 @@ module Baseline
     end
 
     private
+
+    # 未声明资源能力的厂商拒绝生成，不能通过通用字符串拼接伪装支持。
+    def render_resource(_operation)
+      raise UnsupportedOperation, "unsupported_resource"
+    end
 
     # 通用接口词元归一化，厂商可收紧原生接口命名语法。
     def source_interface(value) = ResourceSchema.interface_name(value)

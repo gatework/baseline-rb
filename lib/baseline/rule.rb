@@ -58,12 +58,12 @@ module Baseline
       facts[definition.fact] = definition.value_type if %i[boolean string].include?(definition.value_type)
     end.merge("hostname" => :string, "snmp.community_present" => :boolean, "credentials.present" => :boolean).freeze
 
-    attr_reader :id, :definition, :title, :fact, :operator, :value_type, :allowed_values, :expected, :severity, :applies_to, :managed_scopes
+    attr_reader :id, :definition, :title, :fact, :operator, :value_type, :allowed_values, :expected, :severity, :applies_to, :managed_scopes, :remediation
 
     # 校验规则定义，并冻结比较契约。
     def initialize(id, options)
       @definition = DEFINITIONS.fetch(id) { raise ArgumentError, "Unknown baseline rule" }
-      unless options.is_a?(Hash) && (options.keys - %w[enabled expected severity applies_to managed_scopes]).empty? &&
+      unless options.is_a?(Hash) && (options.keys - %w[enabled expected severity applies_to managed_scopes remediation]).empty? &&
           [ true, false ].include?(options.fetch("enabled", true)) &&
           %w[low medium high critical].include?(options.fetch("severity", "medium"))
         raise ArgumentError, "Invalid baseline rule options"
@@ -79,6 +79,13 @@ module Baseline
         ResourceSchema.validate_scopes!(options["managed_scopes"])
       end
       @managed_scopes = CtxParser::Immutable.copy(options["managed_scopes"])
+      @remediation = CtxParser::Immutable.copy(options.fetch("remediation", {}))
+      unless remediation.is_a?(Hash) && (remediation.keys - %w[maximum_targets order]).empty? &&
+          (remediation.empty? || %w[syslog.minimum_servers syslog.servers syslog.destinations].include?(id)) &&
+          (!remediation.key?("maximum_targets") || remediation["maximum_targets"].is_a?(Integer) && remediation["maximum_targets"].between?(1, 65_535)) &&
+          (!remediation.key?("order") || %w[add_before_remove remove_before_add].include?(remediation["order"]))
+        raise ArgumentError, "Invalid baseline remediation options"
+      end
       validate_applicability!
       freeze
     end

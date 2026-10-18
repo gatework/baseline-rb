@@ -69,6 +69,8 @@ The library performs no device access, backup collection, remediation execution,
 
 Optional `syslog.destinations`, `ntp.associations`, and `tacacs.endpoints` rules compare arrays of objects containing `identity`, `scope`, and optional `attributes`. Only declared attributes are managed. `managed_scopes` explicitly enables detection of unwanted objects within those scopes; omitting it checks approved objects and attributes without treating unrelated objects as unwanted. Unverified attribute defaults remain unknown. The default policy retains its original 30 checks; these three object rules require explicit approval data.
 
+H3C syslog plans can add/remove destinations and replace attributes while retaining unmanaged options and checking related server-count/address constraints. Structured changes require explicit managed scopes. Net additions require verified device capacity in the rule's `remediation.maximum_targets`; a pure swap may use observed occupancy as a conservative capacity lower bound and remove wrong targets first. Plans expose the capacity source and ordering. `remediation.order: remove_before_add` explicitly prioritizes removal. No generated command is executed by this library.
+
 Detailed vendor behavior, historical validation notes, and Motor-only integration are preserved in [the architecture reference](docs/architecture-zh.md). Host integration examples in that reference require Motor; they are not standalone gem APIs. Motor adapters live under `backend/lib/baseline`, `backend/lib/vxlan`, and `backend/lib/wireless` in the [Motor repository](https://github.com/gatework/motor/tree/main/backend/lib).
 
 ## Domain vocabulary
