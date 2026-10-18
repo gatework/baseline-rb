@@ -4,6 +4,8 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+- List SNMP write-grant review requirements per anonymous community, group definition and known user reference; preserve view/security/ACL dependencies and unresolved evidence without generating permission or secret commands.
+
 - Generate nonsecret Comware 7 TACACS endpoint changes within existing default-routing schemes, preserving role keys and shared domain references; require explicit targets, scope, external fallback/key verification and capacity evidence.
 - Protect physical primary slots, native endpoint identity, last-role paths and intermediate secondary capacity; verify native command application and repeated planning with an independent test model.
 - Treat unmodelled scheme VPN and same-address multiport inventory as unknown rather than proving a default-scope object.

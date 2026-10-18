@@ -203,3 +203,6 @@ Comware/VRP `aaa.bindings` 描述选中管理域的有序方法、TACACS 职责/
 
 
 H3C `tacacs.endpoints` 支持现有缺省路由方案内的非秘密 Comware 7 端点变更。需明确职责/主备目标和 `managed_scopes`，声明 `syntax_profile: comware7`，并在外部核实后设置 `local_fallback_access_verified: true`、`tacacs_key_compatibility_verified: true`。已有职责密钥是前提，净新增需容量证据。主服务器按物理槽位替换；备服务器按地址及端口精确撤销。共享域引用保持原状，方案 VPN、私有密钥、原生身份歧义、绑定迁移及未支持的端口迁移仍受阻。逐步骤检查容量，满 16 台备服务器时可能需要明确批准 `order: remove_before_add`。人工执行审核通过的配置前，仍需确认服务器可用且可安全移除当前认证端点。独立状态模型验证离线命令闭环，不代表真实认证成功。参见[端点修正示例](examples/remediation_tacacs_targets.rb)。
+
+
+`snmp.write_enabled: false` 审核方案在 `details.permission_grants` 列出已知及待核实授权：匿名团体字序号、已解析的组安全级别/视图/ACL、已知用户引用、来源行及材料/NMS 依赖。组修改需保留读视图、通知、安全级别和 ACL；写团体字替换需批准材料。缺少组定义或用户引用时要求补证。此类检查继续受阻，等待厂商权限迁移验证；不生成删组、秘密或占位命令。参见[权限审核示例](examples/remediation_snmp_permissions.rb)。

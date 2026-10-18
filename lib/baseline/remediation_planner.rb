@@ -7,6 +7,7 @@ require_relative "ntp_remediation"
 require_relative "vty_remediation"
 require_relative "access_remediation"
 require_relative "snmp_access_remediation"
+require_relative "snmp_permission_remediation"
 require_relative "credential_remediation"
 require_relative "tacacs_key_remediation"
 require_relative "authentication_remediation"
@@ -56,6 +57,9 @@ module Baseline
           check(finding, status, nil)
         elsif CredentialRemediation.applicable?(finding, audit.configuration)
           result = CredentialRemediation.new.call(finding, audit.configuration)
+          check(finding, :blocked, result.fetch(:reason), requirements: result.fetch(:requirements), details: result.fetch(:details))
+        elsif SnmpPermissionRemediation.applicable?(finding, audit.configuration)
+          result = SnmpPermissionRemediation.new.call(finding, audit.configuration)
           check(finding, :blocked, result.fetch(:reason), requirements: result.fetch(:requirements), details: result.fetch(:details))
         elsif TacacsKeyRemediation.applicable?(finding, audit.configuration)
           result = TacacsKeyRemediation.new.call(finding, audit.configuration)

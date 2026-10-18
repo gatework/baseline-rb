@@ -26,6 +26,8 @@ module Baseline
         requirements = RemediationPlanner::REQUIREMENTS.fetch(id, [ "supported_rule_handler" ])
         if supported && id == "snmp.versions"
           requirements = [ "existing_v3_access_verified", "snmp_v3_group_reference", "existing_enabled_snmp_v3" ]
+        elsif capability[:status] != :unsupported && id == "snmp.write_enabled"
+          requirements = SnmpPermissionRemediation::REQUIREMENTS
         elsif supported && SnmpAccessRemediation::IDS.include?(id)
           requirements = [ "fresh_acl_identity", "approved_access_limits", "global_acl_support_evidence", "explicit_targets_for_unbound_principals" ]
         elsif supported && AccessRemediation::IDS.include?(id)
@@ -45,6 +47,8 @@ module Baseline
         end
         reason = if capability[:status] != :unsupported && CredentialRemediation::IDS.include?(id)
           id == "credentials.storage" ? :credential_rotation_required : :credential_strength_verification_required
+        elsif capability[:status] != :unsupported && id == "snmp.write_enabled"
+          :snmp_permission_approval_required
         elsif capability[:status] != :unsupported && id == "tacacs.keys" && %w[h3c huawei].include?(name)
           :credential_material_required
         elsif capability[:status] != :unsupported && AuthenticationRemediation::ROLES.key?(id) && %w[h3c huawei].include?(name)

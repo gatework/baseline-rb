@@ -166,3 +166,10 @@ H3C 现有方案的缺省路由端点支持物理主槽位替换、逐地址/端
 主服务器地址替换直接设置原生槽位；取消 single-connection 需撤销后重建，因此已引用职责必须有另一个端点。备服务器撤销必须带地址及端口，不生成无参数的全量撤销。逐条验证容量和已有引用不失去最后端点；满 16 台备服务器时先增后删受阻，可明确批准先删后增。共享域引用变更、方案 VPN、私有密钥、同址多端口及文本别名迁移仍需独立实现，不能将当前子集视为完整 TACACS 修正支持。仅保留配置中的路径不代表服务器实际可达；人工执行前还需确认移除不影响正在使用的认证过程。
 
 语法及边界依据：[H3C Comware 7 HWTACACS 命令参考](https://www.h3c.com/en/d_202206/1617723_294551_0.htm) 中的 primary/secondary authentication、authorization、accounting 章节，而非同页的 RADIUS 同名命令。通过独立测试状态模型逐条应用原生命令后重新审计，并检查无关配置及第二次零变更；未连接真实设备。
+
+
+## SNMP 写权限逐对象审核
+
+`snmp.write_enabled: false` 的人工审核信息保留在 `check.details.permission_grants`。写团体字以配置指纹内序号定位，给出来源行和替换为只读的材料、NMS 同步及原视图/ACL 保留要求，不公开团体字或其摘要。组授权列出已解析的各安全级别定义、读/写/通知视图、IPv4/IPv6 ACL 和已知用户消费者；`revoke_write` 是审核意图，不是已验证厂商命令。未解析权限和孤立用户使用 `verify`，`inventory_complete: false` 与补证要求保留，已知违规不能掩盖其他未知主体。
+
+H3C 文档分别定义组名和安全级别，以及省略读视图时的默认读权限、未配置写视图时无写权限。但这不能单独证明重复执行 group 命令会撤回原写视图，更不能推断删组再建不影响用户。原生权限迁移仍需完整命令/引用验证，目前检查为 blocked，能力查询明确 unsupported，并给出逐对象要求。默认不批准相反的写权限扩张。依据：[H3C SNMP 组命令](https://www.h3c.com/en/Support/Resource_Center/EN/Home/Public/00-Public/Technical_Documents/Reference_Guides/Command_References/H3C_CR-18349/09/202404/2100798_294551_0.htm)。
