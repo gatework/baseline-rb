@@ -4,6 +4,11 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+- Add typed TACACS `aaa.domain` binding policies, exact reference-set comparison, selected-domain predicates, and explicit object-only verification scope.
+- Inventory unselected Comware/VRP domain references without dropping shared uses; incomplete or unsupported binding evidence stays unknown.
+- Expose object and binding audit capabilities separately and retain shared-reference approval requirements without emitting binding changes.
+- Retain immutable resource values through fact construction, append binding evidence without reparsing identity, and share owned authentication graph views.
+
 - Derive Comware/VRP TACACS usage from selected-domain AAA bindings, preserving ordered methods, local fallback/none, role endpoints, VTY evidence and provenance.
 - Reject stale domain selections and malformed Huawei method tails; model Comware login/default inheritance and explicitly represented built-in domains.
 - Provide object-specific management AAA approval/evidence requirements without selecting unapproved candidate groups or generating authentication changes.

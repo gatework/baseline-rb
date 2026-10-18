@@ -39,7 +39,13 @@ module Baseline
         else
           [ :unsupported, :capability_unmodeled ]
         end
-        [ id, { fact: definition.fact, status: status, reason: reason } ]
+        capability = { fact: definition.fact, status: status, reason: reason }
+        if (kind = ResourceSchema::FACTS.key(id))
+          kinds = parser && status != :unsupported ? parser::BINDING_KINDS.fetch(kind, []) : []
+          capability[:bindings] = { status: kinds.any? ? :conditional : :unsupported, kinds: kinds,
+            reason: kinds.any? ? nil : :resource_bindings_unmodeled }
+        end
+        [ id, capability ]
       end)
     end
 

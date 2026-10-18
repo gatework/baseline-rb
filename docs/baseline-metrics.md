@@ -125,8 +125,29 @@ Comware/VRP 的 `aaa.bindings` 为选中的默认管理域保留三类职责的�
 
 域选择按最后声明归约，损坏语句不沿用旧选择；选中域不存在时为 unknown，不能据此证明未使用 TACACS。支持 Comware `domain name` 形式、同域/方案重新进入，以及按名称不区分大小写解析方案引用。Comware 的 login 方法撤销恢复域 default，default 撤销恢复文档中的本地方法；完整输入缺省选择 system/VRP default_admin 时仍要求对应域在模型中明确存在，不凭空补造域配置。Huawei 模式必须完整消费，撤销、未知尾部和矛盾 local/local-case 不能靠旧值或首词产生通过；计费模式限制为当前已支持的单一方法。
 
-TACACS 标量使用检查从同一绑定证据归纳，来源包括域选择、方法、方案、实际服务器和 VTY 行。端点未完整解析时不确认其引用可用。现阶段只描述选中的管理域，尚不是所有域、显式登录域或其他厂商的完整共享引用清单，因此不据此更新/删除共享认证对象。
+TACACS 标量使用检查从同一绑定证据归纳，来源包括域选择、方法、方案、实际服务器和 VTY 行。端点未完整解析时不确认其引用可用。`aaa.bindings` 保留选中管理域视角；`aaa.domain_bindings` 扩展记录已建模的全部显式域，未选中域的共享引用也不会丢弃。`aaa.domain_bindings_complete` 按职责标记完整输入下的库存确定性；显式用户的实际登录路径、其他服务提供者和其他厂商的绑定仍需分别建模，不据此自动更新/删除共享认证对象。
 
 `tacacs.login/authorization/accounting` 和 `ssh.vty_aaa` 的审核结果可列出具体绑定、缺少的域/方法/端点/VTY 证据、当前候选服务器组以及批准链、材料和本地恢复前提。候选组不等于批准目标；普通 AAA VTY 检查不强制使用 TACACS，也可批准本地 AAA 方案。当前检查仍 blocked，能力查询仍将认证链命令生成标为 unsupported；这些人工要求不表示已有自动切换或完整 `bindings` 策略写入支持。参见[认证链审核示例](../examples/remediation_authentication.rb)。
 
 依据：[H3C 登录方法、默认继承及有序后备](https://www.h3c.com/en/Support/Resource_Center/EN/Home/Public/00-Public/Technical_Documents/Reference_Guides/Command_References/H3C_CR-35328/13/202609/2929796_294551_0.htm)、[H3C 默认域选择与撤销](https://www.h3c.com/en/d_202301/1749967_294551_0.htm)、[Huawei AAA 模式和管理域选择](https://support.huawei.com/enterprise/en/doc/EDOC1100412529/c0449dc0/aaa-configuration-commands)。当前语法范围和未建模默认值仍须按设备版本核实，不代表所有固件验证通过。
+
+## 结构化 TACACS 域绑定策略
+
+`tacacs.endpoints` 的对象可声明 `bindings`，当前仅接受 `aaa.domain`：
+
+```yaml
+identity: {address: 192.0.2.30, role: authentication, priority: primary}
+scope: {group: OPS}
+bindings:
+  - {kind: aaa.domain, domain: ADMIN, role: authentication, position: primary, selected: true}
+```
+
+`domain/role/position` 是完整绑定身份。`position` 表示该域方法链中的首选或后备方法，与服务器对象自身的 primary/secondary 优先级不同。域名按已支持的 Comware/VRP 语义不区分大小写；职责限 authentication/authorization/accounting，位置限 primary/fallback。可选 `selected` 要求该域是否为当前选中管理域；省略表示不比较选择状态，不等同于 false。未知字段、原始路径/命令、重复逻辑身份及非法值均拒绝。
+
+显式 `bindings` 数组是该对象的完整期望域引用集合，报告缺失、多余及选择状态变化。`[]` 要求已知未引用；只有完整输入、相关职责的域/方法和引用库存均确定时，才提供可比较的空数组。省略 `bindings` 只核验对象定义，不修改、不清除现有引用。JSON 使用 `details.verification_scope` 明确范围，文字报告直接提示“仅对象定义，未核验使用链”。
+
+资源 `.bindings == nil` 或对象事实中缺少 bindings 表示未知，不是未绑定。未选中域、重新进入及撤销后的关系纳入库存；匿名/损坏域和未知方法不允许证明引用集合完整。按职责记录完整程度，未知计费引用不应掩盖已解析的认证引用。其他厂商尚未建模的绑定保持 unknown；Syslog/NTP 的绑定类型尚未开放此字段。`Audit.capabilities` 的资源项通过独立 `bindings` 子项列出已支持类型及 conditional/unsupported，不改变对象定义层面的原能力含义。
+
+绑定比较不等于引用改写。当前方案展示实际共享引用和差异，要求批准变更范围、保留或迁移关系、有序方法及本地后备，并完成厂商命令验证；不会因省略 bindings 或提供空数组自动删除共享对象。尚未生成 TACACS 绑定切换命令。域引用检查也不替代 VTY、密钥和真实后备访问验证。[完整离线示例](../examples/resource_bindings.rb) 使用独立合成前后配置演示对象存在但引用错误的失败，以及正确域引用的通过。
+
+绑定证据补充保留不可变资源值对象，只复制新增的绑定及行号；不会为了补关系再次解析已验证的端点身份。选中域视图和全域库存由同次拥有的不可变图派生，避免重复深拷贝，调用方可变数据仍不能影响快照。`script/benchmark.rb` 增加 10/100 个合成域共享同一组的完整审计；规模只用于软件测量，不表示设备域数量上限或实际吞吐。

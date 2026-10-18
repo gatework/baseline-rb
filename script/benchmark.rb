@@ -69,3 +69,20 @@ end
     end
   end
 end
+
+# 全域引用规模测试保留相同共享服务器组，不用选中域快路径冒充完整库存。
+[ 10, 100 ].each do |size|
+  domains = size.times.map do |index|
+    "domain D#{index}\n authentication login hwtacacs-scheme OPS local\n authorization login hwtacacs-scheme OPS local\n accounting login hwtacacs-scheme OPS local\n#\n"
+  end.join
+  configuration = "sysname LAB\nhwtacacs scheme OPS\n primary authentication 192.0.2.30\n primary authorization 192.0.2.31\n primary accounting 192.0.2.32\n#\n" \
+    "#{domains}domain default enable D0\nline vty 0 4\n authentication-mode scheme\n#\n"
+  bindings = size.times.map { |index| { "kind" => "aaa.domain", "domain" => "D#{index}", "role" => "authentication", "position" => "primary", "selected" => index.zero? } }
+  expected = { "identity" => { "address" => "192.0.2.30", "role" => "authentication", "priority" => "primary" }, "scope" => { "group" => "OPS" }, "bindings" => bindings }
+  policy = Baseline::Policy.new("version" => 1, "checks" => { "tacacs.endpoints" => { "expected" => [ expected ] } })
+  audit = Baseline::Audit.new(policy: policy)
+  measure("shared TACACS domain bindings #{size}") do
+    report = audit.call(configuration: configuration, platform: "h3c", complete: true)
+    raise "Missing complete domain binding evidence" unless report.compliant? && report.configuration.fact("aaa.domain_bindings").size == size * 3
+  end
+end

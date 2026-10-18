@@ -177,7 +177,7 @@ bundle exec rake build
 
 `bundle exec rake` 执行 RSpec、RuboCop 及离线示例。测试放在 `spec/`，沿用项目 RSpec 约定；样例采用合成或脱敏证据。新增解析格式时补充成功、不完整、不支持及非法输入回归。离线测试不代表所有设备版本均通过实机验证。
 
-运行 `bundle exec ruby -Ilib script/benchmark.rb` 可测量合成 ACL 覆盖比较、凭据来源行查询、越界来源报告、PAN-OS 多账号解析及事实快照构建；脚本报告三次运行的中位数，请在同一机器和 Ruby 版本下比较不同修订。
+运行 `bundle exec ruby -Ilib script/benchmark.rb` 可测量合成 ACL 覆盖比较、凭据来源行查询、越界来源报告、PAN-OS 多账号解析、事实快照构建及共享 TACACS 域绑定；脚本报告三次运行的中位数，请在同一机器和 Ruby 版本下比较不同修订。
 
 使用声明的最低 Ruby 版本检查兼容性。方法用途统一使用简明中文注释；复杂实现还需说明业务规则、实现思路及关键分支。保持公开返回值与错误契约。真实回显和凭据不可进入示例、fixture、日志或发布包。
 
@@ -197,4 +197,6 @@ MIT，见 [LICENSE](LICENSE)。
 
 Comware/VRP TACACS 密钥按替换、撤销及方案重新进入后的最终状态归纳。`check.details[:key_slots]` 分别列出 H3C 认证/授权/计费及 Huawei 共享材料，关联已知端点并提示对端、AAA 引用和恢复前提。损坏状态需补证，检查仍受阻，不生成秘密命令。当前模型描述方案密钥，不代表已支持端点私有密钥继承。参见[TACACS 材料示例](examples/remediation_tacacs.rb)。
 
-Comware/VRP `aaa.bindings` 描述选中管理域的有序方法、TACACS 职责/组/端点引用、来源行及登录 VTY；本地后备与 `none` 分开记录，均不代表恢复访问已经可用。TACACS 使用检查复用这些证据，拒绝旧值和损坏引用。人工方案列出具体链路证据与批准前提，不自动挑选候选组或生成认证切换命令。当前覆盖选中域，尚非所有域/共享引用的完整清单。参见[AAA 审核示例](examples/remediation_authentication.rb)。
+Comware/VRP `aaa.bindings` 描述选中管理域的有序方法、TACACS 职责/组/端点引用、来源行及登录 VTY；本地后备与 `none` 分开记录，均不代表恢复访问已经可用。TACACS 使用检查复用这些证据，拒绝旧值和损坏引用。人工方案列出具体链路证据与批准前提，不自动挑选候选组或生成认证切换命令。`aaa.bindings` 保留选中域视角，`aaa.domain_bindings` 扩展覆盖已建模显式域的共享 TACACS 引用；实际用户路径、其他服务提供者及其他厂商绑定仍待分别补齐。参见[AAA 审核示例](examples/remediation_authentication.rb)。
+
+`tacacs.endpoints` 可声明 `bindings: [{kind: "aaa.domain", domain: "ADMIN", role: "authentication", position: "primary", selected: true}]`，在支持的 Comware/VRP 范围内核验完整域引用集合，包含未选中域的共享使用。position 是方法链优先级，与服务器主备不同。省略 bindings 只查定义；`[]` 需已知未绑定证据。局部/未建模引用保持未知，能力项区分对象与绑定支持。当前方案展示共享引用要求，不生成绑定切换命令。参见[绑定策略示例](examples/resource_bindings.rb)。

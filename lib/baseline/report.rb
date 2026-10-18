@@ -10,6 +10,7 @@ module Baseline
   class Report
     REASONS = {
       resource_attribute_unresolved: "配置对象存在，但部分批准属性未显式声明且缺省值未经验证",
+      resource_binding_unresolved: "对象绑定关系尚未完整解析，不能从对象存在推断使用链已满足要求",
       input_incomplete: "配置不完整，需提供完整备份后重查", unsupported_platform: "尚未支持此平台的配置语法",
       scope_mismatch: "不在策略适用范围内", scope_unknown: "缺少判断适用范围或选择批准值所需的上下文",
       policy_missing: "未定义当前范围的批准值，请完善基线策略", fact_unavailable: "配置事实缺失或包含尚未支持的语法，请查看解析诊断",
@@ -96,7 +97,13 @@ module Baseline
         if %i[pass fail].include?(finding.status)
           output << "    预期: #{display(finding.expected)}; 实际: #{display(finding.actual)}"
         end
-        output << "    差异: #{display(finding.details)}" if finding.details.any?
+        details = finding.details
+        if (scope = details[:verification_scope])
+          label = scope == :objects_only ? "仅对象定义，未核验使用链" : "对象定义及声明的绑定"
+          output << "    核验范围: #{label}"
+          details = details.reject { |key, value| key == :verification_scope || value.respond_to?(:empty?) && value.empty? }
+        end
+        output << "    差异: #{display(details)}" if details.any?
         if finding.lines.any?
           output << "    行号: #{finding.lines.first(20).join(', ')}#{finding.lines.size > 20 ? "… (共 #{finding.lines.size} 行，详见 JSON 报告)" : ''}"
         end

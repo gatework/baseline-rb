@@ -4,6 +4,40 @@ require_relative "spec_helper"
 require "baseline"
 
 RSpec.describe Baseline::FactBuilder do
+  it "updates bindings only on an existing owned resource while preserving prior snapshots" do
+    facts = described_class.new(complete: true)
+    resource = Baseline::ConfigurationResource.new(kind: "tacacs.endpoint", identity: { "address" => "192.0.2.30" }, scope: { "group" => "OPS" }, lines: [ 3 ])
+    facts.record_resource(resource)
+    previous = facts.resources_for("tacacs.endpoint")
+    facts.record_resource_bindings(kind: resource.kind, scope: resource.scope, identity: resource.identity, bindings: [], lines: [ 3, 8 ])
+    expect(resource.bindings).to be_nil
+    expect(previous.first).not_to have_key(:bindings)
+    expect(facts.resources_for("tacacs.endpoint").first).to include(bindings: [], lines: [ 3, 8 ])
+    copy = facts.dup
+    copy.record_resource_bindings(kind: resource.kind, scope: resource.scope, identity: resource.identity, bindings: nil, lines: [ 9 ])
+    expect(facts.resources_for("tacacs.endpoint").first).to include(bindings: [], lines: [ 3, 8 ])
+    expect(copy.resources_for("tacacs.endpoint").first).not_to have_key(:bindings)
+    expect { facts.record_resource_bindings(kind: resource.kind, scope: {}, identity: resource.identity, bindings: [], lines: [ 3 ]) }.to raise_error(KeyError)
+  end
+
+  it "owns selected and inventory authentication views as one immutable graph" do
+    facts = described_class.new(complete: true)
+    name = +"ADMIN"
+    row = { domain: name, selected: true, methods: [ { kind: +"local" } ] }
+    completeness = { "authentication" => true }
+    facts.record_authentication_graph(bindings: [ row ], completeness: completeness)
+    name.replace("OTHER")
+    row[:methods].first[:kind].replace("none")
+    completeness["authentication"] = false
+    values = facts.build.records.first.fetch("facts")
+    %w[aaa.bindings aaa.domain_bindings].each do |path|
+      expect(values.fetch(path).first).to include(domain: "ADMIN", methods: [ { kind: "local" } ])
+      expect(values.fetch(path).first).to be_frozen
+    end
+    expect(values.fetch("aaa.domain_bindings_complete")).to eq("authentication" => true)
+    expect(name).not_to be_frozen
+  end
+
   it "provides owned resource snapshots and scoped unresolved evidence for reference analysis" do
     facts = described_class.new(complete: true)
     resource = Baseline::ConfigurationResource.new(kind: "tacacs.endpoint", identity: { "address" => "192.0.2.30", "role" => "authentication" },

@@ -16,6 +16,7 @@ module Baseline
       credential_material_evidence_required: "指定职责的密钥状态未能解析，需要补充证据后再决定是否配置",
       authentication_chain_approval_required: "需要批准管理域、角色方法顺序及目标组，并核实本地后备访问后再修改认证链",
       authentication_chain_evidence_required: "管理认证链尚有未解析的域、方案、端点或 VTY 引用，需要先补充证据",
+      resource_binding_changes_required: "需要批准绑定变更范围、明确保留或迁移的关系，并完成对应厂商命令验证",
       unsupported_setting: "该厂商或当前设置组合尚无已验证的命令实现",
       invalid_command_parameter: "批准参数不符合厂商命令语法或包含非法字符",
       unresolved_prerequisites: "相关配置存在依赖，需先核对所列条件",

@@ -4,6 +4,25 @@ require_relative "spec_helper"
 require "baseline/configuration_resource"
 
 RSpec.describe "Baseline configuration resources" do
+  it "adds owned binding evidence without changing the original immutable definition" do
+    item = Baseline::ConfigurationResource.new(kind: "tacacs.endpoint", identity: { "address" => "192.0.2.30", "role" => "authentication" },
+      scope: { "group" => "OPS" }, lines: [ 3 ])
+    name = +"ADMIN"
+    bindings = [ { "kind" => "aaa.domain", "domain" => name, "role" => "authentication", "position" => "primary" } ]
+    lines = [ 5, 3, 5 ]
+    updated = item.with_bindings(bindings: bindings, lines: lines)
+    name.replace("OTHER")
+    lines.clear
+    expect(item.bindings).to be_nil
+    expect(item.lines).to eq([ 3 ])
+    expect(updated.identity).to eq(item.identity)
+    expect(updated.lines).to eq([ 3, 5 ])
+    expect(updated.bindings.first["domain"]).to eq("admin")
+    expect(updated).to be_frozen
+    expect(name).not_to be_frozen
+    expect { item.with_bindings(bindings: [], lines: [ 0 ]) }.to raise_error(ArgumentError)
+  end
+
   def resource(address: "192.0.2.20", vrf: "default", port: 514)
     Baseline::ConfigurationResource.new(kind: "syslog.destination", identity: { "address" => address },
       scope: { "vrf" => vrf }, attributes: { "port" => port, "protocol" => "udp" }, lines: [ 3 ])

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "ipaddr"
+require_relative "resource_bindings"
 
 module Baseline
   # 资源只持有配置生成所需的非秘密属性；未知字段不能进入报告。
@@ -81,10 +82,11 @@ module Baseline
     def self.validate_expected!(kind, objects)
       raise ArgumentError, "Invalid baseline resources" unless objects.is_a?(Array)
       keys = objects.map do |object|
-        unless object.is_a?(Hash) && (object.keys - %w[identity scope attributes]).empty? && object.key?("identity") && object.key?("scope")
+        unless object.is_a?(Hash) && (object.keys - %w[identity scope attributes bindings]).empty? && object.key?("identity") && object.key?("scope")
           raise ArgumentError, "Invalid baseline resource object"
         end
         validate!(kind: kind, identity: object["identity"], scope: object["scope"], attributes: object.fetch("attributes", {}), lines: [], complete: true)
+        ResourceBindings.validate!(kind, object["bindings"]) if object.key?("bindings")
         [ normalize_scope(kind, object["identity"], object["scope"]), object["identity"] ]
       end
       raise ArgumentError, "Duplicate baseline resource identity" unless keys.uniq.size == keys.size
@@ -101,7 +103,11 @@ module Baseline
 
     # 归一化只创建新容器，调用方的批准参数及已解析资源不被修改。
     def self.normalize_objects(kind, objects)
-      objects.map { |object| object.merge("scope" => normalize_scope(kind, object["identity"], object["scope"])) }
+      objects.map do |object|
+        normalized = object.merge("scope" => normalize_scope(kind, object["identity"], object["scope"]))
+        normalized["bindings"] = ResourceBindings.normalize(object["bindings"]) if object.key?("bindings")
+        normalized
+      end
     end
 
     # 受管作用域使用精确匹配，不从批准对象推导删除边界。

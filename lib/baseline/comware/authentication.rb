@@ -2,7 +2,7 @@
 
 module Baseline
   module Comware
-    # 归约选中管理域的有序方法、方案引用和 VTY 关系，不保留原始命令。
+    # 归约管理域的方法、共享方案引用及选中域的 VTY 关系，不保留原始命令。
     module Authentication
       private
 
@@ -10,18 +10,95 @@ module Baseline
       def record_authentication_bindings(schemes)
         domain = authentication_binding_domain
         endpoints = @fact_builder.resources_for("tacacs.endpoint")
-        bindings = %w[authentication authorization accounting].map do |role|
+        lookup = { schemes: schemes.group_by { |name, _| name.downcase },
+          endpoints: endpoints.group_by { |resource| [ resource[:scope]["group"].downcase, resource[:identity]["role"] ] },
+          unresolved: @fact_builder.unresolved?("tacacs.servers") || @fact_builder.unresolved?("tacacs.endpoints") }
+        selected = authentication_bindings_for(domain, lookup, selected: true)
+        others = authentication_binding_inventory.reject { |entry| entry[:name]&.casecmp?(domain[:name].to_s) }
+          .flat_map { |entry| authentication_bindings_for(entry, lookup, selected: false) }
+        inventory = selected + others
+        complete = %w[authentication authorization accounting].to_h do |role|
+          rows = inventory.select { |binding| binding[:role] == role }
+          [ role, @fact_builder.complete? && rows.all? { |binding| binding[:methods].any? && binding[:references].all? { |reference| reference[:resolved] } } ]
+        end
+        @fact_builder.record_authentication_graph(bindings: inventory, completeness: complete)
+        record_tacacs_domain_bindings(endpoints, inventory, complete)
+        selected.each do |binding|
+          fact = "tacacs.#{binding[:role] == 'authentication' ? 'login' : binding[:role]}"
+          if binding[:uses_tacacs].nil?
+            @fact_builder.record_unknown_fact(fact, lines: binding[:lines], code: binding[:reason])
+          elsif @fact_builder.complete? || binding[:uses_tacacs]
+            @fact_builder.record_fact(fact, binding[:uses_tacacs], lines: binding[:lines])
+          end
+        end
+      end
+
+      # 引用库存按定义一次归约，未选中域也必须保护其共享服务器组。
+      def authentication_binding_inventory
+        active = {}
+        authentication_domain_entries.each do |entry|
+          next if /\A(?:undo )?domain (?:default enable|if-unknown)(?:\s|\z)/.match?(entry.text)
+          match = /\A(undo )?domain(?: name)? (\S+)\z/.match(entry.text)
+          if match && ResourceSchema.token?(match[2])
+            name = match[2]
+            if match[1]
+              active.delete(name.downcase)
+            else
+              item = active[name.downcase] ||= { name: name, sections: [], valid: true }
+              item[:sections] << entry
+            end
+          elsif (family = /\A(?:undo )?domain(?: name)? (\S+)(?:\s|\z)/.match(entry.text))
+            name = ResourceSchema.token?(family[1]) ? family[1] : nil
+            item = active[name&.downcase] ||= { name: name, sections: [], valid: false }
+            item[:valid] = false
+          elsif /\A(?:undo )?domain(?:\s|\z)/.match?(entry.text)
+            active[nil] = { name: nil, sections: [], valid: false }
+          end
+        end
+        active.values.map do |item|
+          { name: item[:name], entries: item[:sections].flat_map(&:children), lines: item[:sections].map(&:line),
+            complete: item[:valid], reason: item[:valid] ? nil : :authentication_domain_unresolved }
+        end
+      end
+
+      # 管理域库存所在层级由厂商选择，不能从接口或其他子视图提取全局域。
+      def authentication_domain_entries = roots
+
+      # 只有对应职责的引用库存明确时才提供 bindings；nil 与已知空数组不同。
+      def record_tacacs_domain_bindings(endpoints, inventory, complete)
+        uses = Hash.new { |index, key| index[key] = [] }
+        inventory.each do |row|
+          row[:references].each do |reference|
+            position = row[:methods].index { |method| method[:kind] == "tacacs" && method[:group].casecmp?(reference[:group]) }
+            next unless position && row[:domain]
+            binding = { "kind" => "aaa.domain", "domain" => row[:domain], "role" => row[:role],
+              "position" => position.zero? ? "primary" : "fallback", "selected" => row[:selected] }
+            uses[[ reference[:group].downcase, row[:role] ]] << [ binding, row[:lines] ]
+          end
+        end
+        endpoints.each do |resource|
+          role, group = resource[:identity]["role"], resource[:scope]["group"]
+          next unless complete[role]
+          links = uses[[ group.downcase, role ]]
+          @fact_builder.record_resource_bindings(kind: resource[:kind], identity: resource[:identity], scope: resource[:scope],
+            bindings: links.map(&:first), lines: (resource[:lines] + links.flat_map(&:last)).uniq)
+        end
+      end
+
+      # 选中域执行额外 VTY 核验，其他域仅归纳配置引用而不声称当前管理路径可用。
+      def authentication_bindings_for(domain, lookup, selected:)
+        %w[authentication authorization accounting].map do |role|
           chain = domain[:complete] ? authentication_binding_chain(role, domain) : { methods: nil, lines: [], reason: domain[:reason] }
           methods = chain[:methods]
           references = methods.to_a.filter_map do |method|
             next unless method[:kind] == "tacacs"
-            matches = schemes.select { |name, _| name.casecmp?(method[:group]) }
-            definition = matches.one? ? matches.values.first : nil
+            matches = lookup[:schemes].fetch(method[:group].downcase, [])
+            definition = matches.one? ? matches.first.last : nil
             servers = definition && definition[:server_types].fetch(role, [])
-            group = matches.one? ? matches.keys.first : method[:group]
-            resources = endpoints.select { |resource| resource[:scope]["group"] == group && resource[:identity]["role"] == role }
+            group = matches.one? ? matches.first.first : method[:group]
+            resources = lookup[:endpoints].fetch([ group.downcase, role ], [])
             resolved = !servers.to_a.empty? && resources.any? && resources.all? { |resource| resource[:complete] } &&
-              !@fact_builder.unresolved?("tacacs.servers") && !@fact_builder.unresolved?("tacacs.endpoints")
+              !lookup[:unresolved]
             { group: group, role: role, servers: servers || [], resolved: resolved,
               endpoints: resources.map { |resource| resource.slice(:identity, :scope, :lines, :complete) },
               lines: [ *(definition ? [ definition[:line] ] : []), *resources.flat_map { |resource| resource[:lines] } ].uniq }
@@ -29,8 +106,8 @@ module Baseline
           reason = chain[:reason]
           reason ||= :tacacs_scheme_unresolved if references.any? { |reference| !reference[:resolved] }
           used = reason ? nil : methods.first[:kind] == "tacacs"
-          vtys = role == "authentication" ? authentication_binding_vtys : []
-          if used && role == "authentication"
+          vtys = selected && role == "authentication" ? authentication_binding_vtys : []
+          if used && selected && role == "authentication"
             if vtys.any? { |vty| vty[:authentication] && !%w[scheme aaa].include?(vty[:authentication]) }
               used = false
             elsif vtys.empty? || vtys.any? { |vty| !vty[:complete] }
@@ -38,19 +115,10 @@ module Baseline
             end
           end
           lines = [ *domain[:lines], *chain[:lines], *references.flat_map { |reference| reference[:lines] }, *vtys.map { |vty| vty[:line] } ].uniq
-          { domain: domain[:name], role: role, scheme: chain[:scheme], methods: methods || [], references: references,
+          { domain: domain[:name], selected: selected, role: role, scheme: chain[:scheme], methods: methods || [], references: references,
             local_fallback: methods && methods.first[:kind] == "tacacs" && methods.drop(1).any? { |method| method[:kind] == "local" },
             allows_none: methods && methods.any? { |method| method[:kind] == "none" }, inherited: chain[:inherited] || false,
             vtys: vtys, uses_tacacs: used, complete: reason.nil?, reason: reason, lines: lines }
-        end
-        record_fact("aaa.bindings", bindings)
-        bindings.each do |binding|
-          fact = "tacacs.#{binding[:role] == 'authentication' ? 'login' : binding[:role]}"
-          if binding[:uses_tacacs].nil?
-            @fact_builder.record_unknown_fact(fact, lines: binding[:lines], code: binding[:reason])
-          elsif @fact_builder.complete? || binding[:uses_tacacs]
-            @fact_builder.record_fact(fact, binding[:uses_tacacs], lines: binding[:lines])
-          end
         end
       end
 

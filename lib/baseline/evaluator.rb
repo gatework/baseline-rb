@@ -51,7 +51,7 @@ module Baseline
       actual = configuration.fact(rule.fact)
       attributes[:actual] = actual
       status, reason, details = compare(rule, actual, expected)
-      attributes[:details] = details if rule.operator == :resources_match && status == :unknown && details
+      attributes[:details] = details if rule.operator == :resources_match && details
       # 不完整输入不能证明通过；仅保留补充记录也无法推翻的明确违规。
       if !configuration.complete? && (status == :pass || status == :fail && !conclusive_violation?(rule, actual, expected, configuration))
         status, reason = :unknown, :input_incomplete

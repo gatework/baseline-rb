@@ -35,6 +35,8 @@ module Baseline
       def snmp_port_command = "snmp-agent udp-port"
       # 从实际所属配置作用域中选取 AAA 声明。
       def aaa_configuration_entries = matching_blocks(/\Aaaa\z/).flat_map(&:children)
+      # VRP 域定义位于 AAA 视图，不能把系统视图的默认域选择当成定义。
+      def authentication_domain_entries = aaa_configuration_entries
       # VRP 管理域选择独立于 Comware，损坏或撤销不得回落到旧选择。
       def authentication_binding_domain
         entry = matching_blocks(/\A(?:undo )?domain\b.*\badmin(?:\s|\z)/).last

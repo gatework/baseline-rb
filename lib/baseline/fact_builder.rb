@@ -84,14 +84,20 @@ module Baseline
       if remove && resource.complete?
         @resources.delete(resource.key)
       else
-        @resources[resource.key] = resource.to_h
+        @resources[resource.key] = resource
       end
       true
     end
 
     # 引用归约读取独立的不可变资源快照，后续覆盖或移除不改变已读证据。
     def resources_for(kind)
-      CtxParser::Immutable.copy(@resources.values.select { |resource| resource[:kind] == kind })
+      CtxParser::Immutable.copy(@resources.values.select { |resource| resource.kind == kind }.map(&:to_h))
+    end
+
+    # 只为库存中的不可变对象补充绑定，不经身份查找成功就不能创建新资源。
+    def record_resource_bindings(kind:, identity:, scope:, bindings:, lines:)
+      resource = @resources.fetch([ kind, scope, identity ])
+      @resources[resource.key] = resource.with_bindings(bindings: bindings, lines: lines)
     end
 
     # 只查询显式诊断，不把尚未记录的值误称为已知事实。
@@ -100,6 +106,16 @@ module Baseline
         scope = issue[:fact]
         scope && (path == scope || path.start_with?("#{scope}.") || scope.start_with?("#{path}."))
       end
+    end
+
+    # 两个视角共用同次拥有的不可变节点，避免完整图与选中域重复深拷贝。
+    def record_authentication_graph(bindings:, completeness:)
+      values = { "aaa.bindings" => bindings.select { |binding| binding[:selected] },
+        "aaa.domain_bindings" => bindings, "aaa.domain_bindings_complete" => completeness }
+      values.reject! { |_, value| value.nil? || !complete? && value.respond_to?(:empty?) && value.empty? }
+      snapshot = CtxParser::Immutable.copy(values)
+      @values.merge!(snapshot)
+      snapshot.each_key { |path| @sources.delete(path) }
     end
 
     # 声明当前适配器确实解析的资源族，空集合才可解释为明确不存在。
@@ -200,7 +216,7 @@ module Baseline
       @issues << { code: :input_not_confirmed_complete } unless @confirmed_complete
       status = complete? && @values.key?("hostname") ? :complete : :partial
       CtxParser::Result.new(status: status,
-        records: [ { "facts" => @values, "sources" => @sources, "resources" => @resources.values } ], issues: @issues.uniq)
+        records: [ { "facts" => @values, "sources" => @sources, "resources" => @resources.values.map(&:to_h) } ], issues: @issues.uniq)
     end
 
     private
@@ -210,12 +226,16 @@ module Baseline
       @resource_kinds.each do |kind|
         fact = ResourceSchema::FACTS.fetch(kind)
         domain = fact.split(".").first
-        resources = @resources.values.select { |resource| resource[:kind] == kind }
+        resources = @resources.values.select { |resource| resource.kind == kind }.map(&:to_h)
         lines = resources.flat_map { |resource| resource[:lines] }.uniq
         unresolved = resources.any? { |resource| !resource[:complete] } ||
           @issues.any? { |issue| [ domain, "#{domain}.servers" ].include?(issue[:fact]) }
         record_unknown_fact(fact, lines: lines, code: :resource_unresolved) if unresolved
-        objects = resources.map { |resource| { "identity" => resource[:identity], "scope" => resource[:scope], "attributes" => resource[:attributes] } }
+        objects = resources.map do |resource|
+          object = { "identity" => resource[:identity], "scope" => resource[:scope], "attributes" => resource[:attributes] }
+          object["bindings"] = resource[:bindings] if resource.key?(:bindings)
+          object
+        end
         record_fact(fact, objects, lines: lines)
       end
     end
@@ -224,6 +244,7 @@ module Baseline
     def initialize_copy(original)
       super
       @values = @values.dup
+      @resources = @resources.dup
       @sources = @sources.dup
       @issues = @issues.dup
     end

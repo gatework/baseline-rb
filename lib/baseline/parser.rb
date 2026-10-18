@@ -21,6 +21,7 @@ module Baseline
     # 声明尚未建模的事实；未知能力不能通过空值或默认值伪装成已支持。
     UNSUPPORTED_FACTS = {}.freeze
     PARTIAL_FACTS = {}.freeze
+    BINDING_KINDS = {}.freeze
 
     SERVICE_PORTS = { "ssh" => 22, "telnet" => 23, "snmp" => 161, "snmptrap" => 162 }.freeze
     SNMP_OPTIONS = %w[auth priv authentication-mode privacy-mode acl access use-ipv4acl group local engineid engineID

@@ -12,7 +12,7 @@ module Baseline
       actual_by_key = actual.to_h { |object| [ [ object["scope"], object["identity"] ], object ] }
       expected_keys = expected.to_h { |object| [ [ object["scope"], object["identity"] ], true ] }
       managed = (managed_scopes || []).to_h { |scope| [ scope, true ] }
-      missing, changed, unresolved = [], [], []
+      missing, changed, unresolved, bindings = [], [], [], []
       expected.each do |object|
         observed = actual_by_key[[ object["scope"], object["identity"] ]]
         if observed.nil?
@@ -25,14 +25,30 @@ module Baseline
           if desired.any? { |key, value| attributes.key?(key) && attributes[key] != value }
             changed << { identity: object["identity"], scope: object["scope"], expected: desired, actual: attributes.slice(*desired.keys) }
           end
+          if object.key?("bindings")
+            if observed.key?("bindings")
+              difference = ResourceBindings.compare(observed["bindings"], object["bindings"])
+              unresolved << { identity: object["identity"], scope: object["scope"], fields: [ "bindings.selected" ] } if difference[:unresolved].any?
+              if difference.except(:unresolved).values.any?(&:any?)
+                bindings << { identity: object["identity"], scope: object["scope"], **difference.except(:unresolved) }
+              end
+            else
+              unresolved << { identity: object["identity"], scope: object["scope"], fields: [ "bindings" ] }
+            end
+          end
         end
       end
       unexpected = actual.select do |object|
         managed.key?(object["scope"]) && !expected_keys.key?([ object["scope"], object["identity"] ])
       end
       details = { missing: missing, unexpected: unexpected, changed: changed }
+      details[:binding_differences] = bindings if bindings.any?
       passed = details.values.all?(&:empty?)
-      return [ :unknown, :resource_attribute_unresolved, { unresolved: unresolved } ] if passed && unresolved.any?
+      details[:verification_scope] = expected.any? { |object| object.key?("bindings") } ? :objects_and_requested_bindings : :objects_only
+      if passed && unresolved.any?
+        reason = unresolved.any? { |entry| entry[:fields].any? { |field| field.start_with?("bindings") } } ? :resource_binding_unresolved : :resource_attribute_unresolved
+        return [ :unknown, reason, { unresolved: unresolved, verification_scope: details[:verification_scope] } ]
+      end
       details[:unresolved] = unresolved if unresolved.any?
       [ passed ? :pass : :fail, passed ? nil : :deviation, details ]
     rescue ArgumentError

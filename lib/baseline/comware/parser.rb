@@ -9,6 +9,7 @@ module Baseline
     # 复用 Comware 与 VRP 结构，由厂商子类选择账号、SSH 和 TACACS 语法。
     class Parser < Baseline::Parser
       include Authentication
+      BINDING_KINDS = { "tacacs.endpoint" => [ "aaa.domain" ].freeze }.freeze
       private
 
       # 解析管理访问暴露检查使用的有序 ACL 定义。

@@ -10,6 +10,7 @@ require_relative "snmp_access_remediation"
 require_relative "credential_remediation"
 require_relative "tacacs_key_remediation"
 require_relative "authentication_remediation"
+require_relative "resource_binding_remediation"
 
 module Baseline
   # 每个指标都必须有规划结果；缺少实现或前提时显式受阻。
@@ -60,6 +61,9 @@ module Baseline
           check(finding, :blocked, result.fetch(:reason), requirements: result.fetch(:requirements), details: result.fetch(:details))
         elsif AuthenticationRemediation.applicable?(finding, audit.configuration)
           result = AuthenticationRemediation.new.call(finding, audit.configuration)
+          check(finding, :blocked, result.fetch(:reason), requirements: result.fetch(:requirements), details: result.fetch(:details))
+        elsif ResourceBindingRemediation.applicable?(finding, audit.configuration)
+          result = ResourceBindingRemediation.new.call(finding, audit.configuration)
           check(finding, :blocked, result.fetch(:reason), requirements: result.fetch(:requirements), details: result.fetch(:details))
         elsif !audit.configuration.complete? || finding.status == :unknown && !((AccessRemediation::IDS + SnmpAccessRemediation::IDS).include?(finding.id) && finding.reason == :fact_unavailable && !finding.expected.nil?)
           reason = audit.configuration.complete? ? finding.reason : audit.configuration.status == :unsupported ? :unsupported_platform : :input_incomplete
