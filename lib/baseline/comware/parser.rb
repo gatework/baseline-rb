@@ -181,8 +181,7 @@ module Baseline
 
       # 提取轮询权限、用户安全属性及来源限制。
       def parse_snmp
-        enabled = configured_state(/\Asnmp-agent(?:\s|\z)/, /\Aundo snmp-agent\z/)
-        record_fact("snmp.enabled", enabled.nil? && @fact_builder.complete? ? false : enabled)
+        enabling_entries = []
         record_fact("snmp.versions", snmp_versions)
         communities = matching_blocks(/\Asnmp-agent community\b/).filter_map do |entry|
           match = /\Asnmp-agent community (read|write)\s+(?:(simple|cipher)\s+)?(\S+)(.*)\z/.match(entry.text)
@@ -191,6 +190,7 @@ module Baseline
             next
           end
           access = SnmpOptions.community(match[4])
+          enabling_entries << entry if access[:complete]
           record_unknown_fact("snmp.acl", [ entry ], code: :unsupported_snmp_access_options) unless access[:complete]
           record_credential("snmp-community", "snmp", match[2] || "plain", match[3], entry)
           { write: match[1] == "write", acl: access[:acl], acl_ipv6: access[:acl_ipv6], read_view: access[:read_view], line: entry.line }
@@ -205,6 +205,7 @@ module Baseline
         groups = configured_snmp_groups(group_entries) do |entry|
           settings = entry.text.sub(/\Asnmp-agent group v3\s+\S+\s*/, "")
           access = SnmpOptions.group(settings)
+          enabling_entries << entry if access[:complete]
           definitions << access.merge(name: entry.text.split[3], version: "v3", line: entry.line)
           record_unknown_fact("snmp.acl", [ entry ], code: :unsupported_snmp_access_options) unless access[:complete]
           [ entry.text.split[3], { acl: access[:acl], line: entry.line, write: snmp_group_write_state(settings) } ]
@@ -227,6 +228,7 @@ module Baseline
           modes = { auth: parse_snmp_secret(settings, "authentication-mode", algorithms: %w[md5 sha sha224 sha256 sha384 sha512 sha2-224 sha2-256 sha2-384 sha2-512]),
             priv: parse_snmp_secret(settings, "privacy-mode", algorithms: %w[des des56 3des aes128 aes192 aes256]) }
           modes = { auth: nil, priv: nil } unless access[:complete]
+          enabling_entries << entry if access[:complete] && modes.values.none?(&:nil?)
           if snmp_user_definitions_replace?
             security_records[match[1]] = [ modes, entry, access[:key_format] ]
             modes.each { |key, value| user[key] = value ? true : value }
@@ -241,7 +243,43 @@ module Baseline
         record_unknown_snmp_access(withdrawals, code: :unsupported_snmp_withdrawal) unless withdrawals.empty?
         @fact_builder.record_snmp_access(communities: communities, users: users.values, groups: groups,
           port: listener_port(snmp_port_command, default: 161, scope: "snmp.acl"), **snmp_access_options)
+        record_snmp_enabled(enabling_entries)
       end
+
+      # 已校验的正向命令才能隐式启用；未知声明不能从默认禁用推导通过。
+      def record_snmp_enabled(enabling_entries)
+        validated = enabling_entries.to_h { |entry| [ entry.index, true ] }
+        entries = matching_blocks(/\A(?:undo )?snmp-agent(?:\s|\z)/)
+        state = @fact_builder.complete? ? false : nil
+        entries.each do |entry|
+          text = entry.text
+          if text == "undo snmp-agent"
+            state = analyze(entry) { false }
+          elsif text == "snmp-agent" || validated[entry.index] || snmp_implicit_enable?(text)
+            state = analyze(entry) { true }
+          elsif !text.start_with?("undo ") && !snmp_service_utility?(text)
+            state = nil unless state == true
+          end
+        end
+        if state.nil? && entries.any?
+          record_unknown_fact("snmp.enabled", entries, code: :snmp_service_unresolved)
+        else
+          record_fact("snmp.enabled", state, entries)
+        end
+      end
+
+      # 只识别已支持的完整声明；未知命令族保持未知，不按前缀视为有效配置。
+      def snmp_implicit_enable?(text)
+        return true if /\Asnmp-agent sys-info version (?:all|(?:v1|v2c|v3)(?: (?:v1|v2c|v3))*)\z/.match?(text)
+        return true if /\Asnmp-agent sys-info (?:contact|location)\s+\S.*\z/.match?(text)
+        return true if /\Asnmp-agent local-engineid [0-9A-Fa-f]{10,64}\z/.match?(text) && text.split.last.size.even?
+
+        match = /\A#{Regexp.escape(snmp_port_command)}\s+([0-9]+)\z/.match(text)
+        !match.nil? && match[1].to_i.between?(1, 65_535)
+      end
+
+      # 工具命令例外必须由厂商适配器声明，不能跨平台假设。
+      def snmp_service_utility?(_text) = false
 
       # 只有明确支持串联 ACL 的适配器才改变组、用户与全局过滤的归约。
       def snmp_access_options = {}

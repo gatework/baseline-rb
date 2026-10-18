@@ -90,3 +90,11 @@ H3C 的用户、组及全局 ACL 会串联过滤；不能用用户 ACL 替代更
 全局来源修正创建新 ACL 后才重绑；原团体字、用户、组及共享旧 ACL 均不修改。没有全局命令证据时须明确确认固件支持；未绑定主体需批准实际来源，不能把批准上限直接当作初始允许集合。同一设备多个领域争用新 ACL 标识时按策略冲突受阻。源过滤与协议版本、MIB 权限分别检查，不将关闭 SNMP 作为其他规则的修复手段。
 
 依据：[H3C 全局 SNMP ACL 命令](https://www.h3c.com/en/Support/Resource_Center/EN/Home/Public/00-Public/Technical_Documents/Reference_Guides/Command_References/H3C_CR-24948/13/202601/2739237_294551_0.htm)、[H3C SNMP 用户与组命令](https://www.h3c.com/en/Support/Resource_Center/EN/Home/Public/00-Public/Technical_Documents/Reference_Guides/Command_References/H3C_S6520X_MS4600_CRs_R6628Pxx-10752/11/202407/2215723_294551_0.htm)。命令存在于特定设备参考中不代表所有固件支持；当前只输出人工审核方案，没有设备执行或 NMS 连通性证明。
+
+## SNMP 启用证据边界
+
+Comware/VRP 的 `snmp.enabled` 按命令顺序归约：独立 `snmp-agent` 和 `undo snmp-agent` 明确启停，完整且已支持的团体字、组、用户、版本及监听设置可证明隐式启用。H3C 完整全局 ACL 绑定也可提供此证据。未知或损坏的正向语句不能证明启用，也不能证明仍处于默认禁用；没有独立启用证据时返回未知。后续明确启停或有效隐式启用可消除先前的状态歧义。未出现任何声明的默认禁用只用于完整输入。
+
+H3C 的 `calculate-password` 是不启用服务的工具命令，参数不进入报告；此例外不跨平台套用到 VRP。未建模的合法命令仍可能产生未知，需要继续补充厂商语法证据。`snmp.enabled` 描述代理功能状态，不单独证明监听可达、NMS 连通、版本或 MIB 权限合规。
+
+依据：[H3C 启用与密码计算命令](https://www.h3c.com/en/d_201506/873135_294551_0.htm)、[Huawei SNMP 系统视图命令](https://info.support.huawei.com/enterprise/en/doc/EDOC1100459901/30eb7700/snmp-configuration-commands)、[H3C 全局 ACL 编号和命名范围](https://www.h3c.com/en/d_202507/2589658_294551_0.htm)。

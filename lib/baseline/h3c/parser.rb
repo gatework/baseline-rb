@@ -37,6 +37,17 @@ module Baseline
       # 同名 VACM 用户的完整声明以最后一次为准，不从旧声明保留认证或 ACL。
       def snmp_user_definitions_replace? = true
 
+      # 密钥摘要计算不会隐式启用 Comware SNMP，也不保留工具参数。
+      def snmp_service_utility?(text) = /\Asnmp-agent calculate-password(?:\s|\z)/.match?(text)
+
+      # 全局 ACL 的完整绑定也是隐式启用命令，命名形式不能缺少实际名称。
+      def snmp_implicit_enable?(text)
+        return true if super || /\Asnmp-agent acl (?:ipv6 )?[23][0-9]{3}\z/.match?(text)
+
+        match = /\Asnmp-agent acl (?:ipv6 )?name (\S+)\z/.match(text)
+        !match.nil? && ResourceSchema.token?(match[1]) && match[1].bytesize <= 63
+      end
+
       # Comware 范围内任一非默认登录设置会使协议及认证同时取范围级值。
       # 未出现的范围级默认值仍保留未知，不从 class 另一项推导已通过。
       def vty_login_entries(defaults, local)
