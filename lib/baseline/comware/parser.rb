@@ -172,13 +172,17 @@ module Baseline
         end
       end
 
+      # VRP 的版本命令单独归约，避免套用 Comware 撤销语法。
+      def snmp_versions
+        versions = last_configured_value(/\Asnmp-agent sys-info version\s+(.+)\z/)&.split
+        versions == [ "all" ] ? %w[v1 v2c v3] : versions
+      end
+
       # 提取轮询权限、用户安全属性及来源限制。
       def parse_snmp
         enabled = configured_state(/\Asnmp-agent(?:\s|\z)/, /\Aundo snmp-agent\z/)
         record_fact("snmp.enabled", enabled.nil? && @fact_builder.complete? ? false : enabled)
-        versions = last_configured_value(/\Asnmp-agent sys-info version\s+(.+)\z/)&.split
-        versions = %w[v1 v2c v3] if versions == [ "all" ]
-        record_fact("snmp.versions", versions)
+        record_fact("snmp.versions", snmp_versions)
         communities = matching_blocks(/\Asnmp-agent community\b/).filter_map do |entry|
           match = /\Asnmp-agent community (read|write)\s+(?:(simple|cipher)\s+)?(\S+)(.*)\z/.match(entry.text)
           unless match

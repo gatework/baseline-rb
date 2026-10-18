@@ -19,6 +19,34 @@ module Baseline
         default_protocol && default_authentication ? defaults : local
       end
 
+      # 启用与撤销只更新列出的版本；损坏声明不能回落到旧的通过值。
+      def snmp_versions
+        versions = nil
+        matching_blocks(/\A(?:undo )?snmp-agent(?: sys-info version(?:\s|\z)|\z)/).each do |entry|
+          if entry.text == "undo snmp-agent"
+            versions = []
+            next
+          end
+          next if entry.text == "snmp-agent"
+          match = /\A(undo )?snmp-agent sys-info version (all|(?:v1|v2c|v3)(?: (?:v1|v2c|v3))*)\z/.match(entry.text)
+          unless match
+            record_unknown_fact("snmp.versions", [ entry ])
+            next
+          end
+          selected = match[2] == "all" ? %w[v1 v2c v3] : match[2].split.uniq
+          if match[1] && selected.size < 3 && versions.nil?
+            record_unknown_fact("snmp.versions", [ entry ], code: :snmp_versions_unresolved)
+          end
+          analyze(entry) { selected }
+          versions = if match[1]
+            selected.size == 3 ? [] : versions && versions - selected
+          else
+            (versions.to_a + selected).uniq
+          end
+        end
+        versions
+      end
+
       # 匹配当前平台显式启用 SSH 的命令。
       def ssh_enable_pattern = /\Assh server enable\z/
       # 匹配当前平台显式禁用 SSH 的命令。
