@@ -63,6 +63,15 @@ module Baseline
       value.is_a?(String) && value.bytesize.between?(1, 253) && /\A[a-zA-Z0-9_][a-zA-Z0-9_.:\/-]*\z/.match?(value)
     end
 
+    # 接口参数可分写类型及编号，但不能包含控制字符或额外词元。
+    def self.interface_name(value)
+      return unless value.is_a?(String) && value.bytesize.between?(1, 253) && !/[[:cntrl:]]/.match?(value)
+      match = /\A([a-zA-Z][\w.:\/-]*)(?: +(\d[\d.:\/-]*))?\z/.match(value)
+      return unless match && (!match[2] || !/\d/.match?(match[1]))
+
+      match[1] + match[2].to_s
+    end
+
     # 某些厂商的引号对象名允许空格，但不接受换行及命令分隔符。
     def self.name?(value)
       value.is_a?(String) && value.bytesize.between?(1, 253) && /\A[a-zA-Z0-9_][a-zA-Z0-9_.:\/ -]*\z/.match?(value) && !value.end_with?(" ")

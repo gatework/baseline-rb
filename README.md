@@ -61,9 +61,11 @@ Checks use `pass`, `fail`, `unknown`, and `not_applicable`. Missing approved val
 
 Management-source checks currently model supported IPv4 ACL semantics. PAN-OS input is a local complete `set` export, not XML or expanded Panorama templates. Password ciphertext is never decrypted or used to claim strength. Raw configuration and secrets must not enter report storage.
 
-The library performs no device access, backup collection, remediation, or database writes. Motor persistence and `Baseline::Check` belong to the host application.
+The library performs no device access, backup collection, remediation execution, or database writes. Motor persistence and `Baseline::Check` belong to the host application.
 
-`Evidence#resources` exposes immutable syslog objects and NTP associations with vendor identities, scopes, options, and source lines. `ConfigurationResource#complete?` describes understood object syntax; it does not establish input completeness, active references, or compliance. Unsupported options are excluded from resource data. This layer prepares offline remediation planning; command generation is not yet available.
+`Evidence#resources` exposes immutable syslog, NTP, and TACACS objects with vendor identities, scopes, options, and source lines. `ConfigurationResource#complete?` describes understood object syntax; it does not establish input completeness, active references, or compliance. Unsupported options are excluded from resource data.
+
+`Remediation.new(policy:).call(configuration:, platform:, complete: false, context: {})` returns a manual-review plan with its audit, per-check results, operations, steps, configuration commands, and serialization. Statuses are `noop/ready/partial/blocked`; unresolved checks remain visible. Commands never execute or save configuration. Current rendering covers selected source-interface, SSHv2, and service settings; full object changes, ACL, SNMP, and authentication-chain rendering remain in development. `Remediation.capabilities(platform:)` reports actual command coverage separately from parsing capabilities. See [the offline example](examples/remediation.rb).
 
 Optional `syslog.destinations`, `ntp.associations`, and `tacacs.endpoints` rules compare arrays of objects containing `identity`, `scope`, and optional `attributes`. Only declared attributes are managed. `managed_scopes` explicitly enables detection of unwanted objects within those scopes; omitting it checks approved objects and attributes without treating unrelated objects as unwanted. Unverified attribute defaults remain unknown. The default policy retains its original 30 checks; these three object rules require explicit approval data.
 

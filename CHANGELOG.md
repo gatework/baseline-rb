@@ -4,6 +4,9 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+- Add an offline `Remediation` entry point and immutable manual-review plans containing source/policy identities, a result for every enabled metric, typed setting operations, guarded single-line commands, and explicit unresolved requirements. Partial support remains visible rather than claiming complete remediation.
+- Render selected source-interface, SSHv2, and service changes with separate vendor command classes; reject command injection and invalid PAN-OS interface spellings, and withhold service-route interface changes with unresolved source-address dependencies.
+
 - Add optional structured syslog destination, NTP association, and TACACS endpoint rules with explicit managed scopes, typed approved attributes, missing/unexpected/changed differences, and conservative handling of unverified defaults. The default policy retains its original 30 checks.
 - Retain TACACS endpoint roles, priorities, scheme/profile identity, ports, and routing domains without storing key values in resources.
 

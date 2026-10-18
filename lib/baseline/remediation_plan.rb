@@ -1,0 +1,69 @@
+# frozen_string_literal: true
+
+require "json"
+require "ctx_parser/immutable"
+require_relative "report"
+
+module Baseline
+  # 审计、变更意图及命令共同组成审核产物，任何受阻项都保留在整体状态中。
+  class RemediationPlan
+    REASONS = Report::REASONS.merge(
+      remediation_unmodeled: "当前尚未实现此项修正配置，需补齐对应处理能力",
+      credential_rotation_required: "需要批准的新凭据及人工轮换，普通方案不包含秘密值",
+      unsupported_setting: "该厂商或当前设置组合尚无已验证的命令实现",
+      invalid_command_parameter: "批准参数不符合厂商命令语法或包含非法字符",
+      unresolved_prerequisites: "相关配置存在依赖，需先核对所列条件"
+    ).freeze
+    Check = Data.define(:id, :status, :reason, :operation_ids, :requirements) do
+      # 检查结果不持有调用方可变参数。
+      def initialize(**attributes)
+        super(**CtxParser::Immutable.copy(attributes))
+      end
+
+      # 保留机器原因码，同时为审核者解释当前受阻条件。
+      def explanation = reason ? RemediationPlan::REASONS.fetch(reason, reason.to_s) : status == :planned ? "已生成待审核变更" : "无需变更"
+    end
+    attr_reader :audit, :checks, :operations, :steps
+
+    # 所有数据都是独立快照；此对象不执行配置命令。
+    def initialize(audit:, checks:, operations:, steps:, renderer:)
+      @audit, @checks, @operations, @steps = audit, checks.dup.freeze, operations.dup.freeze, steps.dup.freeze
+      @commands = renderer.configuration_commands(@steps).freeze
+      freeze
+    end
+
+    # 有命令不代表所有指标已解决；未知或未支持项不能被隐藏。
+    def status
+      blocked = checks.any? { |check| check.status == :blocked }
+      return steps.empty? ? :blocked : :partial if blocked
+      steps.empty? ? :noop : :ready
+    end
+
+    # 每个非空命令块均需人工审核，不能当作自动执行许可。
+    def requires_review? = steps.any?
+    # 返回独立命令块；不包含 save、commit 或实际执行结果。
+    def configuration_commands = @commands
+
+    # 公开结构保留指纹、逐项结果和可审核操作。
+    def to_h
+      { status: status, requires_review: requires_review?, configuration_sha256: audit.configuration.sha256,
+        policy_sha256: audit.policy_sha256, audit: audit.to_h, checks: checks.map(&:to_h),
+        operations: operations.map(&:to_h), steps: steps.map(&:to_h), configuration_commands: configuration_commands }
+    end
+
+    # 参数值由审计结构导出，文字部分仅呈现单行命令及稳定原因码。
+    def to_text
+      output = [ "baseline remediation: #{status}; 配置命令需人工审核后执行", "配置 SHA256: #{audit.configuration.sha256}; 策略 SHA256: #{audit.policy_sha256}" ]
+      checks.each do |check|
+        output << "  [#{check.status}] #{check.id}#{check.reason ? " (#{check.reason})" : ''}"
+        output << "    #{check.explanation}"
+        output << "    所需条件: #{check.requirements.join(', ')}" if check.requirements.any?
+      end
+      output.concat([ "配置命令:", *configuration_commands ]) if configuration_commands.any?
+      output.join("\n")
+    end
+
+    # 普通调试只展示状态及数量。
+    def inspect = "#<#{self.class} status=#{status} checks=#{checks.size} operations=#{operations.size}>"
+  end
+end

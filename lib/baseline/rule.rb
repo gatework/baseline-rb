@@ -88,7 +88,13 @@ module Baseline
 
     # 策略选择完成后再归一化对象默认域，其他规则继续保留原批准值。
     def normalize_expected(value)
-      value_type == :resource_set && !value.nil? ? ResourceSchema.normalize_objects(ResourceSchema::FACTS.key(id), value) : value
+      if value_type == :resource_set && !value.nil?
+        ResourceSchema.normalize_objects(ResourceSchema::FACTS.key(id), value)
+      elsif %w[ntp.source syslog.source].include?(id)
+        ResourceSchema.interface_name(value) || value
+      else
+        value
+      end
     end
 
     # 将 nil 保留为批准值缺失；具体值则按规则目录声明的领域类型校验。

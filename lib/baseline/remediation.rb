@@ -1,0 +1,46 @@
+# frozen_string_literal: true
+
+require_relative "audit"
+require_relative "remediation_planner"
+require_relative "h3c/command_renderer"
+require_relative "huawei/command_renderer"
+require_relative "cisco_ios/command_renderer"
+require_relative "cisco_nxos/command_renderer"
+require_relative "palo_alto/command_renderer"
+
+module Baseline
+  # 同一次解析产生审计与修正意图，不接受另一份配置拼接既有报告。
+  class Remediation
+    RENDERERS = { "h3c" => H3c::CommandRenderer, "huawei" => Huawei::CommandRenderer,
+      "cisco_ios" => CiscoIos::CommandRenderer, "cisco_nxos" => CiscoNxos::CommandRenderer,
+      "palo_alto" => PaloAlto::CommandRenderer }.freeze
+
+    # 查询的是实际生成覆盖，不将审计支持自动标记为生成支持。
+    def self.capabilities(platform:)
+      name = Audit.normalize_platform(platform)
+      renderer = RENDERERS.fetch(name, CommandRenderer).new
+      CtxParser::Immutable.copy(Audit.capabilities(platform: name).to_h do |id, capability|
+        supported = capability[:status] != :unsupported && renderer.supports?(id)
+        [ id, { status: supported ? :conditional : :unsupported,
+          reason: supported ? nil : capability[:reason] || :remediation_unmodeled,
+          requirements: RemediationPlanner::REQUIREMENTS.fetch(id, [ "supported_rule_handler" ]), prerequisites: renderer.prerequisites(id) } ]
+      end)
+    end
+
+    # 审计与规划器共用同一冻结策略。
+    def initialize(policy:)
+      @policy = policy
+      @audit = Audit.new(policy: policy)
+    end
+
+    # 只生成审核产物，不读取文件、访问设备或提交配置。
+    def call(configuration:, platform:, complete: false, context: {})
+      audit = @audit.call(configuration: configuration, platform: platform, complete: complete, context: context)
+      renderer = RENDERERS.fetch(audit.configuration.platform, CommandRenderer).new
+      RemediationPlanner.new(policy: @policy, renderer: renderer).call(audit)
+    end
+
+    # 不在调试输出中展示策略值或配置内容。
+    def inspect = "#<#{self.class}>"
+  end
+end

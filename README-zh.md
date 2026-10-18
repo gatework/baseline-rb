@@ -61,7 +61,13 @@ puts report.to_text
 
 管理来源检查目前覆盖已建模的 IPv4 ACL 语义。PAN-OS 输入要求本机完整 `set` 导出，不支持 XML 或展开后的 Panorama 模板。不解密密码密文，也不凭密文证明强度；原始配置和秘密不可进入报告存储。
 
-本库不连接设备、不采集备份、不修复配置、不写数据库。Motor 持久化和 `Baseline::Check` 属于宿主应用。
+本库不连接设备、不采集备份、不下发修正配置、不写数据库。Motor 持久化和 `Baseline::Check` 属于宿主应用。
+
+`Remediation.new(policy:).call(configuration:, platform:, complete: false, context: {})` 将同次审计转换为人工审核方案，提供 `audit`、`checks`、`operations`、`steps`、`configuration_commands`、`to_h` 和 `to_text`。状态为 `noop/ready/partial/blocked`；任一受阻指标都保留在方案中。`ready` 表示所选指标有完整的命令方案，不表示已经执行、保存、生效或整机合规。命令不含自动保存或提交。
+
+当前支持 H3C/Huawei/IOS/NX-OS/PAN-OS 的 NTP/Syslog 源接口设置、H3C/Huawei/IOS 的 SSHv2 设置，以及各呈现器明确声明的服务关闭命令；服务种类及设备语法限制仍需检查。PAN-OS 使用原生接口名；存在显式服务路由源地址时，接口切换会受阻，需先核对地址依赖。对象增删、ACL、SNMP 与认证链的完整命令生成仍在开发，未实现项会明确返回 `remediation_unmodeled`，不会当作完成。
+
+`Remediation.capabilities(platform:)` 独立查询生成覆盖及前提，不与 `Audit.capabilities` 的解析能力混淆。运行 `bundle exec ruby -Ilib examples/remediation.rb` 查看合成示例；真实配置及凭据不得写入示例。
 
 详细厂商语义、历史验证记录和 Motor 专用集成说明保留在[架构参考](docs/architecture-zh.md)。其中宿主集成代码需要 Motor，不属于独立 gem API。适配层位于 [Motor 仓库](https://github.com/gatework/motor/tree/main/backend/lib) 的 `backend/lib/baseline`、`backend/lib/vxlan` 和 `backend/lib/wireless`。
 
@@ -86,7 +92,7 @@ checks:
 
 对象级偏差保留 `missing`、`unexpected`、`changed`；同地址但端口错误会判为偏离。使用命名 profile 或方案的厂商应声明其实际作用域和身份。对象定义检查不能证明日志转发或认证引用链已生效。
 
-`Evidence#resources` 提供不可变的 Syslog 配置对象和 NTP 关联，保留厂商身份、作用域、选项及来源行，避免将去重地址误用为配置对象。每项 `ConfigurationResource#complete?` 只表示该对象语法是否被完整理解，不代表配置采集完整、引用链已生效或设备合规；未知选项不会复制进资源数据。资源层正在为离线修正方案提供基础，当前尚无公开的命令生成入口。
+`Evidence#resources` 提供不可变的 Syslog、NTP 和 TACACS 对象，保留厂商身份、作用域、选项及来源行，避免将去重地址误用为配置对象。每项 `ConfigurationResource#complete?` 只表示该对象语法是否被完整理解，不代表配置采集完整、引用链已生效或设备合规；未知选项不会复制进资源数据。
 
 厂商代码按命名空间组织：`Baseline::Hillstone::Parser` 和 `Baseline::Hillstone::Document` 同放在 `baseline/hillstone/`；Palo Alto 使用相同布局。六个平台解析器复用 `Baseline::Parser`、`Comware::Parser` 或 `Cisco::Parser`。单个平台可用 `require "baseline/hillstone/parser"` 独立加载；完整评估入口仍为 `require "baseline"`。
 

@@ -163,6 +163,7 @@ module Baseline
           record_fact("ntp.authentication", servers.all? { |server| server[:authenticated] }, entries.map { |row| row[:entry] })
         end
         record_configured_scalar("ntp.source", %w[deviceconfig system route service ntp source interface])
+        record_route_source_address_presence("ntp")
       end
 
       # 仅完整的认证声明才能证明所有服务器均满足认证要求。
@@ -194,6 +195,13 @@ module Baseline
         end
         record_fact("syslog.servers", servers.uniq, entries.map { |row| row[:entry] })
         record_configured_scalar("syslog.source", %w[deviceconfig system route service syslog source interface])
+        record_route_source_address_presence("syslog")
+      end
+
+      # 切换服务路由接口时，已有显式源地址必须单独核对，不能静默保留错误绑定。
+      def record_route_source_address_presence(service)
+        rows = statements_with_prefix("deviceconfig", "system", "route", "service", service, "source", "address")
+        record_fact("#{service}.source_address_present", rows.any?, rows.map { |row| row[:entry] }) if @fact_builder.complete? || rows.any?
       end
 
       # 命名配置对象按叶子最后值归约，未知字段不进入公开资源数据。

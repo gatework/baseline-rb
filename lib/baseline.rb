@@ -2,3 +2,4 @@
 
 require_relative "baseline/version"
 require_relative "baseline/audit"
+require_relative "baseline/remediation"
