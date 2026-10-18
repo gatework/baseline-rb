@@ -19,6 +19,11 @@ module Baseline
       def ssh_disable_pattern = /\A(?:undo stelnet server enable|stelnet server disable)\z/
       # 模板进入与整组撤销共用相同身份边界。
       def tacacs_section_command = "hwtacacs-server template"
+      # VRP HWTACACS 模板名区分大小写，不能借用 Comware 的别名折叠。
+      def tacacs_name_key(name) = name
+
+      # 域名不区分大小写，命名 AAA 方案保持完整名称匹配。
+      def authentication_section_name_key(command, name) = command == "domain" ? name.downcase : name
       # 匹配认证、授权或计费服务器声明。
       def tacacs_server_pattern = /\Ahwtacacs-server (?:authentication|authorization|accounting)\s+(\S+)/
       # 完整选择服务器命令族，缺失地址也必须保留为损坏证据。

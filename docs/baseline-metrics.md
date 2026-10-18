@@ -151,3 +151,9 @@ bindings:
 绑定比较不等于引用改写。当前方案展示实际共享引用和差异，要求批准变更范围、保留或迁移关系、有序方法及本地后备，并完成厂商命令验证；不会因省略 bindings 或提供空数组自动删除共享对象。尚未生成 TACACS 绑定切换命令。域引用检查也不替代 VTY、密钥和真实后备访问验证。[完整离线示例](../examples/resource_bindings.rb) 使用独立合成前后配置演示对象存在但引用错误的失败，以及正确域引用的通过。
 
 绑定证据补充保留不可变资源值对象，只复制新增的绑定及行号；不会为了补关系再次解析已验证的端点身份。选中域视图和全域库存由同次拥有的不可变图派生，避免重复深拷贝，调用方可变数据仍不能影响快照。`script/benchmark.rb` 增加 10/100 个合成域共享同一组的完整审计；规模只用于软件测量，不表示设备域数量上限或实际吞吐。
+
+### 名称身份按厂商及对象类型区分
+
+Comware HWTACACS 方案名不区分大小写：重新进入或撤销不同大小写的同名方案时，先合并/撤销同一身份，再归约主服务器与密钥；不能把大小写变体当作两台冗余服务器。Huawei HWTACACS 模板名区分大小写，定义 OPS 与引用 ops 不能借名匹配，两个不同模板也不能互相混入绑定。域名仍按其已支持的不区分大小写规则处理；Huawei 命名 AAA 方案按完整名称匹配，不从域名规则推断方案等价。对应版本如有其他名称规则，须通过明确 profile 扩展，未确认的别名不作为通过证据。
+
+依据：[H3C 方案名称命令参考](https://wwwsg-proxy.h3c.com/en/Support/Resource_Center/HK/Switches/H3C_S5500/H3C_S5500_Series_Switches/Technical_Documents/Reference_Guides/Command_References/H3C_S5500-SI_CM%28V1.01%29/200712/211835_294551_0.htm)、[Huawei 模板名称命令参考](https://info.support.huawei.com/hedex/api/pages/EDOC1100278054/AEL11217/07/resources/dc/hwtacacs-server_template.html)、[Huawei 域及命名授权方案参考](https://support.huawei.com/enterprise/en/doc/EDOC1100412529/c0449dc0/aaa-configuration-commands)。

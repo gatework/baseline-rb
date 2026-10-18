@@ -359,7 +359,7 @@ module Baseline
             record_unknown_fact("tacacs", [ entry ], code: :tacacs_scheme_unresolved)
             next
           end
-          name = match[2]
+          name = tacacs_name_key(match[2])
           if match[1]
             active.delete(name)
             analyze(entry) { false }
@@ -369,6 +369,9 @@ module Baseline
         end
         active.values
       end
+
+      # Comware 方案标识不区分大小写；其他厂商按自己的命名契约覆盖。
+      def tacacs_name_key(name) = name.downcase
 
       # 每种职责只保留最后状态；仅在归约后分析最终秘密，旧材料不进入报告。
       def parse_tacacs_keys(section, children)

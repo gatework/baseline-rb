@@ -4,6 +4,8 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+- Respect vendor name identity: fold Comware HWTACACS scheme reentry/removal, but require exact Huawei template and named AAA scheme references while keeping domain matching separate.
+
 - Add typed TACACS `aaa.domain` binding policies, exact reference-set comparison, selected-domain predicates, and explicit object-only verification scope.
 - Inventory unselected Comware/VRP domain references without dropping shared uses; incomplete or unsupported binding evidence stays unknown.
 - Expose object and binding audit capabilities separately and retain shared-reference approval requirements without emitting binding changes.

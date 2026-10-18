@@ -10,8 +10,8 @@ module Baseline
       def record_authentication_bindings(schemes)
         domain = authentication_binding_domain
         endpoints = @fact_builder.resources_for("tacacs.endpoint")
-        lookup = { schemes: schemes.group_by { |name, _| name.downcase },
-          endpoints: endpoints.group_by { |resource| [ resource[:scope]["group"].downcase, resource[:identity]["role"] ] },
+        lookup = { schemes: schemes.group_by { |name, _| tacacs_name_key(name) },
+          endpoints: endpoints.group_by { |resource| [ tacacs_name_key(resource[:scope]["group"]), resource[:identity]["role"] ] },
           unresolved: @fact_builder.unresolved?("tacacs.servers") || @fact_builder.unresolved?("tacacs.endpoints") }
         selected = authentication_bindings_for(domain, lookup, selected: true)
         others = authentication_binding_inventory.reject { |entry| entry[:name]&.casecmp?(domain[:name].to_s) }
@@ -69,17 +69,17 @@ module Baseline
         uses = Hash.new { |index, key| index[key] = [] }
         inventory.each do |row|
           row[:references].each do |reference|
-            position = row[:methods].index { |method| method[:kind] == "tacacs" && method[:group].casecmp?(reference[:group]) }
+            position = row[:methods].index { |method| method[:kind] == "tacacs" && tacacs_name_key(method[:group]) == tacacs_name_key(reference[:group]) }
             next unless position && row[:domain]
             binding = { "kind" => "aaa.domain", "domain" => row[:domain], "role" => row[:role],
               "position" => position.zero? ? "primary" : "fallback", "selected" => row[:selected] }
-            uses[[ reference[:group].downcase, row[:role] ]] << [ binding, row[:lines] ]
+            uses[[ tacacs_name_key(reference[:group]), row[:role] ]] << [ binding, row[:lines] ]
           end
         end
         endpoints.each do |resource|
           role, group = resource[:identity]["role"], resource[:scope]["group"]
           next unless complete[role]
-          links = uses[[ group.downcase, role ]]
+          links = uses[[ tacacs_name_key(group), role ]]
           @fact_builder.record_resource_bindings(kind: resource[:kind], identity: resource[:identity], scope: resource[:scope],
             bindings: links.map(&:first), lines: (resource[:lines] + links.flat_map(&:last)).uniq)
         end
@@ -92,11 +92,11 @@ module Baseline
           methods = chain[:methods]
           references = methods.to_a.filter_map do |method|
             next unless method[:kind] == "tacacs"
-            matches = lookup[:schemes].fetch(method[:group].downcase, [])
+            matches = lookup[:schemes].fetch(tacacs_name_key(method[:group]), [])
             definition = matches.one? ? matches.first.last : nil
             servers = definition && definition[:server_types].fetch(role, [])
             group = matches.one? ? matches.first.first : method[:group]
-            resources = lookup[:endpoints].fetch([ group.downcase, role ], [])
+            resources = lookup[:endpoints].fetch([ tacacs_name_key(group), role ], [])
             resolved = !servers.to_a.empty? && resources.any? && resources.all? { |resource| resource[:complete] } &&
               !lookup[:unresolved]
             { group: group, role: role, servers: servers || [], resolved: resolved,
@@ -148,19 +148,23 @@ module Baseline
         pattern = /\A(undo )?#{Regexp.escape(command)}#{optional} (\S+)\z/
         entries.each do |entry|
           match = pattern.match(entry.text)
-          if match && match[2].casecmp?(name)
+          if match && authentication_section_name_key(command, match[2]) == authentication_section_name_key(command, name)
             if match[1]
               sections.clear
               valid = true
             else
               sections << entry
             end
-          elsif /\A(?:undo )?#{Regexp.escape(command)}#{optional} #{Regexp.escape(name)}(?:\s|\z)/i.match?(entry.text)
+          elsif (family = /\A(?:undo )?#{Regexp.escape(command)}#{optional} (\S+)(?:\s|\z)/.match(entry.text)) &&
+              authentication_section_name_key(command, family[1]) == authentication_section_name_key(command, name)
             valid = false
           end
         end
         [ sections, valid ]
       end
+
+      # 域与方案的名称身份可以有不同厂商规则，命令关键字不参与名称归一化。
+      def authentication_section_name_key(_command, name) = name.downcase
 
       # 缺失选中对象是未解析引用，不是已经确定“不使用 TACACS”。
       def selected_authentication_domain(name, entries, lines:)
