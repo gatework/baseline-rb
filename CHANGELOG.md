@@ -2,6 +2,12 @@
 
 Changes to the public contract are recorded here. Versions follow Semantic Versioning.
 
+## Unreleased
+
+- Keep H3C SSH ACL denial logging separate from ACL bindings, so enabling or disabling logging cannot hide missing management restrictions.
+- Distinguish Huawei log destination domains and source-port controls; source-port declarations no longer inflate syslog server counts or invalidate source-interface evidence.
+- Normalize split Comware/VRP NTP and syslog source interface type/number declarations and recognize their resets.
+
 ## 0.3.1 (2026-10-18)
 
 - Withhold IOS SNMP ACL facts after contradictory community access declarations, while accepting equivalent repeats and preserving NX-OS incremental attributes.

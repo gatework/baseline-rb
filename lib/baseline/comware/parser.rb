@@ -59,9 +59,9 @@ module Baseline
         record_fact("ssh.enabled", configured_state(ssh_enable_pattern, ssh_disable_pattern), matching_blocks(/\A(?:undo )?(?:ssh|stelnet)/))
         compatible = configured_state(/\Assh server compatible-ssh1x enable\z/, /\A(?:undo ssh server compatible-ssh1x enable|ssh server compatible-ssh1x disable)\z/)
         record_fact("ssh.versions", compatible.nil? ? nil : compatible ? [ "1", "2" ] : [ "2" ])
-        ssh_acl_entries = matching_blocks(/\A(?:undo )?ssh server acl\b/).reject { |entry| /\A(?:undo )?ssh server acl ipv6\b/.match?(entry.text) }
+        ssh_acl_entries = matching_blocks(/\A(?:undo )?ssh server acl(?:\s|\z)/).reject { |entry| /\A(?:undo )?ssh server acl ipv6\b/.match?(entry.text) }
         ssh_acl = effective_configured_value(/\Assh server acl(?: ipv4)?\s+(?!name\z|ipv4\z)(?:name\s+)?(\S+)\z/, entries: ssh_acl_entries,
-          family: /\A(?:undo )?ssh server acl\b/, fact: "management.acl", reset: /\Aundo ssh server acl(?: ipv4)?(?: (?:name )?\S+)?\z/)
+          family: /\A(?:undo )?ssh server acl(?:\s|\z)/, fact: "management.acl", reset: /\Aundo ssh server acl(?: ipv4)?(?: (?:name )?\S+)?\z/)
         defaults = matching_blocks(/\Aline class vty\z/).flat_map(&:children)
         vtys = matching_blocks(/\A(?:line|user-interface) vty\b/).map do |section|
           entries = defaults + section.children
@@ -97,23 +97,40 @@ module Baseline
         end
         record_fact("ntp.servers", servers, ntp_entries)
         record_configured_state("ntp.authentication", /\Antp-service authentication enable\z/, /\Aundo ntp-service authentication enable\z/)
-        source_entries = matching_blocks(/\A(?:undo )?ntp-service source(?:-interface)?\b/)
-        source = effective_configured_value(/\Antp-service source(?:-interface)?\s+(\S+)\z/, entries: source_entries,
-          family: /\A/, fact: "ntp.source", reset: /\Aundo ntp-service source(?:-interface)?(?:\s+\S+)?\z/)
-        record_fact("ntp.source", source, source_entries.last(1))
+        source_entries = matching_blocks(/\A(?:undo )?ntp-service source(?:-interface)?(?:\s|\z)/)
+        source = effective_configured_value(/\Antp-service source(?:-interface)?\s+(.+)\z/, entries: source_entries,
+          family: /\A/, fact: "ntp.source", reset: /\Aundo ntp-service source(?:-interface)?(?:\s+[a-zA-Z][\w.:\/-]*(?:\s+\d[\d.:\/-]*)?)?\z/)
+        record_source_interface("ntp.source", source, source_entries.last(1))
       end
 
       # 提取日志目标与源接口，厂商命令不进入事实归约层。
       def parse_syslog
-        log_entries = matching_blocks(/\A(?:undo )?info-center loghost(?:\s|\z)/).reject { |entry| /\A(?:undo )?info-center loghost source(?:\s|\z)/.match?(entry.text) }
-        hosts = configured_server_addresses("syslog.servers", /\Ainfo-center loghost\s+(?:vpn-instance\s+\S+\s+)?(?:ipv6\s+)?((?!(?:vpn-instance|ipv6)(?:\s|\z))\S+)/, log_entries, negate: "undo") do |text, match|
-          [ match[1], text[/\Ainfo-center loghost\s+vpn-instance\s+(\S+)/, 1] ]
+        log_entries = matching_blocks(/\A(?:undo )?info-center loghost(?:\s|\z)/).reject { |entry| /\A(?:undo )?info-center loghost source(?:-port)?(?:\s|\z)/.match?(entry.text) }
+        hosts = configured_server_addresses("syslog.servers", loghost_pattern, log_entries, negate: "undo") do |text, match|
+          [ match[1], text[/\bvpn-instance\s+(\S+)/, 1] ]
         end
         record_fact("syslog.servers", hosts, log_entries)
-        source_entries = matching_blocks(/\A(?:undo )?info-center loghost source\b/)
-        source = effective_configured_value(/\Ainfo-center loghost source\s+(\S+)\z/, entries: source_entries,
-          family: /\A/, fact: "syslog.source", reset: /\Aundo info-center loghost source(?:\s+\S+)?\z/)
-        record_fact("syslog.source", source, source_entries.last(1))
+        source_entries = matching_blocks(/\A(?:undo )?info-center loghost source(?:\s|\z)/)
+        source = effective_configured_value(/\Ainfo-center loghost source\s+(.+)\z/, entries: source_entries,
+          family: /\A/, fact: "syslog.source", reset: /\Aundo info-center loghost source(?:\s+[a-zA-Z][\w.:\/-]*(?:\s+\d[\d.:\/-]*)?)?\z/)
+        record_source_interface("syslog.source", source, source_entries.last(1))
+      end
+
+      # 保留地址族与 VPN 前缀，独立日志控制命令不属于目标地址。
+      def loghost_pattern
+        /\Ainfo-center loghost\s+(?:vpn-instance\s+\S+\s+)?(?:ipv6\s+)?((?!(?:vpn-instance|ipv6|domain)(?:\s|\z))\S+)/
+      end
+
+      # 接口类型和编号可分写；非法尾部不能回落到旧接口或截取首个词元。
+      def record_source_interface(fact, value, entries)
+        return unless value
+
+        match = /\A([a-zA-Z][\w.:\/-]*)(?:\s+(\d[\d.:\/-]*))?\z/.match(value)
+        if match && (!match[2] || !/\d/.match?(match[1]))
+          record_fact(fact, match[1] + match[2].to_s, entries)
+        else
+          record_unknown_fact(fact, entries)
+        end
       end
 
       # 提取轮询权限、用户安全属性及来源限制。

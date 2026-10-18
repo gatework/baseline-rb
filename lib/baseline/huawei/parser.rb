@@ -8,6 +8,11 @@ module Baseline
     class Parser < Comware::Parser
       private
 
+      # VRP 的域名目标使用 domain 关键字，不能把该词当成服务器地址。
+      def loghost_pattern
+        /\Ainfo-center loghost\s+(?:vpn-instance\s+\S+\s+)?(?:ipv6\s+|domain\s+)?((?!(?:vpn-instance|ipv6|domain)(?:\s|\z))\S+)/
+      end
+
       # 匹配当前平台显式启用 SSH 的命令。
       def ssh_enable_pattern = /\Astelnet server enable\z/
       # 匹配当前平台显式禁用 SSH 的命令。
