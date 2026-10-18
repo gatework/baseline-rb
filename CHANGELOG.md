@@ -4,6 +4,9 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+- Add optional structured syslog destination, NTP association, and TACACS endpoint rules with explicit managed scopes, typed approved attributes, missing/unexpected/changed differences, and conservative handling of unverified defaults. The default policy retains its original 30 checks.
+- Retain TACACS endpoint roles, priorities, scheme/profile identity, ports, and routing domains without storing key values in resources.
+
 - Retain scoped NTP association resources, including separate server/peer identities, source interfaces, version, preference, key references, and PAN-OS primary/secondary slots without secret values.
 - Count distinct NTP, syslog, and TACACS servers rather than duplicate observations; compare approved server sets independently of duplicate observations.
 - Keep malformed applicability facts unknown instead of using them to exclude security checks.

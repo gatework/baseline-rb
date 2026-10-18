@@ -138,6 +138,7 @@ module Baseline
         complete = !options.nil? && [ *scope.values, *attributes.values.grep(String) ].all? { |value| ResourceSchema.token?(value) }
         complete &&= !(text.start_with?("info-center loghost vpn-instance ") && options.key?("vpn-instance"))
         complete &&= !attributes.key?("facility") || /\Alocal[0-7]\z/.match?(attributes["facility"])
+        attributes["port"] = 514 if complete && !attributes.key?("port")
         attributes = {} unless complete
         return unless ResourceSchema.token?(scope["vrf"])
 

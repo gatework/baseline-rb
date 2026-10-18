@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "acl"
+require_relative "resource_schema"
 
 require "ctx_parser/immutable"
 
@@ -46,7 +47,10 @@ module Baseline
       "tacacs.login" => Definition.new(title: "管理认证引用 TACACS", fact: "tacacs.login", operator: :equals, value_type: :boolean),
       "tacacs.authorization" => Definition.new(title: "管理授权引用 TACACS", fact: "tacacs.authorization", operator: :equals, value_type: :boolean),
       "tacacs.accounting" => Definition.new(title: "管理审计引用 TACACS", fact: "tacacs.accounting", operator: :equals, value_type: :boolean),
-      "tacacs.keys" => Definition.new(title: "TACACS 密钥配置", fact: "tacacs.keys_present", operator: :equals, value_type: :boolean)
+      "tacacs.keys" => Definition.new(title: "TACACS 密钥配置", fact: "tacacs.keys_present", operator: :equals, value_type: :boolean),
+      "syslog.destinations" => Definition.new(title: "Syslog 配置对象", fact: "syslog.destinations", operator: :resources_match, value_type: :resource_set),
+      "ntp.associations" => Definition.new(title: "NTP 关联对象", fact: "ntp.associations", operator: :resources_match, value_type: :resource_set),
+      "tacacs.endpoints" => Definition.new(title: "TACACS 服务器对象", fact: "tacacs.endpoints", operator: :resources_match, value_type: :resource_set)
     }.freeze
     CONTEXT_FIELDS = %w[host model site role vendor].freeze
     # 适用条件采用标量相等或备选值匹配；集合事实不隐含成员比较语义。
@@ -54,12 +58,12 @@ module Baseline
       facts[definition.fact] = definition.value_type if %i[boolean string].include?(definition.value_type)
     end.merge("hostname" => :string, "snmp.community_present" => :boolean, "credentials.present" => :boolean).freeze
 
-    attr_reader :id, :definition, :title, :fact, :operator, :value_type, :allowed_values, :expected, :severity, :applies_to
+    attr_reader :id, :definition, :title, :fact, :operator, :value_type, :allowed_values, :expected, :severity, :applies_to, :managed_scopes
 
     # 校验规则定义，并冻结比较契约。
     def initialize(id, options)
       @definition = DEFINITIONS.fetch(id) { raise ArgumentError, "Unknown baseline rule" }
-      unless options.is_a?(Hash) && (options.keys - %w[enabled expected severity applies_to]).empty? &&
+      unless options.is_a?(Hash) && (options.keys - %w[enabled expected severity applies_to managed_scopes]).empty? &&
           [ true, false ].include?(options.fetch("enabled", true)) &&
           %w[low medium high critical].include?(options.fetch("severity", "medium"))
         raise ArgumentError, "Invalid baseline rule options"
@@ -70,12 +74,22 @@ module Baseline
       @expected = CtxParser::Immutable.copy(options["expected"])
       @enabled, @severity = options.fetch("enabled", true), CtxParser::Immutable.copy(options.fetch("severity", "medium"))
       @applies_to = CtxParser::Immutable.copy(options.fetch("applies_to", {}))
+      if options.key?("managed_scopes")
+        raise ArgumentError, "Managed scopes require a resource rule" unless value_type == :resource_set
+        ResourceSchema.validate_scopes!(options["managed_scopes"])
+      end
+      @managed_scopes = CtxParser::Immutable.copy(options["managed_scopes"])
       validate_applicability!
       freeze
     end
 
     # 判断策略规则是否已启用评估。
     def enabled? = @enabled
+
+    # 策略选择完成后再归一化对象默认域，其他规则继续保留原批准值。
+    def normalize_expected(value)
+      value_type == :resource_set && !value.nil? ? ResourceSchema.normalize_objects(ResourceSchema::FACTS.key(id), value) : value
+    end
 
     # 将 nil 保留为批准值缺失；具体值则按规则目录声明的领域类型校验。
     def validate_expected!(value)
@@ -88,6 +102,12 @@ module Baseline
           value["min_classes"].is_a?(Integer) && value["min_classes"].between?(1, 4)
       when :enum_set then string_set?(value) && !value.empty? && (value - allowed_values).empty?
       when :string_set, :network_set then string_set?(value)
+      when :resource_set
+        ResourceSchema.validate_expected!(ResourceSchema::FACTS.key(id), value)
+        if managed_scopes && normalize_expected(value).any? { |object| !managed_scopes.include?(object["scope"]) }
+          raise ArgumentError, "Approved resource is outside managed scopes"
+        end
+        true
       end
       raise ArgumentError, "Invalid baseline expected value for #{id}" unless valid
       value.each { |network| Acl.ipv4_range(network) } if value_type == :network_set

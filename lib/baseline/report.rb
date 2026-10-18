@@ -9,6 +9,7 @@ module Baseline
   # 分别报告评估结果与输入覆盖率；未知项不计分，也不视为合规。
   class Report
     REASONS = {
+      resource_attribute_unresolved: "配置对象存在，但部分批准属性未显式声明且缺省值未经验证",
       input_incomplete: "配置不完整，需提供完整备份后重查", unsupported_platform: "尚未支持此平台的配置语法",
       scope_mismatch: "不在策略适用范围内", scope_unknown: "缺少判断适用范围或选择批准值所需的上下文",
       policy_missing: "未定义当前范围的批准值，请完善基线策略", fact_unavailable: "配置事实缺失或包含尚未支持的语法，请查看解析诊断",

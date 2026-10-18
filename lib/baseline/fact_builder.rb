@@ -17,6 +17,7 @@ module Baseline
       @complete = complete && issues.empty?
       @values, @sources, @issues, @acls = {}, {}, issues.dup, {}
       @resources = {}
+      @resource_kinds = []
       @vtys, @communities, @snmp_users, @credentials = [], [], [], []
       @credential_lines = {}
       @snmp_groups = {}
@@ -83,6 +84,13 @@ module Baseline
         @resources[resource.key] = resource.to_h
       end
       true
+    end
+
+    # 声明当前适配器确实解析的资源族，空集合才可解释为明确不存在。
+    def declare_resource_kind(kind)
+      raise ArgumentError, "Unknown configuration resource kind" unless ResourceSchema::FACTS.key?(kind)
+
+      @resource_kinds |= [ kind ]
     end
 
     # 将别名关联到同一 ACL；保留定义冲突，避免后续定义静默覆盖。
@@ -164,6 +172,7 @@ module Baseline
       record_management_facts
       record_snmp_facts
       record_credential_facts
+      record_resource_facts
       @issues << { code: :hostname_missing } unless @values.key?("hostname")
       @issues << { code: :input_not_confirmed_complete } unless @confirmed_complete
       status = complete? && @values.key?("hostname") ? :complete : :partial
@@ -172,6 +181,21 @@ module Baseline
     end
 
     private
+
+    # 旧地址事实损坏时也阻止对象级通过，不将失败提取误当成已知空集。
+    def record_resource_facts
+      @resource_kinds.each do |kind|
+        fact = ResourceSchema::FACTS.fetch(kind)
+        domain = fact.split(".").first
+        resources = @resources.values.select { |resource| resource[:kind] == kind }
+        lines = resources.flat_map { |resource| resource[:lines] }.uniq
+        unresolved = resources.any? { |resource| !resource[:complete] } ||
+          @issues.any? { |issue| [ domain, "#{domain}.servers" ].include?(issue[:fact]) }
+        record_unknown_fact(fact, lines: lines, code: :resource_unresolved) if unresolved
+        objects = resources.map { |resource| { "identity" => resource[:identity], "scope" => resource[:scope], "attributes" => resource[:attributes] } }
+        record_fact(fact, objects, lines: lines)
+      end
+    end
 
     # 已记录的值不可变；复制归约会更新的容器即可隔离派生事实与诊断。
     def initialize_copy(original)

@@ -1,6 +1,6 @@
 # 基线指标覆盖与验收
 
-指标目录以 `Baseline::Rule::DEFINITIONS` 为准。新增规则必须同步补充 `spec/all_metrics_contract_spec.rb` 中独立声明的预期值、通过事实和偏离事实；测试会检查目录与默认策略没有漏项。
+指标目录以 `Baseline::Rule::DEFINITIONS` 为准。新增规则必须同步补充 `spec/all_metrics_contract_spec.rb` 中独立声明的预期值、通过事实和偏离事实。默认策略保留30项基础检查；另外3项对象级规则需显式声明批准对象，不自动启用。
 
 | 领域 | 指标 ID | 业务判定 |
 | --- | --- | --- |
@@ -34,6 +34,9 @@
 | TACACS | tacacs.authorization | 已建模授权动作引用 TACACS |
 | TACACS | tacacs.accounting | 已建模审计动作引用 TACACS |
 | TACACS | tacacs.keys | 已建模服务器或职责具备所需密钥声明 |
+| Syslog 对象 | syslog.destinations | 目标身份、作用域、明确批准的端口等属性及受管范围内的额外对象 |
+| NTP 对象 | ntp.associations | 服务器/peer、路由域、明确批准的版本及认证key引用等属性 |
+| TACACS 对象 | tacacs.endpoints | 方案/命名对象、职责/主备、路由域和明确批准的端口等属性 |
 
 每项都有七种独立的评估回归：证据充分通过、确定偏离、事实缺失、批准值缺失、明确范围不匹配、不完整输入、带局部诊断的保留事实。服务器数量和批准集合另有重复观测回归，适用条件另有损坏事实类型回归。
 

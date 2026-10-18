@@ -15,6 +15,7 @@ module Baseline
       ntp.servers ntp.authentication ntp.source syslog.servers syslog.source
       ssh.enabled ssh.versions ssh.vty_ssh_only ssh.vty_aaa management.acl.bound management.acl.restricted management.acl.sources
       services credentials.storage_safe credentials.records tacacs.servers tacacs.login tacacs.authorization tacacs.accounting tacacs.keys_present
+      syslog.destinations ntp.associations tacacs.endpoints
     ].freeze
 
     # 声明尚未建模的事实；未知能力不能通过空值或默认值伪装成已支持。
@@ -41,6 +42,7 @@ module Baseline
       end
       @source_issues = issues
       @fact_builder = FactBuilder.new(complete: complete, issues: issues)
+      %w[syslog.destination ntp.association tacacs.endpoint].each { |kind| @fact_builder.declare_resource_kind(kind) }
       if roots.empty?
         return CtxParser::Result.new(status: :failed, issues: issues + [ { code: :empty_configuration } ])
       end

@@ -36,7 +36,19 @@ RSpec.describe "Every baseline metric" do
     "tacacs.login" => [ "tacacs.login", true, true, false ],
     "tacacs.authorization" => [ "tacacs.authorization", true, true, false ],
     "tacacs.accounting" => [ "tacacs.accounting", true, true, false ],
-    "tacacs.keys" => [ "tacacs.keys_present", true, true, false ]
+    "tacacs.keys" => [ "tacacs.keys_present", true, true, false ],
+    "syslog.destinations" => [ "syslog.destinations",
+      [ { "identity" => { "address" => "192.0.2.20" }, "scope" => { "vrf" => "default" }, "attributes" => { "port" => 1514 } } ],
+      [ { "identity" => { "address" => "192.0.2.20" }, "scope" => { "vrf" => "default" }, "attributes" => { "port" => 1514 } } ],
+      [ { "identity" => { "address" => "192.0.2.20" }, "scope" => { "vrf" => "default" }, "attributes" => { "port" => 514 } } ] ],
+    "ntp.associations" => [ "ntp.associations",
+      [ { "identity" => { "address" => "192.0.2.10", "role" => "server" }, "scope" => { "vrf" => "default" }, "attributes" => { "version" => 4 } } ],
+      [ { "identity" => { "address" => "192.0.2.10", "role" => "server" }, "scope" => { "vrf" => "default" }, "attributes" => { "version" => 4 } } ],
+      [ { "identity" => { "address" => "192.0.2.10", "role" => "server" }, "scope" => { "vrf" => "default" }, "attributes" => { "version" => 3 } } ] ],
+    "tacacs.endpoints" => [ "tacacs.endpoints",
+      [ { "identity" => { "address" => "192.0.2.30" }, "scope" => {}, "attributes" => { "port" => 49 } } ],
+      [ { "identity" => { "address" => "192.0.2.30" }, "scope" => {}, "attributes" => { "port" => 49 } } ],
+      [ { "identity" => { "address" => "192.0.2.30" }, "scope" => {}, "attributes" => { "port" => 149 } } ] ]
   }
 
   def metric_report(id, expected:, facts:, complete: true, issues: [], **options)
@@ -48,7 +60,7 @@ RSpec.describe "Every baseline metric" do
 
   it "lists every metric explicitly so a new definition cannot silently miss acceptance coverage" do
     expect(metrics.keys).to match_array(Baseline::Rule::DEFINITIONS.keys)
-    expect(Baseline::Policy.default.rules.map(&:id)).to match_array(metrics.keys)
+    expect(Baseline::Policy.default.rules.map(&:id)).to match_array(metrics.keys - %w[syslog.destinations ntp.associations tacacs.endpoints])
   end
 
   metrics.each do |id, (fact, expected, passing, failing)|

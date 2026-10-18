@@ -89,7 +89,7 @@ module Baseline
           value = value["default"]
         end
       end
-      Resolution.new(value: value, reason: value.nil? ? :policy_missing : nil, path: path)
+      Resolution.new(value: rule.normalize_expected(value), reason: value.nil? ? :policy_missing : nil, path: path)
     end
 
     # 展示对象身份与状态，避免泄露原始回显或凭据。

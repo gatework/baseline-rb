@@ -65,6 +65,8 @@ The library performs no device access, backup collection, remediation, or databa
 
 `Evidence#resources` exposes immutable syslog objects and NTP associations with vendor identities, scopes, options, and source lines. `ConfigurationResource#complete?` describes understood object syntax; it does not establish input completeness, active references, or compliance. Unsupported options are excluded from resource data. This layer prepares offline remediation planning; command generation is not yet available.
 
+Optional `syslog.destinations`, `ntp.associations`, and `tacacs.endpoints` rules compare arrays of objects containing `identity`, `scope`, and optional `attributes`. Only declared attributes are managed. `managed_scopes` explicitly enables detection of unwanted objects within those scopes; omitting it checks approved objects and attributes without treating unrelated objects as unwanted. Unverified attribute defaults remain unknown. The default policy retains its original 30 checks; these three object rules require explicit approval data.
+
 Detailed vendor behavior, historical validation notes, and Motor-only integration are preserved in [the architecture reference](docs/architecture-zh.md). Host integration examples in that reference require Motor; they are not standalone gem APIs. Motor adapters live under `backend/lib/baseline`, `backend/lib/vxlan`, and `backend/lib/wireless` in the [Motor repository](https://github.com/gatework/motor/tree/main/backend/lib).
 
 ## Domain vocabulary

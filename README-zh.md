@@ -71,6 +71,21 @@ puts report.to_text
 
 全部 30 项指标及逐项验收边界见[指标覆盖说明](docs/baseline-metrics.md)。数量指标统计不同服务器，重复采集同一地址不能满足冗余要求。
 
+可选规则 `syslog.destinations`、`ntp.associations`、`tacacs.endpoints` 进一步检查对象身份、作用域及明确批准的属性。`expected` 为对象数组，每项包含 `identity`、`scope` 和可选 `attributes`；`managed_scopes` 明确哪些作用域的多余对象需要判为偏离。未声明受管范围时只检查批准对象及其指定属性，不推导其他对象应被删除。未指定属性保持不受管；未经验证的设备默认值保持未知。这三项未自动加入默认策略。
+
+```yaml
+version: 1
+checks:
+  syslog.destinations:
+    managed_scopes: [{vrf: default}]
+    expected:
+      - identity: {address: 192.0.2.20}
+        scope: {vrf: default}
+        attributes: {port: 1514}
+```
+
+对象级偏差保留 `missing`、`unexpected`、`changed`；同地址但端口错误会判为偏离。使用命名 profile 或方案的厂商应声明其实际作用域和身份。对象定义检查不能证明日志转发或认证引用链已生效。
+
 `Evidence#resources` 提供不可变的 Syslog 配置对象和 NTP 关联，保留厂商身份、作用域、选项及来源行，避免将去重地址误用为配置对象。每项 `ConfigurationResource#complete?` 只表示该对象语法是否被完整理解，不代表配置采集完整、引用链已生效或设备合规；未知选项不会复制进资源数据。资源层正在为离线修正方案提供基础，当前尚无公开的命令生成入口。
 
 厂商代码按命名空间组织：`Baseline::Hillstone::Parser` 和 `Baseline::Hillstone::Document` 同放在 `baseline/hillstone/`；Palo Alto 使用相同布局。六个平台解析器复用 `Baseline::Parser`、`Comware::Parser` 或 `Cisco::Parser`。单个平台可用 `require "baseline/hillstone/parser"` 独立加载；完整评估入口仍为 `require "baseline"`。

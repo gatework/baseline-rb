@@ -5,6 +5,7 @@ require "ipaddr"
 module Baseline
   # 资源只持有配置生成所需的非秘密属性；未知字段不能进入报告。
   module ResourceSchema
+    FACTS = { "syslog.destination" => "syslog.destinations", "ntp.association" => "ntp.associations", "tacacs.endpoint" => "tacacs.endpoints" }.freeze
     SYSLOG_FIELDS = %w[address name protocol port facility severity channel dscp filter source format types certificate_check].freeze
     NTP_FIELDS = %w[address version key_id prefer source minpoll maxpoll burst iburst normal_sync authenticated].freeze
     TACACS_FIELDS = %w[address port source key_present timeout single_connection].freeze
@@ -20,6 +21,17 @@ module Baseline
         lines.is_a?(Array) && lines.all? { |line| line.is_a?(Integer) && line.positive? } &&
         [ true, false ].include?(complete)
       raise ArgumentError, "Invalid configuration resource" unless valid
+      identity_fields, scope_fields, roles = case kind
+      when "syslog.destination" then [ %w[address name protocol port types], %w[vrf profile source], [] ]
+      when "ntp.association" then [ %w[address name role], %w[vrf], %w[server peer] ]
+      when "tacacs.endpoint" then [ %w[address name role priority family], %w[vrf profile group], %w[authentication authorization accounting all] ]
+      end
+      valid_identity = (identity.keys - identity_fields).empty? && (scope.keys - scope_fields).empty? &&
+        (identity.key?("address") ^ identity.key?("name")) &&
+        (!identity.key?("role") || roles.include?(identity["role"])) &&
+        (kind != "ntp.association" || identity.key?("name") || identity.key?("role")) &&
+        identity.all? { |key, value| !attributes.key?(key) || attributes[key] == value }
+      raise ArgumentError, "Invalid configuration resource identity" unless valid_identity
 
       [ identity, scope, attributes ].each do |fields|
         fields.each do |key, value|
@@ -54,6 +66,45 @@ module Baseline
     # 某些厂商的引号对象名允许空格，但不接受换行及命令分隔符。
     def self.name?(value)
       value.is_a?(String) && value.bytesize.between?(1, 253) && /\A[a-zA-Z0-9_][a-zA-Z0-9_.:\/ -]*\z/.match?(value) && !value.end_with?(" ")
+    end
+
+    # 批准对象只声明身份、作用域及受管属性，不能夹带原始命令或秘密。
+    def self.validate_expected!(kind, objects)
+      raise ArgumentError, "Invalid baseline resources" unless objects.is_a?(Array)
+      keys = objects.map do |object|
+        unless object.is_a?(Hash) && (object.keys - %w[identity scope attributes]).empty? && object.key?("identity") && object.key?("scope")
+          raise ArgumentError, "Invalid baseline resource object"
+        end
+        validate!(kind: kind, identity: object["identity"], scope: object["scope"], attributes: object.fetch("attributes", {}), lines: [], complete: true)
+        [ normalize_scope(kind, object["identity"], object["scope"]), object["identity"] ]
+      end
+      raise ArgumentError, "Duplicate baseline resource identity" unless keys.uniq.size == keys.size
+      true
+    end
+
+    # 只有地址型默认域及已命名方案缺省 VRF 可规范化，命名主备槽位保留原作用域。
+    def self.normalize_scope(kind, identity, scope)
+      default_vrf = kind == "ntp.association" && identity.key?("address") ||
+        kind == "syslog.destination" && !scope.key?("profile") && !scope.key?("source") ||
+        kind == "tacacs.endpoint" && scope.key?("group")
+      default_vrf ? { "vrf" => "default" }.merge(scope) : scope
+    end
+
+    # 归一化只创建新容器，调用方的批准参数及已解析资源不被修改。
+    def self.normalize_objects(kind, objects)
+      objects.map { |object| object.merge("scope" => normalize_scope(kind, object["identity"], object["scope"])) }
+    end
+
+    # 受管作用域使用精确匹配，不从批准对象推导删除边界。
+    def self.validate_scopes!(scopes)
+      unless scopes.is_a?(Array) && !scopes.empty? && scopes.uniq.size == scopes.size && scopes.all? do |scope|
+        scope.is_a?(Hash) && (scope.keys - SCOPE_FIELDS).empty? && scope.all? do |key, value|
+          %w[group profile].include?(key) ? name?(value) : token?(value)
+        end
+      end
+        raise ArgumentError, "Invalid managed resource scopes"
+      end
+      true
     end
 
     # 地址与 DNS 名沿用同一校验契约，资源和旧事实不能对非法目标判断不同。

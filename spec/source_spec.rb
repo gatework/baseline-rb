@@ -88,7 +88,7 @@ RSpec.describe Baseline::CiscoNxos::Parser do
 
     expect(result).to be_complete
     expect(result.to_h.keys).to contain_exactly(:status, :records, :issues)
-    expect(result.records.first.fetch("sources")).to eq("ssh.enabled" => [ 3, 4 ], "ntp.servers" => [ 2 ])
+    expect(result.records.first.fetch("sources")).to eq("ssh.enabled" => [ 3, 4 ], "ntp.servers" => [ 2 ], "ntp.associations" => [ 2 ])
     expect(parser.document.cursor).to equal(parser.cursor)
     expect(parser.document.roots).to equal(parser.blocks)
     expect(parser.cursor.content).to eq(text)
