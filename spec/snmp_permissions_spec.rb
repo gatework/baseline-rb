@@ -39,7 +39,7 @@ RSpec.describe "Baseline SNMP access permissions" do
       it "reports an explicit SNMPv3 write grant even without a write community" do
         report = audit(platform, group(platform, "#{write_option} WRITEVIEW"), user(platform))
         expect(permission(report).status).to eq(:fail)
-        expect(report.configuration.value("snmp.write_enabled")).to be(true)
+        expect(report.configuration.fact("snmp.write_enabled")).to be(true)
         expect(permission(report).lines).to include(3)
       end
 
@@ -51,7 +51,7 @@ RSpec.describe "Baseline SNMP access permissions" do
       it "uses documented no-write-view semantics for a completely parsed group" do
         report = audit(platform, group(platform, "#{read_option} READVIEW"), user(platform))
         expect(permission(report).status).to eq(:pass)
-        expect(report.configuration.value("snmp.write_enabled")).to be(false)
+        expect(report.configuration.fact("snmp.write_enabled")).to be(false)
       end
 
       it "does not require visible users before reporting configured group write access" do
@@ -84,8 +84,8 @@ RSpec.describe "Baseline SNMP access permissions" do
         legacy = platform == "cisco_ios" ? "snmp-server user legacy LEGACY v2c" : "snmp-agent usm-user v2c legacy"
         report = audit(platform, group(platform, "#{write_option} WRITEVIEW"), legacy, definition: Baseline::Policy.default)
         expect(permission(report).status).to eq(:fail)
-        expect(report.configuration.known?("snmp.v3_auth_priv")).to be(false)
-        expect(report.configuration.known?("snmp.acl.bound")).to be(false)
+        expect(report.configuration.fact_known?("snmp.v3_auth_priv")).to be(false)
+        expect(report.configuration.fact_known?("snmp.acl.bound")).to be(false)
         expect(report.findings.find { |finding| finding.id == "ssh.enabled" }.status).to eq(:pass)
       end
     end
@@ -112,8 +112,8 @@ RSpec.describe "Baseline SNMP access permissions" do
     it "unions multiple user roles without losing an earlier write grant or authentication settings" do
       report = audit("cisco_nxos", nxos_user("network-admin"), "snmp-server user observer network-operator")
       expect(permission(report).status).to eq(:fail)
-      expect(report.configuration.value("snmp.v3_auth_priv")).to be(true)
-      expect(report.configuration.value("snmp.users").first.fetch(:roles)).to eq(%w[network-admin network-operator])
+      expect(report.configuration.fact("snmp.v3_auth_priv")).to be(true)
+      expect(report.configuration.fact("snmp.users").first.fetch(:roles)).to eq(%w[network-admin network-operator])
     end
 
     it "keeps unknown roles unknown unless another role explicitly grants write access" do
@@ -126,7 +126,7 @@ RSpec.describe "Baseline SNMP access permissions" do
     it "does not let unknown authentication hide an explicit administrator grant" do
       report = audit("cisco_nxos", "snmp-server user observer network-admin")
       expect(permission(report).status).to eq(:fail)
-      expect(report.configuration.known?("snmp.v3_auth_priv")).to be(false)
+      expect(report.configuration.fact_known?("snmp.v3_auth_priv")).to be(false)
     end
 
     it "applies the default read-only rule to a pure SNMPv3 administrator" do
@@ -136,10 +136,10 @@ RSpec.describe "Baseline SNMP access permissions" do
 
     it "keeps unrepresented CLI accounts unknown without inventing SNMP users" do
       report = audit("cisco_nxos", "username cli-admin password 5 FIXTURE-HASH role network-admin", definition: Baseline::Policy.default)
-      expect(report.configuration.value("snmp.enabled")).to be(true)
+      expect(report.configuration.fact("snmp.enabled")).to be(true)
       expect(permission(report).status).to eq(:unknown)
       expect(permission(report).diagnostics).to include(hash_including(code: :snmp_user_sync_unconfirmed, lines: [ 3 ]))
-      expect(report.configuration.value("snmp.users")).to eq([])
+      expect(report.configuration.fact("snmp.users")).to eq([])
       expect(report.findings.find { |finding| finding.id == "ssh.enabled" }.status).to eq(:pass)
       expect(report.to_h.to_json).not_to include("FIXTURE-HASH")
     end
@@ -165,9 +165,9 @@ RSpec.describe "Baseline SNMP access permissions" do
     it "excludes explicitly disabled SNMP without creating synchronization uncertainty" do
       commands = [ "username cli-admin role network-admin", "no snmp-server protocol enable" ]
       report = audit("cisco_nxos", *commands, definition: Baseline::Policy.default)
-      expect(report.configuration.value("snmp.enabled")).to be(false)
+      expect(report.configuration.fact("snmp.enabled")).to be(false)
       expect(permission(report).status).to eq(:not_applicable)
-      expect(report.configuration.known?("snmp.write_enabled")).to be(true)
+      expect(report.configuration.fact_known?("snmp.write_enabled")).to be(true)
       enabled = audit("cisco_nxos", *commands, "snmp-server protocol enable", definition: Baseline::Policy.default)
       expect(permission(enabled).status).to eq(:unknown)
     end
@@ -182,7 +182,7 @@ RSpec.describe "Baseline SNMP access permissions" do
   it "does not let legacy IOS group uncertainty erase a known community write grant" do
     report = audit("cisco_ios", "snmp-server community FIXTURE-COMMUNITY RW", "snmp-server group LEGACY v2c read VIEW")
     expect(permission(report).status).to eq(:fail)
-    expect(report.configuration.known?("snmp.acl.bound")).to be(false)
+    expect(report.configuration.fact_known?("snmp.acl.bound")).to be(false)
     unresolved = audit("cisco_ios", "snmp-server group LEGACY v2c read VIEW")
     expect(permission(unresolved).status).to eq(:unknown)
     expect(permission(unresolved).diagnostics).to include(hash_including(code: :unsupported_snmp_group))
@@ -191,12 +191,35 @@ RSpec.describe "Baseline SNMP access permissions" do
   it "does not let malformed access declarations erase a confirmed write view" do
     report = audit("cisco_ios", group("cisco_ios", "write WRITEVIEW"), "snmp-server community", definition: Baseline::Policy.default)
     expect(permission(report).status).to eq(:fail)
-    expect(report.configuration.known?("snmp.community_present")).to be(false)
+    expect(report.configuration.fact_known?("snmp.community_present")).to be(false)
   end
 
   it "keeps the no-SNMP case explicitly read-only without manufacturing a v3 user" do
     report = audit("h3c")
     expect(permission(report).status).to eq(:pass)
-    expect(report.configuration.value("snmp.users")).to eq([])
+    expect(report.configuration.fact("snmp.users")).to eq([])
+  end
+
+  {
+    "cisco_ios" => [ "snmp-server group", "snmp-server group OPS", "snmp-server group OPS v3x", "snmp-server group OPS v3-extra" ],
+    "cisco_nxos" => [ "snmp-server group", "snmp-server group OPS", "snmp-server group OPS v3x", "snmp-server group OPS v3-extra" ],
+    "h3c" => [ "snmp-agent group", "snmp-agent group v3", "snmp-agent group v2c OPS" ],
+    "huawei" => [ "snmp-agent group", "snmp-agent group v3", "snmp-agent group v2c OPS" ]
+  }.each do |platform, commands|
+    it "keeps incomplete or unsupported #{platform} group declarations unknown" do
+      commands.each do |command|
+        report = audit(platform, command)
+        expect(permission(report).status).to eq(:unknown), command
+        expect(permission(report).diagnostics).to include(hash_including(code: :snmp_permission_unresolved))
+        expect(report.findings.find { |finding| finding.id == "ssh.enabled" }.status).to eq(:pass)
+      end
+    end
+
+    it "retains a confirmed #{platform} write grant alongside an incomplete group" do
+      write = platform.start_with?("cisco") ? "snmp-server community FIXTURE-COMMUNITY RW" : "snmp-agent community write cipher FIXTURE-COMMUNITY"
+      report = audit(platform, write, commands.first)
+      expect(permission(report).status).to eq(:fail)
+      expect(report.configuration.fact_known?("snmp.community_present")).to be(false)
+    end
   end
 end

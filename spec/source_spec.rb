@@ -128,3 +128,18 @@ RSpec.describe Baseline::CiscoNxos::Parser do
     expect(original_document.cursor.content).to include("PRIVATE-SECRET")
   end
 end
+
+RSpec.describe "Baseline hostname declaration evidence" do
+  { "h3c" => "sysname", "huawei" => "sysname", "cisco_ios" => "hostname", "cisco_nxos" => "hostname",
+    "hillstone" => "hostname", "palo_alto" => "set deviceconfig system hostname" }.each do |platform, command|
+    it "does not reuse an earlier #{platform} identity after a malformed replacement" do
+      [ command, "#{command} NEW extra" ].each do |last|
+        result = Baseline::Audit::PARSERS.fetch(platform).parse("#{command} OLD\n#{last}\n", complete: true)
+        configuration = Baseline::Evidence.new(platform: platform, sha256: "synthetic", result: result)
+        expect(configuration.fact_known?("hostname")).to be(false)
+        expect(configuration.fact("hostname")).to be_nil
+        expect(configuration).not_to be_complete
+      end
+    end
+  end
+end

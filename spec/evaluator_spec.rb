@@ -66,6 +66,21 @@ RSpec.describe Baseline::Evaluator do
     expect(evaluate(checks, text: text).findings.first.status).to eq(:fail)
   end
 
+  it "retains ordered network deviations and keeps unsupported address evidence unknown" do
+    policy = Baseline::Policy.new("version" => 1, "checks" => { "management.sources" => { "expected" => [ "192.0.2.0/24" ] } })
+    evaluate_sources = lambda do |sources|
+      result = CtxParser::Result.new(status: :complete, records: [ { "facts" => { "management.acl.sources" => sources } } ])
+      configuration = Baseline::Evidence.new(platform: "h3c", sha256: "synthetic", result: result)
+      described_class.new(policy: policy).call(configuration: configuration).findings.first
+    end
+    finding = evaluate_sources.call(%w[203.0.113.0/24 192.0.2.0/25 198.51.100.0/24 203.0.113.0/24])
+    expect(finding.status).to eq(:fail)
+    expect(finding.details).to eq(outside_approved: %w[203.0.113.0/24 198.51.100.0/24 203.0.113.0/24])
+    expect(evaluate_sources.call([]).status).to eq(:pass)
+    finding = evaluate_sources.call([ "2001:db8::/32" ])
+    expect([ finding.status, finding.reason, finding.details ]).to eq([ :unknown, :unsupported_address_family, {} ])
+  end
+
   it "fails known weak plaintext but keeps opaque password strength unknown" do
     checks = { "credentials.strength" => { "expected" => { "min_length" => 12, "min_classes" => 3 } } }
     prefix = "sysname LAB\nlocal-user admin class manage\n"
@@ -83,5 +98,25 @@ RSpec.describe Baseline::Evaluator do
     report = evaluate({ "ssh.enabled" => { "expected" => true, "applies_to" => { "vendor" => "h3c" } } }, context: { vendor: "cisco_ios" })
     expect(report).to be_compliant
     expect(report.context["vendor"]).to eq("h3c")
+  end
+
+  it "keeps malformed credential attributes unknown without hiding another confirmed weak password" do
+    policy = Baseline::Policy.new("version" => 1, "checks" => {
+      "credentials.strength" => { "expected" => { "min_length" => 12, "min_classes" => 3 } }
+    })
+    evaluate_records = lambda do |records|
+      result = CtxParser::Result.new(status: :complete, records: [ { "facts" => { "credentials.records" => records } } ])
+      configuration = Baseline::Evidence.new(platform: "h3c", sha256: "synthetic", result: result)
+      described_class.new(policy: policy).call(configuration: configuration).findings.first
+    end
+    strong = { storage: "plaintext", common: false, length: 20, character_classes: 4 }
+    malformed = [ {}, "unexpected", { storage: "invented" }, { storage: "plaintext" },
+      strong.merge(length: "20"), strong.merge(length: -1), strong.merge(character_classes: 5), strong.merge(common: nil) ]
+    malformed.each do |record|
+      finding = evaluate_records.call([ strong, record ])
+      expect([ finding.status, finding.reason ]).to eq([ :unknown, :fact_type_mismatch ])
+      finding = evaluate_records.call([ record, strong.merge(length: 3) ])
+      expect([ finding.status, finding.reason ]).to eq([ :fail, :weak_password ])
+    end
   end
 end

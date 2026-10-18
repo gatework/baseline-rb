@@ -31,7 +31,7 @@ RSpec.describe Baseline::Report do
 
   it "builds the compact summary without serializing configuration facts or full findings" do
     original = assess({ "ssh.enabled" => { "expected" => true } })
-    configuration = instance_double(Baseline::Configuration, complete?: true, input_complete?: true, platform: "h3c", sha256: "a" * 64, status: :complete, issues: [])
+    configuration = instance_double(Baseline::Evidence, complete?: true, input_complete?: true, platform: "h3c", sha256: "a" * 64, status: :complete, issues: [])
     finding = instance_double(Baseline::Report::Finding, status: :pass, summary: original.findings.first.summary)
     report = described_class.new(configuration: configuration, policy_sha256: original.policy_sha256, findings: [ finding ], context: {})
     expect(configuration).not_to receive(:to_h)

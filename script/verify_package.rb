@@ -26,8 +26,16 @@ Dir.mktmpdir("gem-install-") do |home|
     audit = Baseline::Audit.new(policy: policy)
     source = "sysname PACKAGE-CHECK\\nssh server enable\\nreturn\\n"
     report = audit.call(configuration: source, platform: :h3c, complete: true)
-    abort "Installed audit did not prove compliance" unless report.compliant? && report.findings.one? && report.configuration.value("ssh.enabled") == true
+    abort "Installed audit did not prove compliance" unless report.compliant? && report.findings.one? && report.configuration.fact("ssh.enabled") == true
     abort "Partial evidence proved compliance" if audit.call(configuration: source, platform: :h3c).compliant?
+    coverage = Baseline::Audit.capabilities(platform: :stoneos)
+    abort "Installed SNMPv3 capability is missing" unless coverage.fetch("snmp.auth_priv").fetch(:status) == :supported
+    policy = Baseline::Policy.new("version" => 1, "checks" => { "snmp.auth_priv" => { "expected" => true }, "snmp.write_enabled" => { "expected" => false } })
+    source = "hostname PACKAGE-CHECK\\nsnmp-server group MONITOR v3 auth-enc read-view ALL\\n" \
+      "snmp-server user USER group MONITOR v3 remote 192.0.2.10 auth-protocol sha SYNTHETIC-AUTH enc-protocol aes SYNTHETIC-PRIV\\n"
+    report = Baseline::Audit.new(policy: policy).call(configuration: source, platform: :stoneos, complete: true)
+    abort "Installed SNMPv3 assessment failed" unless report.compliant? && report.findings.size == 2
+    abort "Installed report exposed a credential" if report.to_h.to_s.include?("SYNTHETIC-AUTH") || report.to_h.to_s.include?("SYNTHETIC-PRIV")
     Dir[File.join(loaded.full_gem_path, "examples/**/*.rb")].sort.each { |path| load path }
   RUBY
   system(env, ruby, "-e", check, chdir: home, exception: true)

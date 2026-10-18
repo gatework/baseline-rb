@@ -26,7 +26,7 @@ module Baseline
         end
         true
       end
-      self.class.network_prefixes(permitted_ranges(selected))
+      self.class.cidrs_from_ranges(permitted_ranges(selected))
     end
 
     # 返回公开的数据结构，并保留状态与诊断信息。
@@ -50,7 +50,7 @@ module Baseline
     end
 
     # 将网络前缀转换为包含首尾地址的整数区间。
-    def self.address_range(cidr)
+    def self.ipv4_range(cidr)
       ip = IPAddr.new(cidr)
       raise ArgumentError, "IPv4 ACL required" unless ip.ipv4?
       [ ip.to_range.first.to_i, ip.to_range.last.to_i ]
@@ -71,8 +71,8 @@ module Baseline
 
     # 批准区间只解析、合并一次；实际网段按起点顺序与其线性比较。
     def self.each_network_coverage(actual, expected)
-      approved = merge_ranges(expected.map { |cidr| address_range(cidr) })
-      networks = actual.each_with_index.map { |cidr, index| [ address_range(cidr), index ] }.sort_by(&:first)
+      approved = merge_ranges(expected.map { |cidr| ipv4_range(cidr) })
+      networks = actual.each_with_index.map { |cidr, index| [ ipv4_range(cidr), index ] }.sort_by(&:first)
       approved_index = 0
       networks.each do |(first, last), source_index|
         approved_index += 1 while approved_index < approved.size && approved[approved_index].last < first
@@ -83,7 +83,7 @@ module Baseline
     private_class_method :each_network_coverage
 
     # 将地址区间转换为数量最少的网络前缀。
-    def self.network_prefixes(ranges)
+    def self.cidrs_from_ranges(ranges)
       merge_ranges(ranges).flat_map do |first, last|
         networks = []
         while first <= last
@@ -114,7 +114,7 @@ module Baseline
     def permitted_ranges(selected)
       boundaries = Hash.new { |entries, address| entries[address] = [] }
       selected.each_with_index do |rule, priority|
-        first, last = self.class.address_range(rule.fetch(:source))
+        first, last = self.class.ipv4_range(rule.fetch(:source))
         boundaries[first] << [ priority, true ]
         # 将闭区间终点转为下一地址的失效事件，统一处理相邻和重叠网段。
         boundaries[last + 1] << [ priority, false ]

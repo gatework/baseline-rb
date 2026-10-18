@@ -90,7 +90,7 @@ module Baseline
       when :string_set, :network_set then string_set?(value)
       end
       raise ArgumentError, "Invalid baseline expected value for #{id}" unless valid
-      value.each { |network| Acl.address_range(network) } if value_type == :network_set
+      value.each { |network| Acl.ipv4_range(network) } if value_type == :network_set
     end
 
     # 展示对象身份与状态，避免泄露原始回显或凭据。

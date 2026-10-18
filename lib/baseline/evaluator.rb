@@ -38,22 +38,24 @@ module Baseline
         return finding(attributes, :unknown, configuration.status == :unsupported ? :unsupported_platform : :input_incomplete)
       end
       return finding(attributes, :unknown, :scope_unknown) if applicable.nil?
-      resolution = @policy.resolve_with_source(rule, context)
+      resolution = @policy.resolve_with_path(rule, context)
       attributes[:policy_path] = resolution.path
       return finding(attributes, :unknown, resolution.reason) if resolution.reason
       expected = attributes[:expected] = resolution.value
-      unless configuration.known?(rule.fact)
-        return finding(attributes, :unknown, configuration.complete? ? :fact_unavailable : :input_incomplete)
+      unless configuration.fact_known?(rule.fact)
+        unavailable = attributes[:diagnostics].any? { |issue| issue[:code] == :unsupported_capability && issue[:fact] == rule.fact }
+        reason = !configuration.complete? ? :input_incomplete : unavailable ? :unsupported_capability : :fact_unavailable
+        return finding(attributes, :unknown, reason)
       end
-      actual = configuration.value(rule.fact)
+      actual = configuration.fact(rule.fact)
       attributes[:actual] = actual
-      status, reason = compare(rule.operator, actual, expected)
+      status, reason, details = compare(rule.operator, actual, expected)
       # 不完整输入不能证明通过；仅保留补充记录也无法推翻的明确违规。
       if !configuration.complete? && (status == :pass || status == :fail && !conclusive_violation?(rule, actual, expected, configuration))
         status, reason = :unknown, :input_incomplete
       end
       if status == :fail
-        attributes[:details] = differences(rule.operator, actual, expected)
+        attributes[:details] = details || differences(rule.operator, actual, expected)
         # 尚未采集的配置可能补齐缺项，因此不将缺项作为已确认偏差展示。
         attributes[:details].delete(:missing) unless configuration.complete?
       end
@@ -88,7 +90,6 @@ module Baseline
       when :set_equals then { missing: expected - actual, unexpected: actual - expected }
       when :subset then { unexpected: actual - expected }
       when :count_at_least then { minimum: expected, actual_count: actual.size }
-      when :networks_within then { outside_approved: Acl.unapproved_networks(actual, expected) }
       when :all_disabled then { enabled: expected.select { |name| actual[name] == true } }
       else {}
       end
@@ -105,8 +106,8 @@ module Baseline
       rule.applies_to.each do |key, expected|
         values = key == "facts" ? expected : { key => expected }
         values.each do |name, criterion|
-          known = key == "facts" ? configuration.scope_known?(name) : context.key?(name)
-          value = key == "facts" ? configuration.value(name) : context[name]
+          known = key == "facts" ? configuration.applicability_fact_known?(name) : context.key?(name)
+          value = key == "facts" ? configuration.fact(name) : context[name]
           if !known
             unknown = true
           elsif !(criterion.is_a?(Array) ? criterion.include?(value) : criterion == value)
@@ -135,24 +136,38 @@ module Baseline
         when :subset then (actual - expected).empty?
         when :set_equals then actual.sort == expected.sort
         when :count_at_least then actual.size >= expected
-        when :networks_within then Acl.networks_within?(actual, expected)
+        when :networks_within
+          outside = Acl.unapproved_networks(actual, expected)
+          details = { outside_approved: outside }
+          outside.empty?
         end
       end
-      [ passed ? :pass : :fail, passed ? nil : :deviation ]
+      [ passed ? :pass : :fail, passed ? nil : :deviation, details ]
     rescue ArgumentError, IPAddr::InvalidAddressError
       [ :unknown, :unsupported_address_family ]
     end
 
     # 检查可度量的凭据属性，不保存秘密值。
     def password_strength(actual, expected)
-      return [ :unknown, :fact_type_mismatch ] unless actual.is_a?(Array) && actual.all? { |item| item.is_a?(Hash) }
-      visible = actual.select { |item| item[:storage] == "plaintext" }
+      return [ :unknown, :fact_type_mismatch ] unless actual.is_a?(Array)
+      valid = actual.select { |item| valid_strength_attributes?(item) }
+      visible = valid.select { |item| item[:storage] == "plaintext" }
       weak = visible.any? do |item|
         item[:common] || item.fetch(:length) < expected.fetch("min_length") || item.fetch(:character_classes) < expected.fetch("min_classes")
       end
       return [ :fail, :weak_password ] if weak
+      return [ :unknown, :fact_type_mismatch ] if valid.size != actual.size
       return [ :unknown, :password_strength_unobservable ] if actual.empty? || visible.size != actual.size
       [ :pass, nil ]
+    end
+
+    # 公开事实入口可接受外部解析结果；损坏属性不能冒充可比较的口令证据。
+    def valid_strength_attributes?(item)
+      return false unless item.is_a?(Hash) && %w[plaintext legacy protected unknown].include?(item[:storage])
+      return true unless item[:storage] == "plaintext"
+
+      [ true, false ].include?(item[:common]) && item[:length].is_a?(Integer) && item[:length] >= 0 &&
+        item[:character_classes].is_a?(Integer) && item[:character_classes].between?(0, 4)
     end
   end
 end

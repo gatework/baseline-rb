@@ -8,7 +8,7 @@ RSpec.describe Baseline::Hillstone::Parser do
 
   def parse(text, complete: true)
     result = described_class.parse(text, complete: complete)
-    Baseline::Configuration.new(platform: "hillstone", sha256: "synthetic", result: result)
+    Baseline::Evidence.new(platform: "hillstone", sha256: "synthetic", result: result)
   end
 
   it "normalizes native host lists, services and server references without leaking credentials" do
@@ -29,41 +29,41 @@ RSpec.describe Baseline::Hillstone::Parser do
 
   it "recognizes explicit write grants and leaves an unknown security format local to SNMP" do
     result = parse(configuration.sub(" ro\n", " rw\n") + "snmp-server user malformed\n")
-    expect(result.value("snmp.write_enabled")).to be(true)
-    expect(result.known?("snmp.write_enabled")).to be(true)
-    expect(result.known?("snmp.v3_auth_priv")).to be(false)
-    expect(result.value("ssh.enabled")).to be(true)
+    expect(result.fact("snmp.write_enabled")).to be(true)
+    expect(result.fact_known?("snmp.write_enabled")).to be(true)
+    expect(result.fact_known?("snmp.v3_auth_priv")).to be(false)
+    expect(result.fact("ssh.enabled")).to be(true)
   end
 
   it "does not infer disabled listeners or restrictive sources from an absent declaration" do
     result = parse("hostname LAB\n")
-    expect(result.value("ssh.enabled")).to be_nil
-    expect(result.value("services").values).to all(be_nil)
-    expect(result.known?("management.acl.restricted")).to be(false)
-    expect(result.value("tacacs.login")).to be_nil
+    expect(result.fact("ssh.enabled")).to be_nil
+    expect(result.fact("services").values).to all(be_nil)
+    expect(result.fact_known?("management.acl.restricted")).to be(false)
+    expect(result.fact("tacacs.login")).to be_nil
   end
 
   it "combines trusted ranges and preserves explicitly unrestricted exposure" do
     result = parse(configuration + "admin host any ssh\n")
-    expect(result.value("management.acl.sources")).to eq([ "0.0.0.0/0" ])
-    expect(result.value("management.acl.restricted")).to be(false)
+    expect(result.fact("management.acl.sources")).to eq([ "0.0.0.0/0" ])
+    expect(result.fact("management.acl.restricted")).to be(false)
     result = parse(configuration.gsub("198.51.100.0/25", "198.51.100.0 255.255.255.128"))
-    expect(result.value("management.acl.sources")).to eq([ "198.51.100.0/24" ])
+    expect(result.fact("management.acl.sources")).to eq([ "198.51.100.0/24" ])
   end
 
   it "marks invalid host ranges unknown instead of dropping them from a restrictive union" do
     [ "range 198.51.100.255 198.51.100.0", "2001:db8::/32", "not-an-address" ].each do |source|
       result = parse(configuration + "admin host #{source} ssh\n")
-      expect(result.known?("management.acl.restricted")).to be(false)
+      expect(result.fact_known?("management.acl.restricted")).to be(false)
     end
   end
 
   it "keeps unknown NTP and logging arguments from proving an empty compliant server set" do
     [ "ntp server", "ntp server 192.0.2.10 unsupported", "ntp server 192.0.2.10 key invalid" ].each do |command|
-      expect(parse("hostname LAB\n#{command}\n").known?("ntp.servers")).to be(false)
+      expect(parse("hostname LAB\n#{command}\n").fact_known?("ntp.servers")).to be(false)
     end
     result = parse("hostname LAB\nlogging syslog 192.0.2.1 udp bad-port\n")
-    expect(result.known?("syslog.servers")).to be(false)
+    expect(result.fact_known?("syslog.servers")).to be(false)
   end
 
   it "does not promote nested commands or multiline UI data into global facts" do
@@ -84,18 +84,18 @@ RSpec.describe Baseline::Hillstone::Parser do
     CONFIG
     result = parse(text)
     expect(result).to be_complete
-    expect(result.value("hostname")).to eq("LAB")
-    expect(result.value("ntp.servers")).to eq([ "192.0.2.10" ])
-    expect(result.value("snmp.enabled")).to be_nil
-    expect(result.value("management.acl.sources")).to be_nil
+    expect(result.fact("hostname")).to eq("LAB")
+    expect(result.fact("ntp.servers")).to eq([ "192.0.2.10" ])
+    expect(result.fact("snmp.enabled")).to be_nil
+    expect(result.fact("management.acl.sources")).to be_nil
   end
 
   it "downgrades unterminated and modeled multiline values without losing earlier facts" do
     [ "value \"unterminated", "ntp server \"192.0.2.1\ncontinued\"\n" ].each do |ending|
       result = parse("hostname LAB\ninterface ethernet0/0\n  manage ssh\nexit\n#{ending}")
       expect(result.status).to eq(:partial)
-      expect(result.value("ssh.enabled")).to be(true)
-      expect(result.value("ntp.servers")).to be_nil
+      expect(result.fact("ssh.enabled")).to be(true)
+      expect(result.fact("ntp.servers")).to be_nil
     end
   end
 
@@ -111,11 +111,11 @@ RSpec.describe Baseline::Hillstone::Parser do
 
   it "keeps unknown encoded password storage unknown and rejects incomplete secret tuples" do
     result = parse("hostname LAB\nadmin user operator\n  password $vendor-format$PRIVATE-FIXTURE\nexit\n")
-    expect(result.value("credentials.storage_safe")).to be_nil
+    expect(result.fact("credentials.storage_safe")).to be_nil
     expect(result.to_h.to_s).not_to include("PRIVATE-FIXTURE")
     malformed = parse("hostname LAB\naaa-server X type tacacs+\n  host 192.0.2.1\n  secret cipher\nexit\n")
     expect(malformed.status).to eq(:partial)
-    expect(malformed.value("tacacs.keys_present")).to be(false)
+    expect(malformed.fact("tacacs.keys_present")).to be(false)
   end
 
   it "does not let comment apostrophes hide a write grant or banner bodies inject one" do
@@ -128,48 +128,99 @@ RSpec.describe Baseline::Hillstone::Parser do
     CONFIG
     result = parse(text)
     expect(result).to be_complete
-    expect(result.value("snmp.write_enabled")).to be(true)
+    expect(result.fact("snmp.write_enabled")).to be(true)
     banner = "hostname LAB\nbanner motd ^\noperator's note\nsnmp-server host any version 2c community SYNTHETIC rw\n^\nntp server 192.0.2.1\n"
-    expect(parse(banner).value("snmp.write_enabled")).to be(false)
-    expect(parse(banner).value("ntp.servers")).to eq([ "192.0.2.1" ])
+    expect(parse(banner).fact("snmp.write_enabled")).to be(false)
+    expect(parse(banner).fact("ntp.servers")).to eq([ "192.0.2.1" ])
   end
 
   it "uses the documented read-only default and retains accounts without password evidence" do
     result = parse("hostname LAB\nsnmp-server host 192.0.2.1 version 2c community SYNTHETIC\nadmin user observer\n  role admin\nexit\n")
-    expect(result.value("snmp.write_enabled")).to be(false)
-    expect(result.value("snmp.versions")).to eq([ "v2c" ])
-    expect(result.value("credentials.present")).to be(true)
-    expect(result.value("credentials.records")).to include(hash_including(owner: "observer", storage: "unknown", present: false))
+    expect(result.fact("snmp.write_enabled")).to be(false)
+    expect(result.fact("snmp.versions")).to eq([ "v2c" ])
+    expect(result.fact("credentials.present")).to be(true)
+    expect(result.fact("credentials.records")).to include(hash_including(owner: "observer", storage: "unknown", present: false))
   end
 
   it "does not replace a duplicate TACACS definition with apparently complete evidence" do
     text = configuration + "aaa-server \"TACACS A\" type tacacs+\n  host 203.0.113.10\n  secret cipher SYNTHETIC\nexit\n"
     result = parse(text)
-    expect(result.known?("tacacs.servers")).to be(false)
-    expect(result.known?("tacacs.login")).to be(false)
-    expect(result.value("ssh.enabled")).to be(true)
+    expect(result.fact_known?("tacacs.servers")).to be(false)
+    expect(result.fact_known?("tacacs.login")).to be(false)
+    expect(result.fact("ssh.enabled")).to be(true)
   end
 
   it "resolves StoneOS forward declarations without treating them as conflicting definitions" do
     text = "aaa-server \"TACACS A\" type tacacs+\nexit\n" + configuration
     result = parse(text)
-    expect(result.known?("tacacs.servers")).to be(true)
-    expect(result.value("tacacs.servers")).to eq(%w[192.0.2.30 192.0.2.31])
-    expect(result.value("tacacs.login")).to be(true)
+    expect(result.fact_known?("tacacs.servers")).to be(true)
+    expect(result.fact("tacacs.servers")).to eq(%w[192.0.2.30 192.0.2.31])
+    expect(result.fact("tacacs.login")).to be(true)
     expect(result.issues).not_to include(hash_including(code: :duplicate_tacacs_scheme))
-    expect(parse(configuration + "aaa-server \"TACACS A\" type tacacs+\nexit\n").value("tacacs.servers")).to eq(result.value("tacacs.servers"))
-    expect(parse("hostname LAB\naaa-server EMPTY type tacacs+\nexit\n").known?("tacacs.servers")).to be(false)
+    expect(parse(configuration + "aaa-server \"TACACS A\" type tacacs+\nexit\n").fact("tacacs.servers")).to eq(result.fact("tacacs.servers"))
+    expect(parse("hostname LAB\naaa-server EMPTY type tacacs+\nexit\n").fact_known?("tacacs.servers")).to be(false)
   end
 
   it "validates server destinations and does not turn incomplete definitions into empty approved sets" do
     [ '""', '"not a host"', "999.0.0.1", "192.0.2.1/24" ].each do |address|
       text = "hostname LAB\nntp server #{address}\nlogging syslog #{address} udp 514\naaa-server AAA type tacacs+\n  host #{address}\nexit\n"
       result = parse(text)
-      %w[ntp.servers syslog.servers tacacs.servers].each { |path| expect(result.known?(path)).to be(false) }
+      %w[ntp.servers syslog.servers tacacs.servers].each { |path| expect(result.fact_known?(path)).to be(false) }
     end
-    expect(parse("hostname LAB\naaa-server AAA type tacacs+\n  secret cipher SYNTHETIC\nexit\n").known?("tacacs.servers")).to be(false)
+    expect(parse("hostname LAB\naaa-server AAA type tacacs+\n  secret cipher SYNTHETIC\nexit\n").fact_known?("tacacs.servers")).to be(false)
     result = parse("hostname LAB\nntp server ntp.example.test\nntp server 2001:db8::1\n")
-    expect(result.value("ntp.servers")).to eq(%w[ntp.example.test 2001:db8::1])
-    expect(parse('hostname LAB' + "\nsnmp-server host 192.0.2.1 version 2c community \"\" ro\n").known?("snmp.write_enabled")).to be(false)
+    expect(result.fact("ntp.servers")).to eq(%w[ntp.example.test 2001:db8::1])
+    expect(parse('hostname LAB' + "\nsnmp-server host 192.0.2.1 version 2c community \"\" ro\n").fact_known?("snmp.write_enabled")).to be(false)
+  end
+end
+
+RSpec.describe "Hillstone SNMPv3 capability parity" do
+  def assess(body, complete: true)
+    checks = { "snmp.write_enabled" => { "expected" => false }, "snmp.auth_priv" => { "expected" => true },
+      "snmp.sources" => { "expected" => [ "192.0.2.0/24" ] }, "snmp.versions" => { "expected" => [ "v3" ] } }
+    policy = Baseline::Policy.new("version" => 1, "checks" => checks)
+    Baseline::Audit.new(policy: policy).call(configuration: "hostname LAB\nsnmp-server manager\n#{body}", platform: "hillstone", complete: complete)
+  end
+
+  let(:body) do
+    "snmp-server group MONITOR v3 auth-enc read-view ALL\n" \
+      "snmp-server user USER group MONITOR v3 remote 192.0.2.10 auth-protocol sha SYNTHETIC-AUTH enc-protocol aes SYNTHETIC-PRIV\n" \
+      "snmp-server host 192.0.2.10 version 3\n"
+  end
+
+  it "evaluates the same v3 permission, security and source facts as other vendors" do
+    report = assess(body)
+    expect(report.findings.map(&:status)).to eq([ :pass, :pass, :pass, :pass ])
+    expect(report).to be_compliant
+    expect(report.configuration.fact("snmp.users")).to include(hash_including(name: "USER", group: "MONITOR", auth: true, priv: true, write: false))
+    expect(report.to_h.to_json + report.to_text).not_to include("SYNTHETIC-AUTH", "SYNTHETIC-PRIV")
+    expect(report.findings.find { |finding| finding.id == "snmp.auth_priv" }.lines).to eq([ 4 ])
+  end
+
+  it "retains write grants and missing encryption as independent violations" do
+    report = assess(body.sub("read-view ALL", "read-view ALL write-view ALL").sub(" enc-protocol aes SYNTHETIC-PRIV", ""))
+    expect(report.findings.map(&:status)).to eq([ :fail, :fail, :pass, :pass ])
+  end
+
+  it "keeps unresolved groups, malformed users and unsupported algorithms unknown" do
+    [ body.sub("group MONITOR v3 remote", "group MISSING v3 remote"),
+      body.sub("auth-protocol sha", "auth-protocol FUTURE"), body.sub("SYNTHETIC-PRIV", ""),
+      body + "snmp-server user\n", body + "no snmp-server user USER\n" ].each do |text|
+      report = assess(text)
+      expect(report).not_to be_compliant
+      expect(report.findings.first.status).to eq(:unknown)
+    end
+  end
+
+  it "does not use a group security requirement as proof of a user's configured secrets" do
+    report = assess(body.sub(" auth-protocol sha SYNTHETIC-AUTH enc-protocol aes SYNTHETIC-PRIV", ""))
+    expect(report.findings.find { |finding| finding.id == "snmp.auth_priv" }.status).to eq(:fail)
+  end
+
+  it "keeps v3 hosts without users unknown and cannot prove compliance from partial evidence" do
+    report = assess("snmp-server host 192.0.2.10 version 3\n")
+    expect(report.findings.first.status).to eq(:unknown)
+    partial = assess(body, complete: false)
+    expect(partial.findings.map(&:status)).to all(eq(:unknown))
   end
 end

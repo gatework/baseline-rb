@@ -11,10 +11,10 @@
 ```mermaid
 flowchart LR
   Text[运行配置文本] --> Parser[厂商 Parser]
-  Parser --> Facts[Facts / Acl / Credential]
-  Facts --> Configuration
+  Parser --> FactBuilder[FactBuilder / Acl / Credential]
+  FactBuilder --> Evidence
   YAML[policy.yml] --> Policy[Policy / Rule]
-  Configuration --> Evaluator
+  Evidence --> Evaluator
   Policy --> Evaluator
   Evaluator --> Report
   Backup[已有加密备份] --> Check[Baseline::Check]
@@ -31,9 +31,9 @@ flowchart LR
 | `Comware::Parser` / `Cisco::Parser` | 分别共享 Comware/VRP 与 IOS/NX-OS 的语法族 |
 | `H3c::Parser` / `Huawei::Parser` / `CiscoIos::Parser` / `CiscoNxos::Parser` / `Hillstone::Parser` / `PaloAlto::Parser` | 厂商差异，不把厂商分支散落到规则求值中 |
 | `Document < CtxParser::Document` | 使用公共游标和缩进树，隔离 banner、接口子配置及不完整输入 |
-| `QuotedDocument` / `Hillstone::Document` / `PaloAlto::Document` | 隔离跨行字符串、证书和 UI 数据，保留厂商命令边界；注释和 banner 不参与字符串扫描 |
-| `Facts` | 每次解析独享的事实集合，归约 VTY、SNMP 组引用、命名 ACL 与原生来源列表、凭据；输出独立的结果快照 |
-| `Configuration` | 不可变事实、输入指纹、完整性和局部解析诊断 |
+| `MultilineDocument` / `Hillstone::Document` / `PaloAlto::Document` | 隔离跨行字符串、证书和 UI 数据，保留厂商命令边界；注释和 banner 不参与字符串扫描 |
+| `FactBuilder` | 每次解析独享的事实集合，归约 VTY、SNMP 组引用、命名 ACL 与原生来源列表、凭据；输出独立的结果快照 |
+| `Evidence` | 不可变事实、输入指纹、完整性和局部解析诊断 |
 | `Acl` | IPv4 地址区间与有序规则，按首次匹配计算允许来源 |
 | `Credential` | 只保留格式、存储类别、明文长度/字符类别/常见弱口令标记 |
 | `Policy` / `Rule::Definition` / `Rule` | YAML 批准值、强类型规则目录、适用范围、比较操作、严重度及选择分支 |
@@ -43,9 +43,9 @@ flowchart LR
 
 独立 Ruby 调用只需加载 `baseline`；`Check` 由 Rails 自动加载。持久化使用 `baseline_assessments` 表；纯文本分析不依赖数据库。没有新增外部依赖、HTTP 接口或后台任务。
 
-厂商解析器把命令转换为普通 Ruby 值及 `Acl` / `Credential` 对象；`Facts` 不读取命令文本，也不操作游标。语法解释成功后由 `Configuration#analyze` 标记当前行，`capture` 关联脱敏数据与来源；未解释的子命令保留原状态。事实中的行号用于判定报告，游标中的捕获用于显式溯源，两者不将原文带入持久化结果。
+厂商解析器把命令转换为普通 Ruby 值及 `Acl` / `Credential` 对象；`FactBuilder` 不读取命令文本，也不操作游标。语法解释成功后由 `CtxParser::Configuration#analyze` 标记当前行，`capture` 关联脱敏数据与来源；未解释的子命令保留原状态。事实中的行号用于判定报告，游标中的捕获用于显式溯源，两者不将原文带入持久化结果。
 
-新增厂商时，有相同语法族才继承 `Comware::Parser` 或 `Cisco::Parser`；防火墙直接继承 `Baseline::Parser`，独立解释本机管理语法。新增跨厂商归约逻辑放入 `Facts` 或已有领域对象，批准值仍声明在策略 YAML 中。不要在厂商类中重复维护事实字典、诊断列表或引用解析状态。`Facts#direct_acl` 对原生允许来源统一归一化，区分 `nil`（未确认）、`[]`（明确没有允许来源）与 `0.0.0.0/0`（全网）；`incomplete!` 使破损声明无法证明合规的缺省状态。
+新增厂商时，有相同语法族才继承 `Comware::Parser` 或 `Cisco::Parser`；防火墙直接继承 `Baseline::Parser`，独立解释本机管理语法。新增跨厂商归约逻辑放入 `FactBuilder` 或已有领域对象，批准值仍声明在策略 YAML 中。不要在厂商类中重复维护事实字典、诊断列表或引用解析状态。`FactBuilder#record_source_restriction` 对原生允许来源统一归一化，区分 `nil`（未确认）、`[]`（明确没有允许来源）与 `0.0.0.0/0`（全网）；`mark_incomplete!` 使破损声明无法证明合规的缺省状态。
 
 ## 事实与检查
 

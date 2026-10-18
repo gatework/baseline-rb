@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative "configuration"
+require_relative "evidence"
 
 require "ctx_parser/immutable"
 require "json"
@@ -12,6 +12,7 @@ module Baseline
       input_incomplete: "配置不完整，需提供完整备份后重查", unsupported_platform: "尚未支持此平台的配置语法",
       scope_mismatch: "不在策略适用范围内", scope_unknown: "缺少判断适用范围或选择批准值所需的上下文",
       policy_missing: "未定义当前范围的批准值，请完善基线策略", fact_unavailable: "配置事实缺失或包含尚未支持的语法，请查看解析诊断",
+      unsupported_capability: "此厂商的当前适配器尚未建模该能力，不能据此声明合规",
       fact_type_mismatch: "解析事实类型与检查要求不一致", unnecessary_service_enabled: "存在策略要求关闭的服务",
       service_state_unknown: "配置未明确声明部分服务状态，不能推断厂商默认值", deviation: "实际配置偏离批准值",
       unsupported_address_family: "地址格式超出当前 IPv4 检查能力", weak_password: "发现未满足强度要求的明文凭据",

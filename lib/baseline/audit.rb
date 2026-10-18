@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative "configuration"
+require_relative "evidence"
 require_relative "evaluator"
 require_relative "h3c/parser"
 require_relative "huawei/parser"
@@ -22,6 +22,36 @@ module Baseline
       "nxos" => "cisco_nxos", "nx_os" => "cisco_nxos", "stoneos" => "hillstone", "stone_os" => "hillstone",
       "paloalto" => "palo_alto", "panos" => "palo_alto", "pan_os" => "palo_alto" }.freeze
 
+    # 将同一规则目录映射到各厂商的实现覆盖范围；supported 不代表当前证据已知。
+    def self.capabilities(platform:)
+      parser = PARSERS[normalize_platform(platform)]
+      CtxParser::Immutable.copy(Rule::DEFINITIONS.to_h do |id, definition|
+        unsupported = parser && parser::UNSUPPORTED_FACTS[definition.fact]
+        partial = parser && parser::PARTIAL_FACTS[definition.fact]
+        status, reason = if !parser
+          [ :unsupported, :unsupported_platform ]
+        elsif unsupported
+          [ :unsupported, unsupported ]
+        elsif partial
+          [ :partial, partial ]
+        elsif parser::SUPPORTED_FACTS.include?(definition.fact)
+          [ :supported, nil ]
+        else
+          [ :unsupported, :capability_unmodeled ]
+        end
+        [ id, { fact: definition.fact, status: status, reason: reason } ]
+      end)
+    end
+
+    # 能力查询与实际解析共用平台别名归一化，避免两条入口选择不同适配器。
+    def self.normalize_platform(platform)
+      unless platform.is_a?(String) || platform.is_a?(Symbol)
+        raise ArgumentError, "A platform name is required"
+      end
+      name = platform.to_s.strip.downcase.tr("-", "_")
+      ALIASES.fetch(name, name)
+    end
+
     # 绑定配置解析与基线评估使用的策略。
     def initialize(policy:)
       @evaluator = Evaluator.new(policy: policy)
@@ -32,13 +62,12 @@ module Baseline
       unless configuration.is_a?(String) && (platform.is_a?(String) || platform.is_a?(Symbol)) && [ true, false ].include?(complete)
         raise ArgumentError, "Configuration text, platform and boolean completeness are required"
       end
-      name = platform.to_s.strip.downcase.tr("-", "_")
-      name = ALIASES.fetch(name, name)
+      name = self.class.normalize_platform(platform)
       parser = PARSERS[name]
       result = parser ? parser.parse(configuration, complete: complete) :
         CtxParser::Result.new(status: :unsupported, issues: [ { code: :unsupported_platform } ])
-      facts = Configuration.new(platform: name, sha256: Digest::SHA256.hexdigest(configuration), result: result, input_complete: complete)
-      @evaluator.call(configuration: facts, context: context)
+      evidence = Evidence.new(platform: name, sha256: Digest::SHA256.hexdigest(configuration), result: result, input_complete: complete)
+      @evaluator.call(configuration: evidence, context: context)
     end
 
     # 展示对象身份与状态，避免泄露原始回显或凭据。

@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
-require_relative "../quoted_document"
+require_relative "../multiline_document"
 
 module Baseline
   module Hillstone
     # StoneOS 导出内容可能包含命令回显、显式退出及引号包裹的界面状态。
-    class Document < QuotedDocument
+    class Document < MultilineDocument
       protected
 
       # 区分配置结构行与引号、横幅中的文本内容。

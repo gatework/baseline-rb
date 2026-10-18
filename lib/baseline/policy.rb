@@ -64,12 +64,12 @@ module Baseline
 
     # 解析上下文对应的策略值，并保留选择路径。
     def resolve(rule, context)
-      resolution = resolve_with_source(rule, context)
+      resolution = resolve_with_path(rule, context)
       [ resolution.value, resolution.reason ]
     end
 
     # 保留相对于 expected 的命中范围、默认分支或未解析选择器路径。
-    def resolve_with_source(rule, context)
+    def resolve_with_path(rule, context)
       value = rule.expected
       path = []
       while selector?(value)

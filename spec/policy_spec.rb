@@ -50,9 +50,9 @@ RSpec.describe Baseline::Policy do
   it "explains the selected branch while preserving the two-value resolution interface" do
     definition = policy("by_vendor" => { "h3c" => { "by_site" => { "HQ" => [ "192.0.2.1" ] }, "default" => [ "192.0.2.2" ] } })
     rule = definition.rules.first
-    selected = definition.resolve_with_source(rule, { "vendor" => "h3c", "site" => "HQ" })
+    selected = definition.resolve_with_path(rule, { "vendor" => "h3c", "site" => "HQ" })
     expect(selected.to_h).to eq(value: [ "192.0.2.1" ], reason: nil, path: %w[by_vendor h3c by_site HQ])
-    fallback = definition.resolve_with_source(rule, { "vendor" => "h3c", "site" => "branch" })
+    fallback = definition.resolve_with_path(rule, { "vendor" => "h3c", "site" => "branch" })
     expect(fallback.to_h).to eq(value: [ "192.0.2.2" ], reason: nil, path: %w[by_vendor h3c default])
     expect(definition.resolve(rule, { "vendor" => "h3c", "site" => "branch" })).to eq([ fallback.value, fallback.reason ])
     expect { selected.path << "default" }.to raise_error(FrozenError)
@@ -62,12 +62,12 @@ RSpec.describe Baseline::Policy do
   it "distinguishes an unresolved selector, an explicitly missing value and an absent branch" do
     definition = policy("by_site" => { "HQ" => nil }, "default" => [ "192.0.2.1" ])
     rule = definition.rules.first
-    expect(definition.resolve_with_source(rule, {}).to_h).to eq(value: nil, reason: :scope_unknown, path: [ "by_site" ])
-    expect(definition.resolve_with_source(rule, { "site" => "HQ" }).to_h).to eq(value: nil, reason: :policy_missing, path: %w[by_site HQ])
+    expect(definition.resolve_with_path(rule, {}).to_h).to eq(value: nil, reason: :scope_unknown, path: [ "by_site" ])
+    expect(definition.resolve_with_path(rule, { "site" => "HQ" }).to_h).to eq(value: nil, reason: :policy_missing, path: %w[by_site HQ])
     definition = policy("by_site" => { "HQ" => [ "192.0.2.1" ] })
-    expect(definition.resolve_with_source(definition.rules.first, { "site" => "branch" }).to_h).to eq(value: nil, reason: :policy_missing, path: [])
+    expect(definition.resolve_with_path(definition.rules.first, { "site" => "branch" }).to_h).to eq(value: nil, reason: :policy_missing, path: [])
     definition = policy(nil)
-    expect(definition.resolve_with_source(definition.rules.first, {}).to_h).to eq(value: nil, reason: :policy_missing, path: [])
+    expect(definition.resolve_with_path(definition.rules.first, {}).to_h).to eq(value: nil, reason: :policy_missing, path: [])
   end
 
   it "keeps false approved values and caller context distinct from a missing selection" do
@@ -75,7 +75,7 @@ RSpec.describe Baseline::Policy do
       "ssh.enabled" => { "expected" => { "by_site" => { "lab" => false }, "default" => true } }
     })
     site = +"lab"
-    resolution = definition.resolve_with_source(definition.rules.first, { "site" => site })
+    resolution = definition.resolve_with_path(definition.rules.first, { "site" => site })
     site.replace("HQ")
     expect(resolution.to_h).to eq(value: false, reason: nil, path: %w[by_site lab])
   end

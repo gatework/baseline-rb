@@ -2,6 +2,31 @@
 
 Changes to the public contract are recorded here. Versions follow Semantic Versioning.
 
+## 0.3.0 (2026-10-18)
+
+- Breaking: rename mutable fact assembly to `FactBuilder`, immutable parsed snapshots to `Evidence`, multiline quoted-value documents to `MultilineDocument`, and the PAN-OS prefix lookup to `CommandIndex#matching_prefix`.
+- Name parser pipeline actions `parse_*`, fact/diagnostic mutations `record_*`, regular-expression providers `*_pattern`, and policy branch selection `resolve_with_path`; rename IPv4 range/CIDR conversions to describe their results. Update require paths and callers without compatibility aliases.
+
+- Reject malformed ACL `host` operands rather than interpreting them as unrestricted addresses in ordered deny rules.
+- Require explicit fact capability declarations so new policy rules do not automatically advertise vendor support.
+- Resolve the final PAN-OS management-profile binding per interface scope while retaining other interfaces independently.
+
+- Standardize vendor NTP, Syslog, and SNMP hooks under a shared pipeline; keep syntax extraction in the vendor adapters and permission reduction in `FactBuilder`.
+- Add Hillstone SNMPv3 group permissions, user authentication/privacy, safe credential metadata, and IPv4 polling-source evaluation.
+- Expose immutable per-rule vendor implementation coverage via `Audit.capabilities(platform:)`, shared platform normalization, and explicit unknown diagnostics for unmodeled capabilities.
+
+- Declare the `ctx_parser` runtime dependency without a version constraint; application lockfiles control reproducible installation versions.
+
+- Validate Cisco/Comware server addresses before counting NTP, Syslog, or TACACS endpoints; malformed endpoint declarations remain unknown and supported endpoint cancellations remove prior entries.
+- Preserve VRF identity while reducing supported NTP declarations and validate their full option lists; keep unsupported or malformed options unknown. Reduce IOS logging aliases in source order and discard removed TACACS host keys.
+- Evaluate modeled management, source-interface, and AAA declarations in configuration order, preserving cancellations and malformed replacements instead of falling back to older values. Reject malformed final hostname declarations across all platforms.
+- Diagnose multi-line PAN-OS interface bindings and handle malformed externally supplied credential facts without raising internal exceptions.
+- Let `CtxParser::Result` own snapshot freezing and copying, avoiding a duplicate traversal of facts and diagnostic trees.
+
+- Keep incomplete and unsupported SNMP group declarations unknown instead of proving absent write permission; reject malformed Cisco version tokens without raising an internal exception.
+- Build each `FactBuilder#build` snapshot independently; replaced management/SNMP evidence, resolved group references, and source-free values no longer retain stale derived facts, diagnostics, or source lines.
+- Index PAN-OS statements by decoded token prefixes with bounded depth, and reuse network deviations during evaluation, avoiding repeated full-export scans, excessive indexing of malformed tails, and duplicate network comparisons.
+
 ## 0.2.1 (2026-10-17)
 
 - Reject duplicate normalized context keys before policy selection; preserve source lines and cursor captures for scalar NTP and Syslog configuration facts.

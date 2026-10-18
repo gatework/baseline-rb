@@ -152,7 +152,7 @@ RSpec.describe Baseline::Evaluator, "partial configuration evidence" do
     { "snmp.write_enabled" => false, "ssh.vty_ssh_only" => true }.each do |fact, value|
       checks = { "services.disabled" => { "expected" => [ "http" ], "applies_to" => { "facts" => { fact => value } } } }
       report = audit(checks, body: "sysname LAB\nip http enable\nline vty 0 4\n protocol inbound ssh\n")
-      expect(report.configuration.value(fact)).to eq(value)
+      expect(report.configuration.fact(fact)).to eq(value)
       expect(report.findings.first.to_h).to include(status: :unknown, reason: :scope_unknown)
     end
   end
@@ -188,7 +188,7 @@ RSpec.describe Baseline::Evaluator, "partial configuration evidence" do
     expect(password.status).to eq(:unknown)
     expect(password.diagnostics).to include(code: :incomplete_final_line, line: 4)
     expect(report.configuration.sha256).to eq(Digest::SHA256.hexdigest(body))
-    expect(report.configuration.value("credentials.records")).to be_nil
+    expect(report.configuration.fact("credentials.records")).to be_nil
   end
 
   it "does not treat a truncated address following pagination as an observed unexpected server" do
@@ -235,7 +235,7 @@ RSpec.describe Baseline::Evaluator, "partial configuration evidence" do
     checks = { "snmp.versions" => { "expected" => [ "v3" ] } }
     report = audit(checks, body: "sysname LAB\nsnmp-agent sys-info version v3 --More--\n", complete: true)
     expect(report.findings.first.status).to eq(:unknown)
-    expect(report.configuration.value("snmp.versions")).to be_nil
+    expect(report.configuration.fact("snmp.versions")).to be_nil
     expect(report.findings.first.diagnostics).to include(code: :incomplete_configuration, line: 2)
   end
 

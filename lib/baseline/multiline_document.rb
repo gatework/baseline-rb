@@ -4,7 +4,7 @@ require_relative "document"
 
 module Baseline
   # 多行引号内容始终作为数据处理，即使正文看起来像全局命令。
-  class QuotedDocument < Document
+  class MultilineDocument < Document
     protected
 
     # 区分配置结构行与引号、横幅中的文本内容。

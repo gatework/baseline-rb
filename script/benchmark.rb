@@ -18,7 +18,7 @@ end
   approved = actual.reverse
   measure("coverage #{size}") { raise unless Baseline::Acl.networks_within?(actual, approved) }
   measure("credential lookup #{size}") do
-    facts = Baseline::Facts.new(complete: true)
+    facts = Baseline::FactBuilder.new(complete: true)
     size.times do |i|
       facts.record_credential(Baseline::Credential.new(owner: "synthetic", kind: "snmp", format: "cipher", secret: "example", line: i))
       raise unless facts.credential_recorded?(i)
@@ -39,5 +39,33 @@ end
     report = audit.call(configuration: configuration, platform: :cisco_ios, complete: true)
     finding = report.findings.fetch(0)
     raise "Missing deviation evidence" unless finding.status == :fail && finding.details.fetch(:outside_approved).size == size
+  end
+end
+
+# 多账号导出会反复查询词元前缀，同时验证最终声明与凭据脱敏。
+[ 200, 800 ].each do |size|
+  accounts = size.times.map { |index| "set mgt-config users USER-#{index} phash '$5$synthetic$opaque'\n" }.join
+  configuration = "set deviceconfig system hostname LAB\n#{accounts}"
+  measure("PAN-OS accounts #{size}") do
+    result = Baseline::PaloAlto::Parser.parse(configuration, complete: true)
+    credentials = result.records.fetch(0).fetch("facts").fetch("credentials.records")
+    raise "Missing account evidence" unless credentials.size == size && credentials.all? { |value| value[:storage] == "protected" }
+  end
+end
+
+# 快照构建覆盖嵌套凭据和服务器事实；每次都必须产出独立、冻结的结果。
+[ 200, 800 ].each do |size|
+  facts = Baseline::FactBuilder.new(complete: true)
+  facts.record_fact("hostname", "LAB")
+  facts.record_fact("ntp.servers", size.times.map { |index| "time-#{index}.example.test" })
+  size.times do |index|
+    facts.record_credential(Baseline::Credential.new(owner: "USER-#{index}", kind: "local_user", format: "cipher", secret: "synthetic", line: index + 1))
+  end
+  measure("fact snapshots #{size} x30") do
+    30.times do
+      result = facts.build
+      records = result.records.fetch(0).fetch("facts").fetch("credentials.records")
+      raise "Missing frozen snapshot evidence" unless records.size == size && records.frozen? && records.first.frozen?
+    end
   end
 end

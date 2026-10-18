@@ -21,7 +21,7 @@ gem "baseline-rb", require: "baseline"
 
 Then run `bundle install`, or install directly with `gem install baseline-rb`. The require path is `baseline` and the public namespace is `Baseline`; package names and Ruby namespaces are intentionally separate.
 
-Internal runtime dependencies: [`ctx_parser`](https://github.com/gatework/ctx_parser). The gemspec requires `ctx_parser ~> 0.2.0` for the shared configuration API. Applications should commit their own `Gemfile.lock` to make deployments reproducible. No Rails boot or sibling checkout paths are required.
+Internal runtime dependencies: [`ctx_parser`](https://github.com/gatework/ctx_parser). The gemspec declares `ctx_parser` without a version constraint for the shared configuration API. Applications should commit their own `Gemfile.lock` to make deployments reproducible. No Rails boot or sibling checkout paths are required.
 
 Release artifacts and checksums are available from [GitHub Releases](https://github.com/gatework/baseline-rb/releases). Check [RubyGems](https://rubygems.org/gems/baseline-rb) for published versions.
 
@@ -67,15 +67,68 @@ Detailed vendor behavior, historical validation notes, and Motor-only integratio
 
 ## Domain vocabulary
 
-`Facts` assembles configuration evidence; `Policy` supplies approved values; `Evaluator` produces compliance findings. `Acl#permitted_source_networks` returns the IPv4 networks permitted by ordered rules for a protocol and destination port: `nil` means unresolved evidence, while `[]` means no permitted sources. `Facts#record_credential` records safe credential attributes. Partial evidence may establish a conclusive violation, but cannot establish compliance.
+`FactBuilder` assembles configuration evidence; `Policy` supplies approved values; `Evaluator` produces compliance findings. `Acl#permitted_source_networks` returns the IPv4 networks permitted by ordered rules for a protocol and destination port: `nil` means unresolved evidence, while `[]` means no permitted sources. `FactBuilder#record_credential` records safe credential attributes. Partial evidence may establish a conclusive violation, but cannot establish compliance.
 
 Vendor-specific code lives in a vendor namespace: `Baseline::Hillstone::Parser` and `Baseline::Hillstone::Document` reside in `baseline/hillstone/`; Palo Alto uses the same layout. The six platform parsers inherit shared behavior from `Baseline::Parser`, `Comware::Parser`, or `Cisco::Parser`. Load only one platform with `require "baseline/hillstone/parser"`, or load the assessment API with `require "baseline"`.
 
-Parser helpers describe the evidence they extract: `matching_blocks`, `configured_values`, `last_configured_value`, `configured_state`, and `acl_source_network`. SNMP write permission uses the policy key `snmp.write_enabled` (`expected: false` to prohibit writes). Update custom policies that used `snmp.read_only`; old class names and rule keys have no compatibility aliases.
+Parser helpers describe the evidence they extract: `matching_blocks`, `configured_values`, `last_configured_value`, `configured_state`, and `parse_acl_source_network`. SNMP write permission uses the policy key `snmp.write_enabled` (`expected: false` to prohibit writes). Update custom policies that used `snmp.read_only`; old class names and rule keys have no compatibility aliases.
 
 Context accepts string or symbol keys, but rejects duplicate keys after normalization with `ArgumentError` rather than selecting a device policy by insertion order.
 
 `complete: true` asserts that the caller supplied the entire snapshot. Reports retain that assertion as `input_complete`, separately from parser status. A partial ordered ACL cannot prove an out-of-policy source: an unseen earlier deny may change its meaning, so the finding stays `unknown`.
+
+## Shared vendor capabilities
+
+All adapters follow the same management, NTP, Syslog, SNMP, and authentication pipeline and return the same `Evidence` / `Report` contracts. Cisco and Comware families share syntax where it is equivalent; native firewall endpoints use their own syntax and produce the same management-source facts. `FactBuilder` owns cross-command permission and evidence reduction; `Evaluator` does not branch on vendor.
+
+Query implementation coverage without supplying a device configuration:
+
+```ruby
+Baseline::Audit.capabilities(platform: :stoneos)["snmp.auth_priv"]
+# => { fact: "snmp.v3_auth_priv", status: :supported, reason: nil }
+Baseline::Audit.capabilities(platform: :panos)["tacacs.accounting"]
+# => { fact: "tacacs.accounting", status: :unsupported, reason: :platform_semantics_unresolved }
+```
+
+The deeply frozen result contains every public rule. New facts require explicit adapter capability declarations; adding a policy rule alone does not advertise implementation support. Status is `supported`, `partial`, or `unsupported`; it describes implemented evidence extraction, not runtime availability or support for every vendor release. The same platform aliases apply to queries and audits. `Audit.normalize_platform(name)` exposes the canonical platform name.
+
+| Capability | H3C / Huawei | IOS / NX-OS | Hillstone | Palo Alto |
+| --- | --- | --- | --- | --- |
+| NTP servers, authentication, source | Supported | Supported | Supported | Supported |
+| Syslog servers and source | Supported | Supported | Supported | Supported |
+| SNMP versions, writes, v3 auth/privacy | Supported | Supported | Supported | Supported |
+| IPv4 management / SNMP source ranges | Supported | Supported | Supported | Supported |
+| SSH enabled | Supported | Supported | Supported | Supported |
+| Explicit SSH versions and VTY checks | Supported | Supported | Unmodeled | Unmodeled |
+| Credential storage and observable strength | Supported | Supported | Supported | Supported |
+| TACACS servers, keys, login | Supported | Supported | Supported | Supported |
+| TACACS authorization | Supported | Supported | Supported | Unmodeled |
+| TACACS accounting | Supported | Supported | Unmodeled | Unmodeled |
+| Disabled service set | Supported | Supported | Partial | Partial |
+
+Hillstone service state covers Telnet, HTTP, HTTPS, and FTP; Palo Alto covers Telnet, HTTP, and HTTPS. Missing service states remain unknown. Native firewall endpoints do not provide router-style VTY facts. These checks are retained as `unknown` with `unsupported_capability` diagnostics, rather than excluded or treated as compliance. Protocol reachability and opaque password strength remain unobservable across all vendors.
+
+Hillstone v3 extraction follows the formal group/user syntax in the [StoneOS CLI guide](https://kb.hillstonenet.com/en/wp-content/uploads/2017/11/StoneOS_CLI_User_Guide_Complete_Book_5.5R5-1.pdf): `auth-protocol` and `enc-protocol` user options, explicit group write views, and IPv4 remote hosts. Unsupported algorithms, IPv6 remote users, removals, unresolved groups, or v3 host entries without user evidence remain unknown. User security comes from configured user evidence, not the group's required security level.
+
+## Naming and object responsibilities
+
+Names identify the object lifecycle and the method's result or side effect. `FactBuilder` accumulates evidence and `build` returns an independent parser result; `Evidence` owns the immutable snapshot used for evaluation; `MultilineDocument` isolates multiline quoted values; `PaloAlto::CommandIndex` searches commands by token prefix. Vendor `Parser` and command-mapped names retain their domain meaning.
+
+| Previous name | Current name | Meaning |
+| --- | --- | --- |
+| `Facts`, `baseline/facts` | `FactBuilder`, `baseline/fact_builder` | Mutable fact assembly |
+| `Configuration`, `baseline/configuration` | `Evidence`, `baseline/evidence` | Immutable evidence snapshot |
+| `QuotedDocument`, `baseline/quoted_document` | `MultilineDocument`, `baseline/multiline_document` | Multiline quoted-value boundaries |
+| `PaloAlto::Statements#at` | `PaloAlto::CommandIndex#matching_prefix` | All statements with a token prefix |
+| `Facts#result` | `FactBuilder#build` | Build a fresh result snapshot |
+| `Facts#record` / `unknown` | `FactBuilder#record_fact` / `record_unknown_fact` | Record facts or diagnostics |
+| `Facts#management` / `snmp` | `FactBuilder#record_management_access` / `record_snmp_access` | Update management or SNMP evidence |
+| `Facts#direct_acl` | `FactBuilder#record_source_restriction` | Record native source ranges, without a named ACL |
+| `Configuration#value` / `known?` / `scope_known?` | `Evidence#fact` / `fact_known?` / `applicability_fact_known?` | Query a fact and its evidence availability |
+| `Policy#resolve_with_source` | `Policy#resolve_with_path` | Return the value, reason, and policy branch path |
+| `Acl.address_range` / `network_prefixes` | `Acl.ipv4_range` / `cidrs_from_ranges` | Convert IPv4 CIDRs and integer ranges |
+
+Internal pipeline steps use `parse_*`; writers use `record_*`; regex providers use `*_pattern`. A tristate result uses `*_state` rather than a boolean predicate, and parsing/validation helpers name what they parse. Plain established names such as `Policy`, `Rule`, `Acl`, `Credential`, `Evaluator`, `Report`, `to_h`, and `inspect` remain appropriate. Old names and require paths have no aliases. Rule IDs, fact keys, and report JSON retain their business vocabulary.
 
 ## Development and tests
 
@@ -90,7 +143,7 @@ bundle exec rake build
 
 `bundle exec rake` runs RSpec, RuboCop, and the offline examples. Tests live in `spec/`, following the existing project's RSpec convention; fixtures use synthetic or sanitized evidence. Add regression cases for successful, incomplete, unsupported, and malformed inputs when extending a parser. Offline tests do not certify all device versions or replace live integration checks.
 
-Run `bundle exec ruby -Ilib script/benchmark.rb` for synthetic network-coverage, credential-lookup, and rejected-source report timings. It reports the median of three runs at two input sizes; compare revisions on the same runtime and machine.
+Run `bundle exec ruby -Ilib script/benchmark.rb` for synthetic network-coverage, credential-lookup, rejected-source report, PAN-OS account parsing, and fact snapshot timings. It reports the median of three runs at two input sizes; compare revisions on the same runtime and machine.
 
 Use the declared minimum Ruby version for compatibility checks. Document source methods and non-obvious business logic in concise Chinese, preserve public return/error contracts, and never add raw device captures or credentials to examples, fixtures, logs, or release archives.
 
