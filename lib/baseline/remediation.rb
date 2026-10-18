@@ -40,6 +40,8 @@ module Baseline
         end
         reason = if capability[:status] != :unsupported && CredentialRemediation::IDS.include?(id)
           id == "credentials.storage" ? :credential_rotation_required : :credential_strength_verification_required
+        elsif capability[:status] != :unsupported && id == "tacacs.keys" && %w[h3c huawei].include?(name)
+          :credential_material_required
         else
           supported ? nil : capability[:reason] || :remediation_unmodeled
         end

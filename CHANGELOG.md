@@ -4,6 +4,9 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+- Reduce Comware/VRP TACACS scheme keys in order across replacement, withdrawal, and reopened/deleted schemes; exclude stale credentials and resources.
+- Report missing or unresolved scheme key material by responsibility and known endpoint, retaining manual peer/AAA/fallback prerequisites without secret commands.
+
 - Require validated Comware/VRP SNMP commands as implicit enable evidence; preserve ordered explicit state and the H3C password-calculation exception.
 - Report per-object credential rotation/material and external-strength-evidence requirements without producing secret-bearing commands; retain SNMP authentication/privacy and Comware/VRP TACACS key purposes.
 

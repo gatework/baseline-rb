@@ -17,16 +17,20 @@ module Baseline
       def ssh_enable_pattern = /\Astelnet server enable\z/
       # 匹配当前平台显式禁用 SSH 的命令。
       def ssh_disable_pattern = /\A(?:undo stelnet server enable|stelnet server disable)\z/
-      # 匹配当前平台 TACACS 配置块的根语句。
-      def tacacs_section_pattern = /\Ahwtacacs-server template\s+/
+      # 模板进入与整组撤销共用相同身份边界。
+      def tacacs_section_command = "hwtacacs-server template"
       # 匹配认证、授权或计费服务器声明。
       def tacacs_server_pattern = /\Ahwtacacs-server (?:authentication|authorization|accounting)\s+(\S+)/
       # 完整选择服务器命令族，缺失地址也必须保留为损坏证据。
       def tacacs_server_family_pattern = /\A(?:undo )?hwtacacs-server (?:authentication|authorization|accounting)(?:\s|\z)/
       # 匹配已配置 TACACS 密钥的存储格式。
       def tacacs_key_pattern = /\Ahwtacacs-server (shared)-key (cipher|simple) (.+)\z/
-      # 要求具备当前平台 TACACS 方案使用的全部密钥角色。
-      def tacacs_keys_complete?(types) = types.include?("shared")
+      # VRP 模板共享密钥的损坏声明也必须参与最终状态归约。
+      def tacacs_key_family_pattern = /\A(?:undo )?hwtacacs-server shared-key(?:\s|\z)/
+      # VRP 共享密钥撤销不携带密钥值。
+      def tacacs_key_reset_pattern = /\Aundo hwtacacs-server shared-key\z/
+      # VRP 模板只使用一个方案级共享密钥槽位。
+      def tacacs_key_roles = %w[shared]
       # 返回当前平台修改 SNMP 监听端口的命令模式。
       def snmp_port_command = "snmp-agent udp-port"
       # 从实际所属配置作用域中选取 AAA 声明。

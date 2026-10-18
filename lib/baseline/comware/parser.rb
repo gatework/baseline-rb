@@ -298,8 +298,10 @@ module Baseline
 
       # 解析实际生效的认证方法及外部服务器引用。
       def parse_authentication
-        schemes = matching_blocks(tacacs_section_pattern).to_h do |section|
-          server_types = matching_blocks(tacacs_server_family_pattern, section.children).group_by { |entry| entry.text.delete_prefix("undo ").split[1] }
+        key_slots = []
+        schemes = tacacs_sections.to_h do |sections|
+          section, children = sections.first, sections.flat_map(&:children)
+          server_types = matching_blocks(tacacs_server_family_pattern, children).group_by { |entry| entry.text.delete_prefix("undo ").split[1] }
             .transform_values do |entries|
               configured_server_addresses("tacacs", tacacs_server_pattern, entries, negate: "undo") do |text, match, negative, entry|
                 record_tacacs_endpoint(section, text, match, negative, entry)
@@ -307,15 +309,12 @@ module Baseline
               end
             end
           servers = server_types.values.flatten.uniq
-          keys = section.children.filter_map do |entry|
-            match = tacacs_key_pattern.match(entry.text)
-            next unless match
-            kind, format, secret = match.captures
-            record_credential("tacacs:#{section.text.split.last}", "tacacs", format, secret, entry, purpose: kind)
-            kind
-          end
-          [ section.text.split.last, { servers: servers, server_types: server_types, key_types: keys.uniq, line: section.line } ]
+          slots = parse_tacacs_keys(section, children)
+          key_slots.concat(slots)
+          [ section.text.split.last, { servers: servers, server_types: server_types,
+            key_types: slots.select { |slot| slot[:present] }.map { |slot| slot[:role] }, line: section.line } ]
         end
+        record_fact("tacacs.key_slots", key_slots)
         record_fact("tacacs.schemes", schemes)
         record_fact("tacacs.servers", schemes.values.flat_map { |entry| entry[:servers] }.uniq)
         domains = authentication_domains
@@ -342,7 +341,17 @@ module Baseline
             record_fact("tacacs.#{key}", used, relevant) if @fact_builder.complete? || used
           end
         end
-        record_fact("tacacs.keys_present", schemes.values.all? { |entry| tacacs_keys_complete?(entry[:key_types]) }) unless schemes.empty?
+        unless schemes.empty?
+          states = key_slots.map { |slot| slot[:present] }
+          lines = key_slots.flat_map { |slot| slot[:lines] }.uniq
+          if states.include?(false)
+            @fact_builder.record_fact("tacacs.keys_present", false, lines: lines)
+          elsif states.include?(nil)
+            @fact_builder.record_unknown_fact("tacacs.keys_present", lines: lines, code: :tacacs_key_unresolved)
+          else
+            @fact_builder.record_fact("tacacs.keys_present", true, lines: lines)
+          end
+        end
         parse_local_accounts
         matching_blocks(/\A(?:line|user-interface)\b/).each do |section|
           matching_blocks(/\A(?:set authentication )?password\b/, section.children).each do |entry|
@@ -353,6 +362,54 @@ module Baseline
         matching_blocks(/\Asuper password\b/).each do |entry|
           match = /\Asuper password(?: level \d+)?\s+(simple|cipher|hash)\s+(.+)\z/.match(entry.text)
           record_credential("super", "enable", match ? match[1] : "unknown", match&.[](2), entry)
+        end
+      end
+
+      # 同名方案重新进入时合并声明；整组撤销后不得残留服务器、密钥或资源。
+      def tacacs_sections
+        active = {}
+        command = Regexp.escape(tacacs_section_command)
+        matching_blocks(/\A(?:undo )?#{command}(?:\s|\z)/).each do |entry|
+          match = /\A(undo )?#{command}\s+(\S+)\z/.match(entry.text)
+          unless match && ResourceSchema.token?(match[2])
+            record_unknown_fact("tacacs", [ entry ], code: :tacacs_scheme_unresolved)
+            next
+          end
+          name = match[2]
+          if match[1]
+            active.delete(name)
+            analyze(entry) { false }
+          else
+            (active[name] ||= []) << entry
+          end
+        end
+        active.values
+      end
+
+      # 每种职责只保留最后状态；仅在归约后分析最终秘密，旧材料不进入报告。
+      def parse_tacacs_keys(section, children)
+        current = tacacs_key_roles.to_h { |role| [ role, nil ] }
+        matching_blocks(tacacs_key_family_pattern, children).each do |entry|
+          match, reset = tacacs_key_pattern.match(entry.text), tacacs_key_reset_pattern.match(entry.text)
+          if match
+            current[match[1]] = { present: true, entry: entry, format: match[2], secret: match[3] }
+          elsif reset
+            current[reset[1] || tacacs_key_roles.first] = { present: false, entry: entry }
+            analyze(entry) { false }
+          else
+            role = entry.text.delete_prefix("undo ").split[1]
+            roles = current.key?(role) ? [ role ] : current.keys
+            roles.each { |key| current[key] = { present: nil, entry: entry } }
+          end
+        end
+        current.map do |role, value|
+          observed = !value.nil?
+          value ||= { present: @fact_builder.complete? ? false : nil, entry: section }
+          entry, present = value.values_at(:entry, :present)
+          if present == true || present.nil? && observed
+            record_credential("tacacs:#{section.text.split.last}", "tacacs", value[:format] || "unknown", value[:secret], entry, purpose: role)
+          end
+          { group: section.text.split.last, role: role, source: "scheme", present: present, complete: !present.nil?, lines: [ entry.line ] }
         end
       end
 

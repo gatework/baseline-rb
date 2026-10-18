@@ -106,3 +106,13 @@ H3C 的 `calculate-password` 是不启用服务的工具命令，参数不进入
 明文/旧格式存储，以及可观察到的弱口令要求批准替换材料、厂商支持的保护格式和人工轮换过程。方案按消费者提示 NMS 同步、TACACS 对端同步、认证引用及本地后备/恢复路径验证；这些是待核实条件，不表示已建立完整引用图或已验证管理连通性。未知存储格式要求补存储证据；密文/散列的强度要求外部证据，不能因此直接断言需要轮换。规则允许相反存储目标时，不生成降级到明文的命令。
 
 此处理不会生成带秘密或秘密占位符的命令，检查仍为 blocked；缺策略、不适用或不完整输入不会被改写为轮换授权。能力查询仍把秘密命令生成标为 unsupported，同时给出人工材料处理原因和条件。[凭据审核示例](../examples/remediation_credentials.rb) 展示对象要求和秘密排除。
+
+## HWTACACS 密钥最终状态与材料要求
+
+Comware/VRP 的同名方案或模板重新进入会合并声明；整组撤销在服务器、凭据及资源归纳前移除该组。每个方案密钥槽位按命令顺序归约，撤销不保留旧凭据，替换只分析最后材料；损坏声明不能回落到旧的通过值，后续完整设置可重新确定状态。局部输入缺失的槽位保持未知，不凭空构造已观察凭据。
+
+`tacacs.key_slots` 保留组、职责、方案级来源、present/complete 及来源行，不保留秘密。现有 `tacacs.keys` 基线契约保持：H3C 检查 authentication/authorization/accounting 三类方案密钥，Huawei 检查 shared；此处尚不将端点私有密钥或其他型号继承规则等同于方案密钥，其他厂商没有自动套用此模型。
+
+`tacacs.keys` 的 `details.key_slots` 对缺失材料列出 provision、批准密钥材料、保护存储格式、人工配置步骤及高风险；对损坏状态列出 verify 和补证要求。端点引用按组和职责关联，共享密钥关联模板全部端点；端点未解析、缺少消费者范围、对端同步、AAA 引用或本地后备访问仍列为待核实依赖，不假称认证链已经可用。没有方案时要求批准方案和端点；不会从备份发明它们。检查保持 blocked，不生成秘密、占位符或移除密钥的降级命令。参见[材料要求示例](../examples/remediation_tacacs.rb)。
+
+语法依据：[H3C Comware 7 key/undo key 命令](https://www.h3c.com/en/Support/Resource_Center/EN/Home/Public/00-Public/Technical_Documents/Reference_Guides/Command_References/H3C_S6520X_MS4600_CRs_R6628Pxx-10752/09/202407/2215673_294551_0.htm)、[Huawei 模板共享密钥撤销](https://info.support.huawei.com/hedex/api/pages/EDOC1100363264/AEN0403J/06/resources/command/yunshan/HWTACACS-SERVER-SHARED-KEY%28HWTACACSOM%29.html)。Comware 旧版本带秘密参数的撤销形式未按 Comware 7 处理；未知形式保留未知，不声称跨版本验证。

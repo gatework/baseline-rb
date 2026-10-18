@@ -8,6 +8,7 @@ require_relative "vty_remediation"
 require_relative "access_remediation"
 require_relative "snmp_access_remediation"
 require_relative "credential_remediation"
+require_relative "tacacs_key_remediation"
 
 module Baseline
   # 每个指标都必须有规划结果；缺少实现或前提时显式受阻。
@@ -30,7 +31,7 @@ module Baseline
       "tacacs.minimum_servers" => [ "approved_tacacs_targets" ], "tacacs.servers" => [ "approved_tacacs_endpoints", "authentication_reference_evidence" ],
       "tacacs.login" => [ "approved_authentication_chain", "local_fallback_evidence" ],
       "tacacs.authorization" => [ "approved_authorization_chain" ], "tacacs.accounting" => [ "approved_accounting_chain" ],
-      "tacacs.keys" => [ "replacement_credential_reference" ],
+      "tacacs.keys" => [ "approved_tacacs_scheme", "approved_tacacs_key_material", "authentication_reference_evidence", "local_fallback_access_verified" ],
       "syslog.destinations" => [ "supported_resource_renderer" ], "ntp.associations" => [ "supported_resource_renderer" ],
       "tacacs.endpoints" => [ "supported_resource_renderer", "authentication_reference_evidence" ]
     })
@@ -52,6 +53,9 @@ module Baseline
           check(finding, status, nil)
         elsif CredentialRemediation.applicable?(finding, audit.configuration)
           result = CredentialRemediation.new.call(finding, audit.configuration)
+          check(finding, :blocked, result.fetch(:reason), requirements: result.fetch(:requirements), details: result.fetch(:details))
+        elsif TacacsKeyRemediation.applicable?(finding, audit.configuration)
+          result = TacacsKeyRemediation.new.call(finding, audit.configuration)
           check(finding, :blocked, result.fetch(:reason), requirements: result.fetch(:requirements), details: result.fetch(:details))
         elsif !audit.configuration.complete? || finding.status == :unknown && !((AccessRemediation::IDS + SnmpAccessRemediation::IDS).include?(finding.id) && finding.reason == :fact_unavailable && !finding.expected.nil?)
           reason = audit.configuration.complete? ? finding.reason : audit.configuration.status == :unsupported ? :unsupported_platform : :input_incomplete

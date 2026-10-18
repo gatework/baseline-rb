@@ -12,6 +12,8 @@ module Baseline
       credential_rotation_required: "需要批准的新凭据及人工轮换，普通方案不包含秘密值",
       credential_strength_verification_required: "需要外部凭据强度或存储证据，不能从密文推断原始口令强度",
       credential_storage_verification_required: "凭据存储格式尚未确定，需要补充对象存储证据",
+      credential_material_required: "缺少指定职责的密钥材料，需批准并人工配置，方案不包含秘密值",
+      credential_material_evidence_required: "指定职责的密钥状态未能解析，需要补充证据后再决定是否配置",
       unsupported_setting: "该厂商或当前设置组合尚无已验证的命令实现",
       invalid_command_parameter: "批准参数不符合厂商命令语法或包含非法字符",
       unresolved_prerequisites: "相关配置存在依赖，需先核对所列条件",
