@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "../parser"
+require_relative "../snmp_options"
 
 module Baseline
   module Comware
@@ -185,12 +186,14 @@ module Baseline
         record_fact("snmp.versions", snmp_versions)
         communities = matching_blocks(/\Asnmp-agent community\b/).filter_map do |entry|
           match = /\Asnmp-agent community (read|write)\s+(?:(simple|cipher)\s+)?(\S+)(.*)\z/.match(entry.text)
-          unless match
+          unless match && !(match[2].nil? && %w[simple cipher].include?(match[3]))
             record_unknown_snmp_access([ entry ])
             next
           end
+          access = SnmpOptions.community(match[4])
+          record_unknown_fact("snmp.acl", [ entry ], code: :unsupported_snmp_access_options) unless access[:complete]
           record_credential("snmp-community", "snmp", match[2] || "plain", match[3], entry)
-          { write: match[1] == "write", acl: match[4][/\bacl\s+(?:name\s+)?(\S+)/, 1], line: entry.line }
+          { write: match[1] == "write", acl: access[:acl], acl_ipv6: access[:acl_ipv6], read_view: access[:read_view], line: entry.line }
         end
         group_entries = matching_blocks(/\Asnmp-agent group\b/).select do |entry|
           next true if /\Asnmp-agent group v3\s+\S+(?:\s|\z)/.match?(entry.text)
@@ -198,12 +201,17 @@ module Baseline
           record_unknown_snmp_access([ entry ], code: :unsupported_snmp_group)
           false
         end
+        definitions = []
         groups = configured_snmp_groups(group_entries) do |entry|
           settings = entry.text.sub(/\Asnmp-agent group v3\s+\S+\s*/, "")
-          [ entry.text.split[3], { acl: entry.text[/\bacl\s+(?:name\s+)?(\S+)/, 1], line: entry.line, write: snmp_group_write_state(settings) } ]
+          access = SnmpOptions.group(settings)
+          definitions << access.merge(name: entry.text.split[3], version: "v3", line: entry.line)
+          record_unknown_fact("snmp.acl", [ entry ], code: :unsupported_snmp_access_options) unless access[:complete]
+          [ entry.text.split[3], { acl: access[:acl], line: entry.line, write: snmp_group_write_state(settings) } ]
         end
         record_fact("snmp.groups", groups)
-        users = {}
+        record_fact("snmp.group_definitions", definitions)
+        users, security_records = {}, {}
         matching_blocks(/\Asnmp-agent usm-user\b/).each do |entry|
           match = /\Asnmp-agent usm-user v3\s+(\S+)(?:\s+(.*))?\z/.match(entry.text)
           unless match
@@ -211,22 +219,35 @@ module Baseline
             next
           end
           settings = match[2].to_s
-          user = users[match[1]] ||= { name: match[1], auth: false, priv: false, line: entry.line }
-          group = settings[/\Agroup\s+(\S+)/, 1]
-          first = settings.split.first
-          group ||= first unless %w[group authentication-mode privacy-mode acl local engineid].include?(first)
-          user[:group] = group if group
-          modes = { auth: parse_snmp_secret(settings, "authentication-mode", algorithms: %w[md5 sha sha2-224 sha2-256 sha2-384 sha2-512]),
+          initial = { name: match[1], auth: false, priv: false, line: entry.line }
+          user = snmp_user_definitions_replace? ? users[match[1]] = initial : users[match[1]] ||= initial
+          access = SnmpOptions.user(settings, group_required: snmp_user_definitions_replace?)
+          record_unknown_fact("snmp.acl", [ entry ], code: :unsupported_snmp_access_options) unless access[:complete]
+          user[:group] = access[:group] if access[:group]
+          modes = { auth: parse_snmp_secret(settings, "authentication-mode", algorithms: %w[md5 sha sha224 sha256 sha384 sha512 sha2-224 sha2-256 sha2-384 sha2-512]),
             priv: parse_snmp_secret(settings, "privacy-mode", algorithms: %w[des des56 3des aes128 aes192 aes256]) }
-          record_snmp_credentials("snmp:#{match[1]}", modes, entry).each { |key, value| user[key] ||= value }
-          acl = settings[/\bacl\s+(?:name\s+)?(\S+)/, 1]
-          user[:acl] = acl if acl
+          modes = { auth: nil, priv: nil } unless access[:complete]
+          if snmp_user_definitions_replace?
+            security_records[match[1]] = [ modes, entry, access[:key_format] ]
+            modes.each { |key, value| user[key] = value ? true : value }
+          else
+            record_snmp_credentials("snmp:#{match[1]}", modes, entry, format: access[:key_format]).each { |key, value| user[key] ||= value }
+          end
+          user[:acl] = access[:acl] if access[:acl]
+          user[:acl_ipv6] = access[:acl_ipv6] if access[:acl_ipv6]
         end
+        security_records.each { |name, (modes, entry, format)| record_snmp_credentials("snmp:#{name}", modes, entry, format: format) }
         withdrawals = matching_blocks(/\Aundo snmp-agent (?:usm-user|group)(?:\s|\z)/)
         record_unknown_snmp_access(withdrawals, code: :unsupported_snmp_withdrawal) unless withdrawals.empty?
         @fact_builder.record_snmp_access(communities: communities, users: users.values, groups: groups,
-          port: listener_port(snmp_port_command, default: 161, scope: "snmp.acl"))
+          port: listener_port(snmp_port_command, default: 161, scope: "snmp.acl"), **snmp_access_options)
       end
+
+      # 只有明确支持串联 ACL 的适配器才改变组、用户与全局过滤的归约。
+      def snmp_access_options = {}
+
+      # VRP 可能分行配置用户；不能套用 Comware 完整 VACM 定义的覆盖语义。
+      def snmp_user_definitions_replace? = false
 
       # Comware、VRP 必须明确授予写视图；引号或未知语法保持未解析。
       def snmp_group_write_state(settings)

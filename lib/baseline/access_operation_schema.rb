@@ -5,7 +5,7 @@ require_relative "access_approval"
 module Baseline
   # ACL 创建与端点重绑是不同操作，禁止通用资源删除绕开共享引用保护。
   module AccessOperationSchema
-    KINDS = %w[access.acl access.binding].freeze
+    KINDS = %w[access.acl access.binding snmp.binding].freeze
 
     # 只允许创建新 ACL、更新既有端点的绑定；身份不含原始 CLI。
     def self.validate!(kind:, identity:, scope:, before:, after:, action:, phase:)
@@ -13,6 +13,10 @@ module Baseline
       valid = if kind == "access.acl"
         common && ResourceSchema.token?(identity["name"]) && action == :add && phase == :create && before.nil? && after.keys == [ "sources" ] &&
           after["sources"].is_a?(Array) && after["sources"].all? { |source| source.is_a?(String) && Acl.ipv4_range(source) }
+      elsif kind == "snmp.binding"
+        common && identity["name"] == "snmp.global" && action == :replace && phase == :update && before.is_a?(Hash) &&
+          (before.keys - [ "acl" ]).empty? && (!before.key?("acl") || ResourceSchema.token?(before["acl"])) &&
+          after.keys == [ "acl" ] && ResourceSchema.token?(after["acl"])
       elsif kind == "access.binding"
         common && AccessApproval.range(identity["name"]) && action == :replace && phase == :update && before.is_a?(Hash) &&
           (before.keys - %w[acl vrf_also]).empty? && (!before.key?("vrf_also") || [ true, false ].include?(before["vrf_also"])) && (!before.key?("acl") || ResourceSchema.token?(before["acl"])) &&

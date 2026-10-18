@@ -63,6 +63,15 @@ RSpec.describe "Remediation setting commands" do
     expect(second.status).to eq(:noop)
   end
 
+  it "returns booleans from every renderer capability predicate" do
+    Baseline::Remediation::RENDERERS.each_value do |type|
+      renderer = type.new
+      Baseline::Rule::DEFINITIONS.each_key do |id|
+        expect([ true, false ]).to include(renderer.supports?(id))
+      end
+    end
+  end
+
   it "keeps command capabilities separate from parser capabilities for every metric and alias" do
     Baseline::Audit::PARSERS.each_key do |platform|
       capabilities = Baseline::Remediation.capabilities(platform: platform)

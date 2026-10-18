@@ -83,6 +83,10 @@ IPv4 管理 ACL 可为 H3C `line vty`、Huawei `user-interface vty`、IOS `line 
 
 现有许可只收紧到与上限的交集，明确提供的来源也不能扩大当前许可。批准 ACL 标识只要在本次输入任意位置出现，就不能视为全新；这种保守检查也覆盖未建模命令、注释和横幅，数字标识会识别前导零。方案不修改旧 ACL 及其 SNMP/业务引用。交集为空需显式批准 `sources: []`；范围交叠、未解决证据或不能保留的协议/端口差异会阻止整项操作。NX-OS/防火墙、IPv6、H3C 传统 `user-interface` 和复杂 ACL 呈现仍待实现。参见[例子](examples/remediation_access.rb)。
 
+H3C SNMP 来源修正支持全新的基本 ACL 加 `snmp-agent acl` 全局绑定，保留团体字、用户、组和各主体更严格的 ACL。`snmp.sources` 必须给出批准上限，相关规则的 `remediation.access_targets` 使用 `{endpoint: "snmp.global", acl: "2005"}`；存在未绑定主体时还必须明确 `sources`。备份没有该全局命令证据时，需要 `global_acl_supported: true` 确认固件能力；不会把所有 H3C 固件视为支持。已有全局许可不会扩大，不会仅靠开关关闭 SNMP 来通过子规则。同一设备上的管理/SNMP 目标若争用同一新 ACL，整个相关方案受阻。参见[SNMP 例子](examples/remediation_snmp_access.rb)。
+
+SNMP 审计区分 H3C 全局/组/用户串联 ACL，使用匿名序号标识团体字，IPv6-only ACL 不算 IPv4 限制。完整且明确没有绑定的主体记为 IPv4 来源未限制，复杂或损坏声明仍为未知。H3C 同名 VACM 用户采用最后一次完整定义及凭据记录；Huawei 的分行配置保持增量处理。组视图和安全级别作为非秘密定义保留，但完整 MIB 视图权限与组修改仍待实现。
+
 详细厂商语义、历史验证记录和 Motor 专用集成说明保留在[架构参考](docs/architecture-zh.md)。其中宿主集成代码需要 Motor，不属于独立 gem API。适配层位于 [Motor 仓库](https://github.com/gatework/motor/tree/main/backend/lib) 的 `backend/lib/baseline`、`backend/lib/vxlan` 和 `backend/lib/wireless`。
 
 ## 领域术语

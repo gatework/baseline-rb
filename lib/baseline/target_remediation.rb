@@ -7,10 +7,11 @@ module Baseline
   class TargetRemediation
     Result = Data.define(:operations, :details)
     class Blocked < StandardError
-      attr_reader :reason
+      attr_reader :reason, :requirements
       # 受阻原因使用稳定代码，不携带配置文本。
-      def initialize(reason)
+      def initialize(reason, requirements: [])
         @reason = reason
+        @requirements = CtxParser::Immutable.copy(requirements)
         super(reason.to_s)
       end
     end

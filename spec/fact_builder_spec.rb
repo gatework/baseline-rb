@@ -16,6 +16,15 @@ RSpec.describe Baseline::FactBuilder do
     expect(values.map { |value| value[:kind] }).to eq(%w[snmp_user tacacs])
   end
 
+  it "owns the global SNMP ACL identity independently of the caller" do
+    facts = described_class.new(complete: true)
+    name = +"MGMT"
+    facts.record_snmp_access(communities: [], users: [], layered_acls: true, global_acl: name, global_acl_supported: true)
+    name.replace("OTHER")
+    expect(facts.build.records.first.fetch("facts").fetch("snmp.global_access")[:acl]).to eq("MGMT")
+    expect(name).not_to be_frozen
+  end
+
   it "copies configuration identity without freezing caller strings" do
     platform = +"h3c"
     checksum = +"fixture"

@@ -144,6 +144,7 @@ RSpec.describe Baseline::Audit do
        rule 20 permit udp source 203.0.113.0 0.0.0.255 destination-port eq snmptrap
       #
     CONFIG
+    h3c += "snmp-agent group v3 readgroup privacy\n"
     ios = fixture("cisco_ios").sub(/ip access-list standard MGMT\n.*?\n!/m, <<~CONFIG.chomp)
       ip access-list extended MGMT
        5 permit udp 198.51.100.0 0.0.0.255 any eq snmp

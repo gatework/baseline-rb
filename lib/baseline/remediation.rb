@@ -26,6 +26,8 @@ module Baseline
         requirements = RemediationPlanner::REQUIREMENTS.fetch(id, [ "supported_rule_handler" ])
         if supported && id == "snmp.versions"
           requirements = [ "existing_v3_access_verified", "snmp_v3_group_reference", "existing_enabled_snmp_v3" ]
+        elsif supported && SnmpAccessRemediation::IDS.include?(id)
+          requirements = [ "fresh_acl_identity", "approved_access_limits", "global_acl_support_evidence", "explicit_targets_for_unbound_principals" ]
         elsif supported && AccessRemediation::IDS.include?(id)
           requirements = [ "fresh_acl_identity", "approved_access_limits", "access_targets_for_initial_binding", "resolved_endpoint_protocol_permissions" ]
           requirements += [ "vrf_scope_for_initial_binding" ] if name == "cisco_ios"

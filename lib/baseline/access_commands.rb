@@ -10,6 +10,12 @@ module Baseline
     def render_access(operation)
       style = self.class::ACCESS_STYLE
       raise CommandRenderer::UnsupportedOperation, "unsupported_access_renderer" unless %i[h3c vrp ios].include?(style)
+      if operation.kind == "snmp.binding"
+        raise CommandRenderer::UnsupportedOperation, "unsupported_snmp_global_acl" unless self.class::SNMP_GLOBAL_ACL
+        acl = operation.after.fetch("acl")
+        validate_acl_identity!(acl, style)
+        return [ CommandStep.new(view: [], command: "#{self.class::SNMP_GLOBAL_ACL} #{acl}", phase: operation.phase, operation_id: operation.id) ]
+      end
       view, commands = operation.kind == "access.acl" ? access_acl_definition(operation, style) : access_binding_definition(operation, style)
       commands.map { |command| CommandStep.new(view: view, command: command, phase: operation.phase, operation_id: operation.id) }
     end

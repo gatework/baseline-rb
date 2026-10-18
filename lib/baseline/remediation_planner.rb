@@ -6,6 +6,7 @@ require_relative "syslog_remediation"
 require_relative "ntp_remediation"
 require_relative "vty_remediation"
 require_relative "access_remediation"
+require_relative "snmp_access_remediation"
 
 module Baseline
   # 每个指标都必须有规划结果；缺少实现或前提时显式受阻。
@@ -42,14 +43,18 @@ module Baseline
     def call(audit)
       raise ArgumentError, "Remediation policy does not match audit" unless audit.policy_sha256 == @policy.sha256
       operations, steps = [], []
+      conflicting_access_domains = conflicting_acl_allocations(audit)
       checks = audit.findings.map do |finding|
         status = { pass: :not_needed, not_applicable: :not_applicable }[finding.status]
         if status
           check(finding, status, nil)
-        elsif !audit.configuration.complete? || finding.status == :unknown && !(AccessRemediation::IDS.include?(finding.id) && finding.reason == :fact_unavailable && !finding.expected.nil?)
+        elsif !audit.configuration.complete? || finding.status == :unknown && !((AccessRemediation::IDS + SnmpAccessRemediation::IDS).include?(finding.id) && finding.reason == :fact_unavailable && !finding.expected.nil?)
           reason = audit.configuration.complete? ? finding.reason : audit.configuration.status == :unsupported ? :unsupported_platform : :input_incomplete
           check(finding, :blocked, reason)
         elsif @renderer.supports?(finding.id)
+          if (AccessRemediation::IDS + SnmpAccessRemediation::IDS).include?(finding.id) && conflicting_access_domains.include?(finding.id.split(".").first)
+            next check(finding, :blocked, :policy_conflict)
+          end
           if finding.id == "ssh.enabled" && finding.expected == true
             next check(finding, :blocked, :unresolved_prerequisites, requirements: REQUIREMENTS.fetch(finding.id))
           end
@@ -66,7 +71,7 @@ module Baseline
             check(finding, :blocked, :unresolved_prerequisites, requirements: missing)
           elsif finding.id == "snmp.versions" && (required = snmp_version_requirements(audit)).any?
             check(finding, :blocked, :unresolved_prerequisites, requirements: required)
-          elsif AccessRemediation::IDS.include?(finding.id)
+          elsif (AccessRemediation::IDS + SnmpAccessRemediation::IDS).include?(finding.id)
             compile_access(finding, audit, operations, steps)
           elsif (SyslogRemediation::IDS + NtpRemediation::IDS).include?(finding.id)
             compile_targets(finding, audit, operations, steps)
@@ -85,15 +90,29 @@ module Baseline
 
     private
 
+    # 同一设备上的不同端点不能分别创建同一 ACL，跨领域也不能靠命令顺序合并权限。
+    def conflicting_acl_allocations(audit)
+      applicable = audit.findings.reject { |item| item.status == :not_applicable }.map(&:id)
+      targets = @policy.rules.select { |rule| applicable.include?(rule.id) }.flat_map do |rule|
+        rule.remediation.fetch("access_targets", []).map { |target| [ rule.id.split(".").first, target ] }
+      end
+      targets.group_by do |_, target|
+        name = target.fetch("acl")
+        /\A[0-9]+\z/.match?(name) ? name.sub(/\A0+(?=[0-9])/, "") : name.downcase
+      end.values.select { |uses| uses.map { |domain, target| [ domain, target.fetch("endpoint") ] }.uniq.size > 1 }
+        .flat_map { |uses| uses.map(&:first) }.uniq
+    end
+
     # 整个访问领域先完整渲染，再加入创建及重绑；不能只暴露前半段方案。
     def compile_access(finding, audit, operations, steps)
-      result = AccessRemediation.new(policy: @policy, reserved_identifiers: @reserved_acl_identifiers).call(finding, audit)
+      handler = SnmpAccessRemediation::IDS.include?(finding.id) ? SnmpAccessRemediation : AccessRemediation
+      result = handler.new(policy: @policy, reserved_identifiers: @reserved_acl_identifiers).call(finding, audit)
       rendered = result.operations.flat_map { |operation| @renderer.render(operation) }
       operations.concat(result.operations)
       steps.concat(rendered)
       check(finding, :planned, nil, operation_ids: result.operations.map(&:id), details: result.details)
     rescue TargetRemediation::Blocked => error
-      check(finding, :blocked, error.reason)
+      check(finding, :blocked, error.reason, requirements: error.requirements)
     rescue CommandRenderer::UnsupportedOperation
       check(finding, :blocked, :unsupported_setting)
     rescue ArgumentError

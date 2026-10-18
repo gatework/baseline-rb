@@ -23,6 +23,7 @@ module Baseline
     SSH_DISABLE_COMMAND = nil
     SNMP_VERSION_REMOVAL = nil
     ACCESS_STYLE = nil
+    SNMP_GLOBAL_ACL = nil
 
     # 原生命令依赖的独立事实由规划器核验，而非在命令里假定成立。
     def prerequisites(id) = self.class::PREREQUISITES.fetch(id, {})
@@ -30,10 +31,11 @@ module Baseline
     # 查询当前呈现器确实可生成的设置类型。
     def supports?(id)
       self.class::SOURCE_COMMANDS.key?(id) || id == "services.disabled" && self.class::DISABLE_COMMANDS.any? ||
-        id == "ssh.vty_ssh_only" && self.class::VTY_PROTOCOL_COMMAND ||
-        id == "ssh.enabled" && self.class::SSH_DISABLE_COMMAND ||
-        id == "snmp.versions" && self.class::SNMP_VERSION_REMOVAL ||
-        %w[management.acl_bound management.acl_restricted management.sources].include?(id) && self.class::ACCESS_STYLE ||
+        id == "ssh.vty_ssh_only" && !self.class::VTY_PROTOCOL_COMMAND.nil? ||
+        id == "ssh.enabled" && !self.class::SSH_DISABLE_COMMAND.nil? ||
+        %w[snmp.acl_bound snmp.acl_restricted snmp.sources].include?(id) && !self.class::SNMP_GLOBAL_ACL.nil? ||
+        id == "snmp.versions" && !self.class::SNMP_VERSION_REMOVAL.nil? ||
+        %w[management.acl_bound management.acl_restricted management.sources].include?(id) && !self.class::ACCESS_STYLE.nil? ||
         id == "ssh.versions" && !self.class::SSH_VERSION_TWO.nil? ||
         self.class::RESOURCE_KINDS.include?(ResourceSchema::FACTS.key(id) ||
           { "syslog.servers" => "syslog.destination", "syslog.minimum_servers" => "syslog.destination",

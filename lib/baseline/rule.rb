@@ -83,6 +83,8 @@ module Baseline
       @remediation = CtxParser::Immutable.copy(options.fetch("remediation", {}))
       remediation_keys = if id == "snmp.versions"
         %w[existing_v3_access_verified]
+      elsif %w[snmp.acl_bound snmp.acl_restricted snmp.sources].include?(id)
+        %w[access_targets global_acl_supported]
       elsif %w[management.acl_bound management.acl_restricted management.sources].include?(id)
         %w[access_targets]
       elsif %w[syslog.minimum_servers syslog.servers syslog.destinations ntp.minimum_servers ntp.servers ntp.associations].include?(id)
@@ -90,12 +92,13 @@ module Baseline
       else []
       end
       unless remediation.is_a?(Hash) && (remediation.keys - remediation_keys).empty? &&
+          (!remediation.key?("global_acl_supported") || [ true, false ].include?(remediation["global_acl_supported"])) &&
           (!remediation.key?("existing_v3_access_verified") || [ true, false ].include?(remediation["existing_v3_access_verified"])) &&
           (!remediation.key?("maximum_targets") || remediation["maximum_targets"].is_a?(Integer) && remediation["maximum_targets"].between?(1, 65_535)) &&
           (!remediation.key?("order") || %w[add_before_remove remove_before_add].include?(remediation["order"]))
         raise ArgumentError, "Invalid baseline remediation options"
       end
-      AccessApproval.validate!(remediation["access_targets"]) if remediation.key?("access_targets")
+      AccessApproval.validate!(remediation["access_targets"], domain: id.start_with?("snmp.") ? :snmp : :management) if remediation.key?("access_targets")
       validate_applicability!
       freeze
     end

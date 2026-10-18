@@ -4,6 +4,10 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+- Intersect H3C global, group, and user SNMP ACLs; report fully parsed unbound IPv4 principals as unrestricted rather than unknown.
+- Generate conditional H3C global SNMP ACL creation/binding without rewriting secrets or per-principal filters; reject cross-domain fresh ACL allocation conflicts.
+- Parse SNMP access options by argument position, preserve safe group definitions, replace stale H3C VACM user/credential state, and recognize command-wide cipher qualifiers and documented SHA-2 names.
+
 - Extend dedicated IPv4 management ACL rendering to Huawei and IOS, preserving existing IOS VRF qualifiers and requiring explicit VRF scope on initial bindings.
 - Bind ACL identity collision checks to the same immutable input snapshot as the audit; scan all candidates in one pass and conservatively reject proposed identities appearing even in unmodelled commands.
 

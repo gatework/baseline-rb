@@ -2,6 +2,7 @@
 
 require_relative "acl"
 require_relative "management_access"
+require_relative "snmp_access"
 require_relative "credential"
 require_relative "configuration_resource"
 
@@ -27,6 +28,7 @@ module Baseline
       @ssh_acl = nil
       @management_ports = { "ssh" => 22, "stelnet" => 22, "telnet" => 23 }
       @snmp_port = 161
+      @snmp_layered, @snmp_global_acl, @snmp_global_acl_supported = false, nil, false
       @direct_acls = {}
     end
 
@@ -110,8 +112,9 @@ module Baseline
     end
 
     # 根据用户、组和团体字归纳 SNMP 暴露面及凭据事实。
-    def record_snmp_access(communities:, users:, groups: nil, port: 161)
+    def record_snmp_access(communities:, users:, groups: nil, port: 161, layered_acls: false, global_acl: nil, global_acl_supported: false)
       @snmp_port = port
+      @snmp_layered, @snmp_global_acl, @snmp_global_acl_supported = layered_acls, CtxParser::Immutable.copy(global_acl), global_acl_supported
       @communities = CtxParser::Immutable.copy(communities)
       @snmp_groups = CtxParser::Immutable.copy(groups || {})
       @snmp_group_issues = []
@@ -120,11 +123,17 @@ module Baseline
           if groups.key?(user[:group])
             group = groups.fetch(user[:group])
             user = user.merge(write: group[:write])
+            if layered_acls
+              user = user.merge(acl_chain: [ group[:acl], user[:acl] ].compact.uniq)
+              if group[:acl_ambiguous] || group[:write].nil?
+                @snmp_group_issues << { code: :snmp_group_ambiguous, fact: "snmp.acl", lines: [] }
+              end
+            end
             unless user[:acl]
               user = user.merge(acl: group[:acl])
               @snmp_group_issues << { code: :snmp_group_ambiguous, fact: "snmp.acl", lines: [] } if group[:acl_ambiguous]
             end
-          elsif !user[:acl]
+          elsif layered_acls || !user[:acl]
             @snmp_group_issues << { code: :snmp_group_unresolved, fact: "snmp.acl", lines: [] }
           end
         end
@@ -261,7 +270,31 @@ module Baseline
           lines: @snmp_users.map { |entry| entry[:line] }.compact)
       end
       bindings = (@communities + @snmp_users).map { |entry| { name: entry[:acl], ports: @snmp_port ? [ @snmp_port ] : nil } }
-      record_acl_sources(bindings, protocol: "udp", fact: "snmp.acl") unless @direct_acls["snmp.acl"]
+      unless @direct_acls["snmp.acl"]
+        @snmp_layered ? record_layered_snmp_access : record_acl_sources(bindings, protocol: "udp", fact: "snmp.acl")
+      end
+    end
+
+    # 分层过滤保留每个主体的更严权限；无本地 ACL 时也不能忽略已有全局过滤。
+    def record_layered_snmp_access
+      global = SnmpAccess.global(acl: @snmp_global_acl, supported: @snmp_global_acl_supported, acls: @acls, port: @snmp_port, issues: @issues)
+      record_fact("snmp.global_access", global)
+      endpoints = SnmpAccess.endpoints(communities: @communities, users: @snmp_users, global_acl: @snmp_global_acl,
+        acls: @acls, port: @snmp_port, issues: @issues)
+      record_fact("snmp.access_endpoints", endpoints)
+      if endpoints.any? { |entry| !entry[:bound] && !entry[:complete] }
+        record_unknown_fact("snmp.acl.bound", code: :acl_binding_unresolved)
+      elsif complete?
+        record_fact("snmp.acl.bound", endpoints.any? && endpoints.all? { |entry| entry[:bound] })
+      end
+      if endpoints.any? && endpoints.all? { |entry| entry[:complete] }
+        sources = Acl.cidrs_from_ranges(endpoints.flat_map { |entry| entry[:sources] }.map { |network| Acl.ipv4_range(network) })
+        lines = endpoints.flat_map { |entry| entry[:acl_chain] }.uniq.flat_map { |name| @acls.fetch(name).rules.map { |rule| rule[:line] } }.compact.uniq
+        record_fact("snmp.acl.sources", sources, lines: lines)
+        record_fact("snmp.acl.restricted", !sources.include?("0.0.0.0/0"), lines: lines)
+      elsif endpoints.any?
+        %w[snmp.acl.sources snmp.acl.restricted].each { |fact| record_unknown_fact(fact, code: :acl_unresolved) }
+      end
     end
 
     # 汇总凭据存储方式及可度量的强度属性。

@@ -79,3 +79,14 @@ Huawei 生成 `acl number`、`acl ... inbound`；IOS 生成命名标准 ACL 和 
 语法依据：[Huawei VTY ACL 配置例子](https://support.huawei.com/enterprise/de/doc/EDOC1100212297/c947deef/example-for-configuring-an-acl-to-limit-telnet-login)、[Cisco IOS XE ACL 配置](https://www.cisco.com/c/en/us/td/docs/switches/lan/c9000/security/acls/acls-configuration-guide/access-control-lists.html)、[Cisco IOS XE VTY VRF 绑定例子](https://www.cisco.com/c/en/us/td/docs/routers/sdwan/configuration/policies/ios-xe-17/policies-book-xe/device-access-policy.pdf)。仍需人工审核固件适配和管理连通性；没有真实设备执行证明。
 
 IOS 标准 ACL 编号按 1–99/1300–1999 校验；命名标识要求以字母开头，使用库既有的单词元允许列表及253字节边界，不将其他协议的63字符限制套入 IOS。格式依据：[Cisco IOS XE ip access-list 命令参考](https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst9500/software/release/17-12/command_reference/b_1712_9500_cr/security_commands.html)。
+
+
+## H3C SNMP 分层来源与声明覆盖
+
+H3C 的用户、组及全局 ACL 会串联过滤；不能用用户 ACL 替代更严格的组 ACL。`snmp.access_endpoints` 对各主体保留 ACL 链、UDP 监听端口、有效来源和完整程度；团体字只用序号作为端点标识，不保留秘密或其摘要。`snmp.global_access` 单独记录全局过滤和命令支持证据。无任何引用且声明完整的主体按 IPv4 来源未限制处理；缺失/损坏/复杂 ACL 仍保留未知。IPv6 ACL 不可误归入 IPv4。
+
+`snmp.group_definitions` 保留安全级别及读/写/通知视图引用，未知选项或重复 ACL 参数不能误报来源已知。视图名、组名可以与选项词同名，必须按参数位置消费。H3C 同名完整 VACM 用户以最后一次声明为准，旧认证、ACL 和凭据记录不得残留；Huawei 的分行配置保持增量语义。命令级 cipher/simple 与每个密钥的格式声明分开分析，普通报告不包含密钥。
+
+全局来源修正创建新 ACL 后才重绑；原团体字、用户、组及共享旧 ACL 均不修改。没有全局命令证据时须明确确认固件支持；未绑定主体需批准实际来源，不能把批准上限直接当作初始允许集合。同一设备多个领域争用新 ACL 标识时按策略冲突受阻。源过滤与协议版本、MIB 权限分别检查，不将关闭 SNMP 作为其他规则的修复手段。
+
+依据：[H3C 全局 SNMP ACL 命令](https://www.h3c.com/en/Support/Resource_Center/EN/Home/Public/00-Public/Technical_Documents/Reference_Guides/Command_References/H3C_CR-24948/13/202601/2739237_294551_0.htm)、[H3C SNMP 用户与组命令](https://www.h3c.com/en/Support/Resource_Center/EN/Home/Public/00-Public/Technical_Documents/Reference_Guides/Command_References/H3C_S6520X_MS4600_CRs_R6628Pxx-10752/11/202407/2215723_294551_0.htm)。命令存在于特定设备参考中不代表所有固件支持；当前只输出人工审核方案，没有设备执行或 NMS 连通性证明。

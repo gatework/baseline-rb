@@ -23,6 +23,20 @@ module Baseline
         record_fact("acl.reserved_numeric_ids", uses.map { |use| use[:id] }.uniq)
       end
 
+      # 全局 SNMP ACL 在组和用户 ACL 之前过滤，独立 IPv6 声明不改变 IPv4 绑定。
+      def snmp_access_options
+        entries = matching_blocks(/\A(?:undo )?snmp-agent acl(?:\s|\z)/).reject { |entry| /\A(?:undo )?snmp-agent acl ipv6(?:\s|\z)/.match?(entry.text) }
+        name = effective_configured_value(/\Asnmp-agent acl\s+(?:name\s+)?(\S+)\z/, entries: entries,
+          family: /\A/, fact: "snmp.global_access", reset: /\Aundo snmp-agent acl\z/)
+        if name && !/\A[0-9]+\z/.match?(name) && !entries.last.text.start_with?("snmp-agent acl name ")
+          record_unknown_fact("snmp.global_access", entries)
+        end
+        { layered_acls: true, global_acl: name, global_acl_supported: entries.any? }
+      end
+
+      # 同名 VACM 用户的完整声明以最后一次为准，不从旧声明保留认证或 ACL。
+      def snmp_user_definitions_replace? = true
+
       # Comware 范围内任一非默认登录设置会使协议及认证同时取范围级值。
       # 未出现的范围级默认值仍保留未知，不从 class 另一项推导已通过。
       def vty_login_entries(defaults, local)

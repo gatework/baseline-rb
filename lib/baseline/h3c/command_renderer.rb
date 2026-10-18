@@ -16,11 +16,14 @@ module Baseline
       RESOURCE_KINDS = %w[syslog.destination ntp.association].freeze
       NTP_STYLE = :h3c
       ACCESS_STYLE = :h3c
+      SNMP_GLOBAL_ACL = "snmp-agent acl"
       VTY_PROTOCOL_COMMAND = "protocol inbound ssh"
       SNMP_VERSION_REMOVAL = "undo snmp-agent sys-info version"
       SSH_DISABLE_COMMAND = "undo ssh server enable"
       PREREQUISITES = CtxParser::Immutable.copy({ "ssh.vty_ssh_only" => { "ssh.enabled" => true },
-        "snmp.versions" => { "snmp.enabled" => true, "snmp.v3_auth_priv" => true } })
+        "snmp.versions" => { "snmp.enabled" => true, "snmp.v3_auth_priv" => true },
+        "snmp.acl_bound" => { "snmp.enabled" => true }, "snmp.acl_restricted" => { "snmp.enabled" => true },
+        "snmp.sources" => { "snmp.enabled" => true } })
 
       private
 
