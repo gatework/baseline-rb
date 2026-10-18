@@ -4,6 +4,10 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+- Derive Comware/VRP TACACS usage from selected-domain AAA bindings, preserving ordered methods, local fallback/none, role endpoints, VTY evidence and provenance.
+- Reject stale domain selections and malformed Huawei method tails; model Comware login/default inheritance and explicitly represented built-in domains.
+- Provide object-specific management AAA approval/evidence requirements without selecting unapproved candidate groups or generating authentication changes.
+
 - Keep only the final H3C primary TACACS server per responsibility, apply unqualified resets, and retain multiple secondary servers; replaced primary addresses cannot inflate redundancy or remain as resources.
 
 - Reduce Comware/VRP TACACS scheme keys in order across replacement, withdrawal, and reopened/deleted schemes; exclude stale credentials and resources.

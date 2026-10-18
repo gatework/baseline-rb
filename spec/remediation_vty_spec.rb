@@ -55,7 +55,7 @@ RSpec.describe "VTY protocol remediation" do
     policy = Baseline::Policy.new("version" => 1, "checks" => { "ssh.vty_aaa" => { "expected" => true } })
     result = Baseline::Remediation.new(policy: policy).call(configuration: "sysname LAB\nline vty 0 4\n authentication-mode password\n protocol inbound ssh\n", platform: "h3c", complete: true)
     expect(result.status).to eq(:blocked)
-    expect(result.checks.first.requirements).to include("approved_authentication_chain")
+    expect(result.checks.first.requirements).to include("approved_ordered_method_chain")
   end
 
   it "withholds all range edits when VTY identities overlap" do

@@ -89,6 +89,19 @@ module Baseline
       true
     end
 
+    # 引用归约读取独立的不可变资源快照，后续覆盖或移除不改变已读证据。
+    def resources_for(kind)
+      CtxParser::Immutable.copy(@resources.values.select { |resource| resource[:kind] == kind })
+    end
+
+    # 只查询显式诊断，不把尚未记录的值误称为已知事实。
+    def unresolved?(path)
+      @issues.any? do |issue|
+        scope = issue[:fact]
+        scope && (path == scope || path.start_with?("#{scope}.") || scope.start_with?("#{path}."))
+      end
+    end
+
     # 声明当前适配器确实解析的资源族，空集合才可解释为明确不存在。
     def declare_resource_kind(kind)
       raise ArgumentError, "Unknown configuration resource kind" unless ResourceSchema::FACTS.key?(kind)

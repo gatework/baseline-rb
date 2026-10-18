@@ -2,11 +2,13 @@
 
 require_relative "../parser"
 require_relative "../snmp_options"
+require_relative "authentication"
 
 module Baseline
   module Comware
     # 复用 Comware 与 VRP 结构，由厂商子类选择账号、SSH 和 TACACS 语法。
     class Parser < Baseline::Parser
+      include Authentication
       private
 
       # 解析管理访问暴露检查使用的有序 ACL 定义。
@@ -318,30 +320,7 @@ module Baseline
         record_fact("tacacs.key_slots", key_slots)
         record_fact("tacacs.schemes", schemes)
         record_fact("tacacs.servers", schemes.values.flat_map { |entry| entry[:servers] }.uniq)
-        domains = authentication_domains
-        methods = domains.flat_map { |entry| entry.children }
-        %w[authentication authorization accounting].each do |kind|
-          relevant = matching_blocks(/\A(?:undo )?#{kind}\s+login\b/, methods)
-          relevant = matching_blocks(/\A(?:undo )?#{kind}\s+default\b/, methods) if relevant.empty?
-          relevant = relevant.last(1)
-          if relevant.any? && !/\A#{kind}\s+(?:login|default)\s+(?:(?:hwtacacs-scheme|radius-scheme)\s+\S+(?:\s+(?:local|none))?|local|none)\z/.match?(relevant.first.text)
-            record_unknown_fact("tacacs.#{kind == 'authentication' ? 'login' : kind}", relevant)
-            next
-          end
-          refs = relevant.filter_map { |entry| entry.text[/\A#{kind}\s+(?:login|default)\s+hwtacacs-scheme\s+(\S+)/, 1] }
-          refs.concat(domain_tacacs_references(kind, domains))
-          key = kind == "authentication" ? "login" : kind
-          if refs.any? && refs.any? { |name| !schemes.key?(name) || schemes[name][:server_types].fetch(kind, []).empty? }
-            record_unknown_fact("tacacs.#{key}", relevant, code: :tacacs_scheme_unresolved)
-          else
-            used = refs.any?
-            if used && key == "login"
-              record_unknown_fact("tacacs.login", code: :vty_authentication_unknown) if @fact_builder.vtys.empty? || @fact_builder.vtys.any? { |vty| vty[:authentication].nil? }
-              used &&= @fact_builder.vtys.any? && @fact_builder.vtys.all? { |vty| %w[scheme aaa].include?(vty[:authentication]) }
-            end
-            record_fact("tacacs.#{key}", used, relevant) if @fact_builder.complete? || used
-          end
-        end
+        record_authentication_bindings(schemes)
         unless schemes.empty?
           states = key_slots.map { |slot| slot[:present] }
           lines = key_slots.flat_map { |slot| slot[:lines] }.uniq
@@ -437,17 +416,6 @@ module Baseline
           attributes: complete ? attributes : {}, entry: entry, negative: negative, complete: complete)
       end
 
-      # 解析认证域引用及其服务器组。
-      def authentication_domains
-        name = last_configured_value(/\Adomain default enable\s+(\S+)\z/)
-        unless name
-          %w[login authorization accounting].each { |kind| record_unknown_fact("tacacs.#{kind}", code: :authentication_domain_unknown) }
-          return []
-        end
-        matching_blocks(/\Adomain #{Regexp.escape(name)}\z/)
-      end
-      # 解析 VRP 认证域引用，避免将 VRP 语法应用到 Comware。
-      def domain_tacacs_references(_kind, _domains) = []
       # 返回当前平台修改 SNMP 监听端口的命令模式。
       def snmp_port_command = "snmp-agent port"
 

@@ -118,3 +118,15 @@ Comware/VRP 的同名方案或模板重新进入会合并声明；整组撤销�
 语法依据：[H3C Comware 7 key/undo key 命令](https://www.h3c.com/en/Support/Resource_Center/EN/Home/Public/00-Public/Technical_Documents/Reference_Guides/Command_References/H3C_S6520X_MS4600_CRs_R6628Pxx-10752/09/202407/2215673_294551_0.htm)、[Huawei 模板共享密钥撤销](https://info.support.huawei.com/hedex/api/pages/EDOC1100363264/AEN0403J/06/resources/command/yunshan/HWTACACS-SERVER-SHARED-KEY%28HWTACACSOM%29.html)。Comware 旧版本带秘密参数的撤销形式未按 Comware 7 处理；未知形式保留未知，不声称跨版本验证。
 
 H3C 每种认证/授权/计费职责的主服务器按单槽位归约，替换和无地址 `undo primary <role>` 在提取地址/资源前生效；被替换地址不能再充当冗余服务器或密钥消费者。多台 secondary 和独立职责保持分离，此单主槽位规则不跨平台套用到 Huawei。依据：[H3C 主备服务器数量与命令](https://wwwsg-proxy.h3c.com/en/Support/Resource_Center/EN/Home/Wireless/00-Public/Configure___Deploy/Configuration_Guides/H3C_AC_CG_R5426P02/13/202104/1399926_294551_0.htm)。
+
+## 管理域的 AAA / TACACS 绑定证据
+
+Comware/VRP 的 `aaa.bindings` 为选中的默认管理域保留三类职责的有序方法、域/方案、TACACS 组及端点引用、来源行和登录 VTY。`local_fallback` 只表示方法列表声明了本地后备；`allows_none` 单独标记不认证/不授权/不计费的退路。两者均不证明本地账号、权限或恢复通道可用。`complete` 表示此模型中的域、方法及 TACACS 使用链可解析，不证明设备连通性、密钥正确或其他 RADIUS/LDAP 服务可用。
+
+域选择按最后声明归约，损坏语句不沿用旧选择；选中域不存在时为 unknown，不能据此证明未使用 TACACS。支持 Comware `domain name` 形式、同域/方案重新进入，以及按名称不区分大小写解析方案引用。Comware 的 login 方法撤销恢复域 default，default 撤销恢复文档中的本地方法；完整输入缺省选择 system/VRP default_admin 时仍要求对应域在模型中明确存在，不凭空补造域配置。Huawei 模式必须完整消费，撤销、未知尾部和矛盾 local/local-case 不能靠旧值或首词产生通过；计费模式限制为当前已支持的单一方法。
+
+TACACS 标量使用检查从同一绑定证据归纳，来源包括域选择、方法、方案、实际服务器和 VTY 行。端点未完整解析时不确认其引用可用。现阶段只描述选中的管理域，尚不是所有域、显式登录域或其他厂商的完整共享引用清单，因此不据此更新/删除共享认证对象。
+
+`tacacs.login/authorization/accounting` 和 `ssh.vty_aaa` 的审核结果可列出具体绑定、缺少的域/方法/端点/VTY 证据、当前候选服务器组以及批准链、材料和本地恢复前提。候选组不等于批准目标；普通 AAA VTY 检查不强制使用 TACACS，也可批准本地 AAA 方案。当前检查仍 blocked，能力查询仍将认证链命令生成标为 unsupported；这些人工要求不表示已有自动切换或完整 `bindings` 策略写入支持。参见[认证链审核示例](../examples/remediation_authentication.rb)。
+
+依据：[H3C 登录方法、默认继承及有序后备](https://www.h3c.com/en/Support/Resource_Center/EN/Home/Public/00-Public/Technical_Documents/Reference_Guides/Command_References/H3C_CR-35328/13/202609/2929796_294551_0.htm)、[H3C 默认域选择与撤销](https://www.h3c.com/en/d_202301/1749967_294551_0.htm)、[Huawei AAA 模式和管理域选择](https://support.huawei.com/enterprise/en/doc/EDOC1100412529/c0449dc0/aaa-configuration-commands)。当前语法范围和未建模默认值仍须按设备版本核实，不代表所有固件验证通过。

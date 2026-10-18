@@ -4,6 +4,23 @@ require_relative "spec_helper"
 require "baseline"
 
 RSpec.describe Baseline::FactBuilder do
+  it "provides owned resource snapshots and scoped unresolved evidence for reference analysis" do
+    facts = described_class.new(complete: true)
+    resource = Baseline::ConfigurationResource.new(kind: "tacacs.endpoint", identity: { "address" => "192.0.2.30", "role" => "authentication" },
+      scope: { "group" => "OPS" }, lines: [ 4 ])
+    facts.record_resource(resource)
+    snapshot = facts.resources_for("tacacs.endpoint")
+    expect(snapshot).to all(be_frozen)
+    expect(snapshot.first[:identity]).to be_frozen
+    facts.record_resource(resource, remove: true)
+    expect(snapshot.size).to eq(1)
+    expect(facts.resources_for("tacacs.endpoint")).to eq([])
+    facts.record_unknown_fact("tacacs.keys_present")
+    expect(facts.unresolved?("tacacs.servers")).to be(false)
+    facts.record_unknown_fact("tacacs")
+    expect(facts.unresolved?("tacacs.servers")).to be(true)
+  end
+
   it "tracks credential source lines without collapsing credentials from the same line" do
     facts = described_class.new(complete: true)
     expect(facts.credential_recorded?(7)).to be(false)

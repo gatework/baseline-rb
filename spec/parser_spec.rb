@@ -74,7 +74,7 @@ RSpec.describe Baseline::Audit do
 
   it "does not count dangling or inactive TACACS definitions as management authentication" do
     config = parse("h3c", fixture("h3c").sub("domain default enable OPS", "domain default enable UNUSED")).configuration
-    expect(config.fact("tacacs.login")).to be(false)
+    expect(config.fact_known?("tacacs.login")).to be(false)
     config = parse("cisco_ios", fixture("cisco_ios").sub("server name AAA2", "server name MISSING")).configuration
     expect(config.fact_known?("tacacs.login")).to be(false)
     config = parse("cisco_ios", fixture("cisco_ios").sub("login authentication default", "login local")).configuration

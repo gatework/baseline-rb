@@ -37,11 +37,15 @@ module Baseline
         elsif supported && NtpRemediation::IDS.include?(id)
           requirements = [ "approved_ntp_associations", "maximum_targets_for_net_additions", "authentication_dependencies" ]
           requirements += [ "managed_scopes" ] if id == "ntp.associations"
+        elsif capability[:status] != :unsupported && AuthenticationRemediation::ROLES.key?(id) && %w[h3c huawei].include?(name)
+          requirements = AuthenticationRemediation.requirements_for(id)
         end
         reason = if capability[:status] != :unsupported && CredentialRemediation::IDS.include?(id)
           id == "credentials.storage" ? :credential_rotation_required : :credential_strength_verification_required
         elsif capability[:status] != :unsupported && id == "tacacs.keys" && %w[h3c huawei].include?(name)
           :credential_material_required
+        elsif capability[:status] != :unsupported && AuthenticationRemediation::ROLES.key?(id) && %w[h3c huawei].include?(name)
+          :authentication_chain_approval_required
         else
           supported ? nil : capability[:reason] || :remediation_unmodeled
         end

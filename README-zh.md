@@ -196,3 +196,5 @@ MIT，见 [LICENSE](LICENSE)。
 凭据审核方案在 `check.details[:credentials]` 中逐对象列出不安全存储或可观察的弱口令，保留来源行、用途、具体偏差、材料及消费者/恢复依赖。密文强度要求外部证据，不直接判弱；SNMP 认证与加密材料分别标识。此类检查仍受阻，普通方案不包含替换秘密或占位命令；能力查询继续标记秘密命令生成不支持，并解释人工材料要求。参见[凭据审核示例](examples/remediation_credentials.rb)。
 
 Comware/VRP TACACS 密钥按替换、撤销及方案重新进入后的最终状态归纳。`check.details[:key_slots]` 分别列出 H3C 认证/授权/计费及 Huawei 共享材料，关联已知端点并提示对端、AAA 引用和恢复前提。损坏状态需补证，检查仍受阻，不生成秘密命令。当前模型描述方案密钥，不代表已支持端点私有密钥继承。参见[TACACS 材料示例](examples/remediation_tacacs.rb)。
+
+Comware/VRP `aaa.bindings` 描述选中管理域的有序方法、TACACS 职责/组/端点引用、来源行及登录 VTY；本地后备与 `none` 分开记录，均不代表恢复访问已经可用。TACACS 使用检查复用这些证据，拒绝旧值和损坏引用。人工方案列出具体链路证据与批准前提，不自动挑选候选组或生成认证切换命令。当前覆盖选中域，尚非所有域/共享引用的完整清单。参见[AAA 审核示例](examples/remediation_authentication.rb)。

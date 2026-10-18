@@ -35,29 +35,52 @@ module Baseline
       def snmp_port_command = "snmp-agent udp-port"
       # 从实际所属配置作用域中选取 AAA 声明。
       def aaa_configuration_entries = matching_blocks(/\Aaaa\z/).flat_map(&:children)
-      # 解析认证域引用及其服务器组。
-      def authentication_domains
-        name = last_configured_value(/\Adomain\s+(\S+)\s+admin\z/)
-        unless name
-          %w[login authorization accounting].each { |kind| record_unknown_fact("tacacs.#{kind}", code: :authentication_domain_unknown) }
-          return []
+      # VRP 管理域选择独立于 Comware，损坏或撤销不得回落到旧选择。
+      def authentication_binding_domain
+        entry = matching_blocks(/\A(?:undo )?domain\b.*\badmin(?:\s|\z)/).last
+        name = if entry&.text == "undo domain admin" || entry.nil? && @fact_builder.complete?
+          "default_admin"
+        else
+          entry&.text&.[](/\Adomain (\S+) admin\z/, 1)
         end
-        aaa_configuration_entries.select { |entry| entry.text == "domain #{name}" }
+        selected_authentication_domain(name, aaa_configuration_entries, lines: entry ? [ entry.line ] : [])
       end
 
-      # 解析 VRP 认证域引用，避免将 VRP 语法应用到 Comware。
-      def domain_tacacs_references(kind, domains)
-        domains.filter_map do |domain|
-          template = last_configured_value(/\Ahwtacacs-server\s+(\S+)\z/, domain.children)
-          scheme = last_configured_value(/\A#{kind}-scheme\s+(\S+)\z/, domain.children)
-          next unless template && scheme
-          definition = aaa_configuration_entries.find { |entry| entry.text == "#{kind}-scheme #{scheme}" }
-          unless definition
-            record_unknown_fact("tacacs.#{kind == 'authentication' ? 'login' : kind}", [ domain ], code: :tacacs_scheme_unresolved)
-            next
-          end
-          template if last_configured_value(/\A#{kind}-mode\s+(.+)\z/, definition.children).to_s.split.first == "hwtacacs"
+      # VRP 域引用命名方案和服务器模板；方法必须完整解析，不能只取首个词。
+      def authentication_binding_chain(role, domain)
+        entries = domain[:entries]
+        ref = matching_blocks(/\A(?:undo )?#{role}-scheme(?:\s|\z)/, entries).last
+        name = ref&.text&.[](/\A#{role}-scheme (\S+)\z/, 1)
+        template = matching_blocks(/\A(?:undo )?hwtacacs-server(?:\s|\z)/, entries).last
+        group = template&.text&.[](/\Ahwtacacs-server (\S+)\z/, 1)
+        lines = [ ref, template ].compact.map(&:line)
+        sections, valid = name ? authentication_named_sections(aaa_configuration_entries, "#{role}-scheme", name) : [ [], false ]
+        unless valid && sections.any?
+          return { methods: nil, lines: lines, scheme: name, reason: :authentication_list_unresolved }
         end
+        entry = matching_blocks(/\A(?:undo )?#{role}-mode(?:\s|\z)/, sections.flat_map(&:children)).last
+        lines.concat(sections.map(&:line))
+        lines << entry.line if entry
+        if entry.nil? || entry.text == "undo #{role}-mode"
+          # VRP 认证/授权缺省本地；计费缺省在此不跨型号推断。
+          methods = role == "accounting" ? nil : [ { kind: "local" } ]
+          return { methods: methods, lines: lines, scheme: name, inherited: true, reason: methods ? nil : :unsupported_authentication_method }
+        end
+        match = /\A#{role}-mode (.+)\z/.match(entry.text)
+        tokens = match && match[1].split
+        allowed = case role
+        when "authentication" then %w[hwtacacs radius local local-case none]
+        when "authorization" then %w[hwtacacs local local-case if-authenticated none]
+        else %w[hwtacacs radius none]
+        end
+        valid = tokens && tokens.any? && tokens.uniq == tokens && (tokens - allowed).empty? && (!tokens.include?("none") || tokens.last == "none")
+        valid &&= !(tokens.include?("local") && tokens.include?("local-case"))
+        valid &&= tokens.one? if role == "accounting"
+        methods = valid ? tokens.map { |token| token == "hwtacacs" ? { kind: "tacacs", group: group } : { kind: token == "local-case" ? "local" : token } } : nil
+        reason = methods ? nil : :unsupported_authentication_method
+        reason = :tacacs_scheme_unresolved if methods&.any? { |method| method[:kind] == "tacacs" } && !ResourceSchema.token?(group)
+        analyze(entry) { true } if methods
+        { methods: reason ? nil : methods, lines: lines, scheme: name, reason: reason }
       end
 
       # 提取本地账号角色及凭据存储属性。

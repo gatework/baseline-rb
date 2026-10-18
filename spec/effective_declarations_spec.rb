@@ -191,7 +191,7 @@ RSpec.describe "Baseline effective declarations" do
       expect(audit("h3c", body + selected + local, checks).findings.first.status).to eq(:fail)
       expect(audit("h3c", body + local + selected, checks).findings.first.status).to eq(:pass)
       expect(audit("h3c", body + selected + " #{kind} login\n", checks).findings.first.status).to eq(:unknown)
-      expect(audit("h3c", body + selected + " undo #{kind} login\n", checks).findings.first.status).to eq(:unknown)
+      expect(audit("h3c", body + selected + " undo #{kind} login\n", checks).findings.first.status).to eq(:fail)
       expect(audit("h3c", body + selected.sub("login", "default") + local, checks).findings.first.status).to eq(:fail)
     end
   end
