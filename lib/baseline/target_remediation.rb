@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "ipaddr"
 require_relative "configuration_operation"
 
 module Baseline
@@ -52,6 +53,7 @@ module Baseline
         attributes = current_by_key[key(object)]&.fetch("attributes", {}) || {}
         object.merge("attributes" => attributes.merge(object.fetch("attributes", {})))
       end
+      validate_native_address_identities!(current, desired)
       projected = current.reject { |object| managed_object?(object, managed) } + desired
       check_constraints!(applicable, projected)
       risk = applicable.max_by { |item| %w[low medium high critical].index(item.severity) }.severity
@@ -83,6 +85,31 @@ module Baseline
     def legacy_identity(address) = { "address" => address }
     def countable_objects(objects) = objects
     def managed_object?(object, managed) = managed.include?(object["scope"])
+
+    # 同一 IP 的不同文本不能用于新增再删除；原生地址归一化未完成前明确受阻。
+    def validate_native_address_identities!(current, desired)
+      observed = current.group_by { |object| native_address_key(object) }
+      if observed.any? { |_, values| values.size > 1 }
+        raise Blocked.new(:native_resource_identity_unresolved, requirements: [ "canonical_resource_identity" ])
+      end
+      wanted = desired.map { |object| native_address_key(object) }
+      raise Blocked, :policy_conflict unless wanted.uniq.size == wanted.size
+      desired.each_with_index do |object, index|
+        old = observed[wanted[index]]&.first
+        if old && old["identity"] != object["identity"]
+          raise Blocked.new(:native_resource_identity_unresolved, requirements: [ "canonical_resource_identity" ])
+        end
+      end
+    end
+
+    # 只确认 IP 别名等价，名称型身份、职责和作用域保持原有厂商契约。
+    def native_address_key(object)
+      identity = object["identity"]
+      return key(object) unless identity.key?("address")
+      [ object["scope"], identity.merge("address" => IPAddr.new(identity["address"]).to_s) ]
+    rescue IPAddr::Error
+      key(object)
+    end
 
     # 容量是调用方提供的设备证据，不从已有目标数或厂商名称猜测。
     def order_for_capacity(operations, current, projected, findings)

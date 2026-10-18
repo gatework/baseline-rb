@@ -80,4 +80,14 @@ RSpec.describe "NTP authenticated association remediation" do
     expect(engine.call(configuration: after, platform: "huawei", complete: true).status).to eq(:noop)
     expect(plan(text).operations).to be_empty
   end
+
+  it "does not add an unkeyed target when an explicit authentication switch is unresolved" do
+    definition = Baseline::Policy.new("version" => 1, "checks" => { "ntp.servers" => {
+      "expected" => [ "192.0.2.12" ], "remediation" => { "maximum_targets" => 3 }
+    } })
+    text = "sysname LAB\nntp-service authentication enable unsupported-option VALUE\nntp-service unicast-server 192.0.2.10\n"
+    result = Baseline::Remediation.new(policy: definition).call(configuration: text, platform: "h3c", complete: true)
+    expect(result.checks.first.reason).to eq(:ntp_authentication_dependency)
+    expect(result.operations).to be_empty
+  end
 end

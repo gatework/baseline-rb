@@ -4,6 +4,8 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+- Block Syslog/NTP IP alias transitions and duplicate native identities before capacity planning, preventing an add/remove pair from deleting the approved endpoint; preserve distinct roles and scopes. Protect TACACS observed fallback/capacity counts against the same aliases. Explicit unresolved NTP authentication evidence also blocks new unkeyed targets.
+
 - Record final Comware/VRP NTP key material metadata, trust state, association configuration prerequisites and sanitized credential evidence; reject stale material/trust/switch updates without masking independently proven unsafe storage.
 - Reuse existing trusted NTP keys for newly approved associations only with external peer-compatibility verification; retain renderer dependency guards and verify convergence through an independent command model.
 

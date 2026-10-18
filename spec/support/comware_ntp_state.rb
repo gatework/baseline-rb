@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "ipaddr"
+
 # 独立的测试状态模型，仅接受已确认的 Comware/VRP 时间关联命令。
 class ComwareNtpState
   TARGET = /\A(?:undo )?ntp-service (?:ipv6 )?unicast-(server|peer) (?:vpn-instance (\S+) )?(\S+)(?:\s|\z)/
@@ -17,7 +19,7 @@ class ComwareNtpState
       indexes = @lines.each_index.select do |index|
         # 合成配置使用顶层零缩进，不能误改接口内命令。
         old = TARGET.match(@lines[index])
-        old && old.captures == target.captures
+        old && native_identity(old) == native_identity(target)
       end
       insertion = indexes.first || @lines.index { |line| line.strip == "return" } || @lines.size
       indexes.reverse_each { |index| @lines.delete_at(index) }
@@ -28,4 +30,16 @@ class ComwareNtpState
   end
 
   def configuration = @lines.join
+
+  private
+
+  # IP 的文本别名由原生端点识别为同一身份，不能模拟成两条独立路径。
+  def native_identity(match)
+    address = begin
+      IPAddr.new(match[3]).to_s
+    rescue IPAddr::Error
+      match[3].downcase
+    end
+    [ match[1], match[2] || "default", address ]
+  end
 end

@@ -27,6 +27,7 @@ module Baseline
         raise Blocked.new(:resource_unresolved, requirements: [ "resolved_tacacs_reference_inventory" ])
       end
       current = evidence.fact("tacacs.endpoints")
+      validate_native_address_identities!(current, current)
       schemes = evidence.fact("tacacs.schemes")
       bindings = domain_bindings(evidence, schemes)
       managed = rule.managed_scopes

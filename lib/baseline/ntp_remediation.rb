@@ -13,7 +13,8 @@ module Baseline
       result = super
       auth = audit.findings.find { |item| item.id == "ntp.authentication" && item.status != :not_applicable }
       required = auth&.expected == true || audit.configuration.fact_known?("ntp.authentication") && audit.configuration.fact("ntp.authentication") == true
-      if required && result.operations.any? { |operation| operation.action == :add && !operation.after.key?("key_id") }
+      unresolved_switch = audit.configuration.issues.any? { |issue| issue[:fact] == "ntp.authentication" }
+      if (required || unresolved_switch) && result.operations.any? { |operation| operation.action == :add && !operation.after.key?("key_id") }
         raise Blocked, :ntp_authentication_dependency
       end
       verified = verify_key_dependencies!(result.operations, audit.configuration)

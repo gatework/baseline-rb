@@ -25,6 +25,7 @@ module Baseline
       structured_policy_unresolved: "更精确的对象基线尚未解决，不能回退生成较粗的配置",
       resource_unresolved: "配置对象证据尚未完整解析，不能据此增删",
       policy_conflict: "批准参数或跨指标约束互相冲突，不能合并生成配置",
+      native_resource_identity_unresolved: "多个地址写法指向同一原生端点，需先归一化对象身份，不能按独立目标增删或估算容量",
       capacity_confirmation_required: "新增目标前需要确认设备目标容量，不能假定有空余槽位",
       capacity_exceeded: "批准的最终目标数量超出已确认容量",
       capacity_evidence_conflict: "当前对象数量与提供的容量证据不一致",

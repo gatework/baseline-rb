@@ -214,4 +214,12 @@ RSpec.describe "H3C TACACS target remediation" do
       expect(plan(after, targets).status).to eq(:noop)
     end
   end
+
+  it "does not treat duplicate observed native addresses as two fallback paths or capacity slots" do
+    text = source("192.0.2.30", [ "ipv6 2001:db8::31", "ipv6 2001:0db8:0:0:0:0:0:31" ])
+      .lines.reject { |line| line.start_with?(" primary authentication") }.join
+    result = plan(text, [ target("192.0.2.32", "secondary") ])
+    expect(result.checks.first.reason).to eq(:native_resource_identity_unresolved)
+    expect(result.operations).to be_empty
+  end
 end
