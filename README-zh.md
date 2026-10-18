@@ -79,7 +79,9 @@ H3C 日志目标规划会同时检查数量、地址和对象规则，拒绝冲�
 
 H3C SNMP 版本收紧仅删除未批准版本，要求当前已启用 v3、具备 authPriv 用户及已解析的组引用，并在 `snmp.versions` 规则中声明 `remediation: {existing_v3_access_verified: true}`，确认人工已验证现有 v3 管理路径。此值不能由备份推定；用户或组撤销语法尚未完整归约时保持未知并受阻。操作按高风险呈现，不删除用户、community 或 ACL，不新建 v3 用户，也不删除全部活动版本。其他厂商版本收紧及完整 SNMP 权限/认证修正仍待实现。
 
-H3C `line vty` 的 IPv4 管理 ACL 现可按范围生成“先创建专用基本 ACL，再重绑”的方案。必须提供 `management.sources` 批准上限，并在相关规则的 `remediation.access_targets` 中声明 `{endpoint: "line vty 0 4", acl: "2002"}`；首次绑定还需 `sources: ["192.0.2.10/32"]`。现有许可只收紧到与上限的交集，不把批准上限全部开放；明确提供的来源也不能扩大现有许可。2000–2999 的新标识若已定义或出现在已识别 ACL/packet-filter 引用中则受阻，不修改旧 ACL 或其 SNMP/业务引用。交集为空时不自动拒绝全部来源，需显式批准 `sources: []`。协议/端口差异无法保留、范围交叠或证据未解决时整项受阻；其他厂商、IPv6、传统 `user-interface` 语法及复杂 ACL 呈现仍待实现。参见[完整例子](examples/remediation_access.rb)。
+IPv4 管理 ACL 可为 H3C `line vty`、Huawei `user-interface vty`、IOS `line vty` 生成“先创建专用 ACL，再重绑”的方案。H3C/Huawei 使用全新 2000–2999 基本 ACL，IOS 使用全新标准 ACL：编号 1–99/1300–1999，或以字母开头且通过库词元白名单（最多253字节）的名称。必须提供 `management.sources` 批准上限，并在相关规则的 `remediation.access_targets` 中声明 `{endpoint: "line vty 0 4", acl: "2002"}`；首次绑定还需明确 `sources`。IOS 保留已有 `vrf-also`，首次绑定须另行批准布尔 `vrf_also`；不会借来源收紧改变 VRF 范围。
+
+现有许可只收紧到与上限的交集，明确提供的来源也不能扩大当前许可。批准 ACL 标识只要在本次输入任意位置出现，就不能视为全新；这种保守检查也覆盖未建模命令、注释和横幅，数字标识会识别前导零。方案不修改旧 ACL 及其 SNMP/业务引用。交集为空需显式批准 `sources: []`；范围交叠、未解决证据或不能保留的协议/端口差异会阻止整项操作。NX-OS/防火墙、IPv6、H3C 传统 `user-interface` 和复杂 ACL 呈现仍待实现。参见[例子](examples/remediation_access.rb)。
 
 详细厂商语义、历史验证记录和 Motor 专用集成说明保留在[架构参考](docs/architecture-zh.md)。其中宿主集成代码需要 Motor，不属于独立 gem API。适配层位于 [Motor 仓库](https://github.com/gatework/motor/tree/main/backend/lib) 的 `backend/lib/baseline`、`backend/lib/vxlan` 和 `backend/lib/wireless`。
 

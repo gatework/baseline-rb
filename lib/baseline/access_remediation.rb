@@ -10,8 +10,8 @@ module Baseline
     Result = Data.define(:operations, :details)
 
     # 使用同一审计所绑定的批准参数。
-    def initialize(policy:)
-      @policy = policy
+    def initialize(policy:, reserved_identifiers: nil)
+      @policy, @reserved_identifiers = policy, reserved_identifiers
     end
 
     # 所有范围先通过检查，才把创建及绑定操作一起交给呈现器。
@@ -31,8 +31,8 @@ module Baseline
       block!(:access_endpoint_unresolved) if ranges.any?(&:nil?) || ranges.sort.each_cons(2).any? { |left, right| left.last >= right.first }
       targets = approved_targets(applicable)
       block!(:access_endpoint_unresolved) unless (targets.keys - grouped.keys).empty?
-      block!(:access_endpoint_unresolved) unless evidence.fact_known?("acl.reserved_numeric_ids") && evidence.fact_known?("acl.identifiers")
-      occupied = (evidence.fact("acl.reserved_numeric_ids") + evidence.fact("acl.identifiers")).map { |value| /\A\d+\z/.match?(value) ? value.to_i.to_s : value }
+      block!(:acl_reference_evidence_required) unless @reserved_identifiers.is_a?(Array) && evidence.fact_known?("acl.identifiers")
+      occupied = (@reserved_identifiers + evidence.fact("acl.identifiers")).map { |value| /\A[0-9]+\z/.match?(value) ? value.sub(/\A0+(?=[0-9])/, "") : value }
       operations, details = [], []
       grouped.each do |name, entries|
         target = targets[name]
@@ -46,12 +46,12 @@ module Baseline
         block!(:approved_acl_identity_required) unless target
         acl = target.fetch("acl")
         block!(:acl_identity_in_use) if occupied.any? { |value| value.casecmp?(acl) }
-        old = evidence.fact("ssh.vty").find { |entry| entry[:name] == name }&.fetch(:acl, nil)
+        before_binding, after_binding = binding_attributes(evidence, name, acl, target)
         risk = applicable.any? { |item| item.severity == "critical" } ? "critical" : "high"
         operations << ConfigurationOperation.new(kind: "access.acl", identity: { "name" => acl }, before: nil,
           after: { "sources" => desired }, action: :add, phase: :create, risk: risk)
-        operations << ConfigurationOperation.new(kind: "access.binding", identity: { "name" => name }, before: old ? { "acl" => old } : {},
-          after: { "acl" => acl }, action: :replace, phase: :update, risk: risk)
+        operations << ConfigurationOperation.new(kind: "access.binding", identity: { "name" => name }, before: before_binding,
+          after: after_binding, action: :replace, phase: :update, risk: risk)
         details << { endpoint: name, before: entries.map { |entry| { transport: entry[:transport], sources: entry[:sources] } },
           after: desired, initial_binding: entries.any? { |entry| !entry[:bound] }, acl: acl }
       end
@@ -60,6 +60,28 @@ module Baseline
     end
 
     private
+
+    # IOS 的 VRF 可达范围与来源许可不同，已有修饰符必须保留，首次绑定需明确批准。
+    def binding_attributes(evidence, name, acl, target)
+      vty = evidence.fact("ssh.vty").find { |entry| entry[:name] == name }
+      old = vty&.fetch(:acl, nil)
+      before, after = old ? { "acl" => old } : {}, { "acl" => acl }
+      if evidence.platform == "cisco_ios"
+        previous = vty[:acl_vrf_also]
+        if old
+          block!(:access_endpoint_unresolved) unless [ true, false ].include?(previous)
+          block!(:access_vrf_scope_conflict) if target.key?("vrf_also") && target["vrf_also"] != previous
+          before["vrf_also"] = previous
+          after["vrf_also"] = previous
+        else
+          block!(:access_vrf_scope_required) unless target.key?("vrf_also")
+          after["vrf_also"] = target.fetch("vrf_also")
+        end
+      elsif target.key?("vrf_also")
+        block!(:unsupported_setting)
+      end
+      [ before, after ]
+    end
 
     # 基本 ACL 只有一组允许来源；目标不能合并原本不同的协议许可而扩大其中任一项。
     def desired_sources(entries, target, limits)

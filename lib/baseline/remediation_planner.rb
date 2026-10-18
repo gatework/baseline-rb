@@ -33,8 +33,9 @@ module Baseline
     })
 
     # 与本次审计绑定相同策略，禁止把其他策略的报告拿来生成方案。
-    def initialize(policy:, renderer:)
+    def initialize(policy:, renderer:, reserved_acl_identifiers: nil)
       @policy, @renderer = policy, renderer
+      @reserved_acl_identifiers = reserved_acl_identifiers && CtxParser::Immutable.copy(reserved_acl_identifiers)
     end
 
     # 编译每项结果；独立可生成操作不受其他指标缺参影响。
@@ -86,7 +87,7 @@ module Baseline
 
     # 整个访问领域先完整渲染，再加入创建及重绑；不能只暴露前半段方案。
     def compile_access(finding, audit, operations, steps)
-      result = AccessRemediation.new(policy: @policy).call(finding, audit)
+      result = AccessRemediation.new(policy: @policy, reserved_identifiers: @reserved_acl_identifiers).call(finding, audit)
       rendered = result.operations.flat_map { |operation| @renderer.render(operation) }
       operations.concat(result.operations)
       steps.concat(rendered)

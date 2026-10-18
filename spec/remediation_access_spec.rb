@@ -60,6 +60,25 @@ RSpec.describe "Management ACL remediation" do
     end
   end
 
+  it "rejects fresh IDs occurring outside the currently recognized ACL command families" do
+    input = configuration(old_acl) + "vendor-extension target 02002\n"
+    result = plan(input, [ { "endpoint" => "line vty 0 4", "acl" => "2002" } ])
+    expect(result.operations).to be_empty
+    expect(result.checks.last.reason).to eq(:acl_identity_in_use)
+  end
+
+  it "uses the same immutable input snapshot for audit and collision checks" do
+    input = configuration(old_acl) + "vendor-extension target 2002\n"
+    allow_any_instance_of(Baseline::Audit).to receive(:call).and_wrap_original do |original, **arguments|
+      report = original.call(**arguments)
+      input.replace(configuration(old_acl))
+      report
+    end
+    result = plan(input, [ { "endpoint" => "line vty 0 4", "acl" => "2002" } ])
+    expect(result.operations).to be_empty
+    expect(input).not_to be_frozen
+  end
+
   it "does not turn an empty intersection into a silent deny-all" do
     result = plan(configuration(old_acl), [ { "endpoint" => "line vty 0 4", "acl" => "2002" } ], [ "203.0.113.0/24" ])
     expect(result.operations).to be_empty
@@ -134,7 +153,7 @@ RSpec.describe "Management ACL remediation" do
     capability = Baseline::Remediation.capabilities(platform: "h3c").fetch("management.sources")
     expect(capability[:status]).to eq(:conditional)
     expect(capability[:requirements]).to include("fresh_acl_identity", "approved_access_limits", "access_targets_for_initial_binding")
-    expect(Baseline::Remediation.capabilities(platform: "huawei").fetch("management.sources")[:status]).to eq(:unsupported)
+    expect(Baseline::Remediation.capabilities(platform: "cisco_nxos").fetch("management.sources")[:status]).to eq(:unsupported)
   end
 
   it "rejects unsafe or ambiguous ACL target approval parameters" do

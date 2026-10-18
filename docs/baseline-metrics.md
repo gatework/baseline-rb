@@ -68,3 +68,14 @@ H3C 的版本修正只删除未批准版本，保留现有已启用的 v3、用�
 命令生成目前限于 H3C `line vty`、IPv4 与全新基本 ACL 标识：现有有效来源与批准上限求交；首次建立必须另行批准实际目标。相同范围的多个传输协议只有在同一基本 ACL 能保留各自的最终许可时才可生成。创建阶段先于绑定更新，旧 ACL 和其他引用保持不动；显式空目标才能生成拒绝全部来源。此能力不代表所有业务 ACL 引用、固件默认值或 IPv6 已建模。
 
 厂商语法依据：[H3C VTY ACL 命令](https://www.h3c.com/en/d_202504/2410608_294551_0.htm)、[H3C SSH server ACL 命令](https://wwwsg-proxy.h3c.com/en/Support/Resource_Center/EN/Home/Public/00-Public/Technical_Documents/Reference_Guides/Command_References/H3C_CR-29707/09/202603/2792736_294551_0.htm)。这两种访问过滤处于不同层次；串联过滤按允许集合交集建模，尚未做真实设备下发验证。
+
+
+## 管理 ACL 厂商扩展与标识占用
+
+Huawei 生成 `acl number`、`acl ... inbound`；IOS 生成命名标准 ACL 和 `access-class ... in`。IOS 的 `vrf-also` 影响可达的 VRF 范围，已有绑定保留原值，首次绑定必须批准布尔 `vrf_also`。来源范围参数不能替代 VRF 范围参数。
+
+`Remediation` 先复制并冻结输入，再用同一快照审计和检查批准 ACL 标识的出现情况；检查只返回策略已经提供的标识，不导出任意原始配置词元。完整输入中出现该标识（含数字前导零、未建模命令、横幅或注释）时，保守拒绝作为新 ACL 使用。缺少这份占用检查的内部 planner 调用也不能生成 ACL。此检查补充定义/引用识别，不代表完整的共享对象更新/删除引用图已经完成。
+
+语法依据：[Huawei VTY ACL 配置例子](https://support.huawei.com/enterprise/de/doc/EDOC1100212297/c947deef/example-for-configuring-an-acl-to-limit-telnet-login)、[Cisco IOS XE ACL 配置](https://www.cisco.com/c/en/us/td/docs/switches/lan/c9000/security/acls/acls-configuration-guide/access-control-lists.html)、[Cisco IOS XE VTY VRF 绑定例子](https://www.cisco.com/c/en/us/td/docs/routers/sdwan/configuration/policies/ios-xe-17/policies-book-xe/device-access-policy.pdf)。仍需人工审核固件适配和管理连通性；没有真实设备执行证明。
+
+IOS 标准 ACL 编号按 1–99/1300–1999 校验；命名标识要求以字母开头，使用库既有的单词元允许列表及253字节边界，不将其他协议的63字符限制套入 IOS。格式依据：[Cisco IOS XE ip access-list 命令参考](https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst9500/software/release/17-12/command_reference/b_1712_9500_cr/security_commands.html)。

@@ -30,7 +30,10 @@ module Baseline
       access_protocol_dependency: "同一 VTY 范围的协议来源差异尚无已验证的基本 ACL 呈现",
       approved_access_targets_required: "首次建立或进一步收紧需要明确批准的端点允许来源",
       approved_acl_identity_required: "需要为待修改端点批准全新的专用 ACL 标识",
-      acl_identity_in_use: "批准的 ACL 标识已定义或被其他配置引用，不能覆盖或意外激活共享对象",
+      acl_identity_in_use: "批准的 ACL 标识已在输入中出现，不能证明它是全新标识，拒绝覆盖或意外激活其他引用",
+      acl_reference_evidence_required: "缺少与本次完整配置绑定的新 ACL 标识占用检查",
+      access_vrf_scope_required: "IOS 首次绑定需明确批准 vrf_also，不能从来源网段推导 VRF 可达范围",
+      access_vrf_scope_conflict: "批准的 VRF 范围与现有绑定不同；来源收紧不能改变原有 VRF 可达范围",
       access_target_expands_existing: "批准的操作目标会扩大当前有效许可，当前收紧方案拒绝放宽",
       access_intersection_empty: "现有许可与批准上限没有交集；拒绝全部来源需显式批准空目标",
       approved_protocols_required: "仅支持明确收紧到 SSH；其他传输目标需显式批准协议"

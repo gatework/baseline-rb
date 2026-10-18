@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "audit"
+require_relative "acl_reservations"
 require_relative "remediation_planner"
 require_relative "h3c/command_renderer"
 require_relative "huawei/command_renderer"
@@ -27,6 +28,7 @@ module Baseline
           requirements = [ "existing_v3_access_verified", "snmp_v3_group_reference", "existing_enabled_snmp_v3" ]
         elsif supported && AccessRemediation::IDS.include?(id)
           requirements = [ "fresh_acl_identity", "approved_access_limits", "access_targets_for_initial_binding", "resolved_endpoint_protocol_permissions" ]
+          requirements += [ "vrf_scope_for_initial_binding" ] if name == "cisco_ios"
         elsif supported && SyslogRemediation::IDS.include?(id)
           requirements = [ "approved_syslog_targets", "maximum_targets_for_additions" ]
           requirements += [ "managed_scopes" ] if id == "syslog.destinations"
@@ -48,9 +50,12 @@ module Baseline
 
     # 只生成审核产物，不读取文件、访问设备或提交配置。
     def call(configuration:, platform:, complete: false, context: {})
-      audit = @audit.call(configuration: configuration, platform: platform, complete: complete, context: context)
+      snapshot = configuration.is_a?(String) ? configuration.dup.freeze : configuration
+      audit = @audit.call(configuration: snapshot, platform: platform, complete: complete, context: context)
       renderer = RENDERERS.fetch(audit.configuration.platform, CommandRenderer).new
-      RemediationPlanner.new(policy: @policy, renderer: renderer).call(audit)
+      identifiers = @policy.rules.select(&:enabled?).flat_map { |rule| rule.remediation.fetch("access_targets", []).map { |target| target.fetch("acl") } }
+      reserved = audit.configuration.complete? ? AclReservations.from(configuration: snapshot, identifiers: identifiers) : nil
+      RemediationPlanner.new(policy: @policy, renderer: renderer, reserved_acl_identifiers: reserved).call(audit)
     end
 
     # 不在调试输出中展示策略值或配置内容。

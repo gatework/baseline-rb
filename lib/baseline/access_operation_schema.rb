@@ -15,8 +15,9 @@ module Baseline
           after["sources"].is_a?(Array) && after["sources"].all? { |source| source.is_a?(String) && Acl.ipv4_range(source) }
       elsif kind == "access.binding"
         common && AccessApproval.range(identity["name"]) && action == :replace && phase == :update && before.is_a?(Hash) &&
-          (before.keys - [ "acl" ]).empty? && (!before.key?("acl") || ResourceSchema.token?(before["acl"])) &&
-          after.keys == [ "acl" ] && ResourceSchema.token?(after["acl"])
+          (before.keys - %w[acl vrf_also]).empty? && (!before.key?("vrf_also") || [ true, false ].include?(before["vrf_also"])) && (!before.key?("acl") || ResourceSchema.token?(before["acl"])) &&
+          (after.keys - %w[acl vrf_also]).empty? && ResourceSchema.token?(after["acl"]) &&
+          (!after.key?("vrf_also") || [ true, false ].include?(after["vrf_also"]))
       end
       raise ArgumentError, "Invalid ACL operation" unless valid
       true

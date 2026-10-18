@@ -17,7 +17,8 @@ module Baseline
     # 同一 ACL 标识只批准给一个端点，避免意外建立共享生命周期。
     def self.validate!(targets)
       unless targets.is_a?(Array) && targets.all? do |target|
-        target.is_a?(Hash) && (target.keys - %w[endpoint acl sources]).empty? && range(target["endpoint"]) && ResourceSchema.token?(target["acl"]) &&
+        target.is_a?(Hash) && (target.keys - %w[endpoint acl sources vrf_also]).empty? && range(target["endpoint"]) && ResourceSchema.token?(target["acl"]) &&
+          (!target.key?("vrf_also") || [ true, false ].include?(target["vrf_also"])) &&
           (!target.key?("sources") || target["sources"].is_a?(Array) && target["sources"].all? { |network| network.is_a?(String) && Acl.ipv4_range(network) })
       end
         raise ArgumentError, "Invalid ACL access targets"

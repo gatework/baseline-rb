@@ -61,6 +61,7 @@ module Baseline
           { name: section.text, protocols: effective_configured_value(/\Atransport input\s+((?:all|none|ssh|telnet)(?:\s+(?:ssh|telnet))*)\z/, entries: section.children,
               family: /\A(?:no )?transport input\b/, fact: "ssh.vty_ssh_only", reset: /\Ano transport input(?:\s+\S+)*\z/)&.split,
             authentication: login[:authentication], authentication_list: login[:authentication_list],
+            acl_vrf_also: acl_entries.reverse.find { |entry| /\A(?:no )?access-class\b/.match?(entry.text) }&.text&.end_with?(" vrf-also") == true,
             acl: effective_configured_value(/\Aaccess-class\s+(\S+)\s+in(?:\s+vrf-also)?\z/, entries: acl_entries,
               family: /\A(?:no )?access-class\b/, fact: "management.acl",
               reset: /\Ano access-class(?:\s+\S+\s+in(?:\s+vrf-also)?)?\z/), line: section.line }

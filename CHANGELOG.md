@@ -4,6 +4,9 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+- Extend dedicated IPv4 management ACL rendering to Huawei and IOS, preserving existing IOS VRF qualifiers and requiring explicit VRF scope on initial bindings.
+- Bind ACL identity collision checks to the same immutable input snapshot as the audit; scan all candidates in one pass and conservatively reject proposed identities appearing even in unmodelled commands.
+
 - Preserve management endpoint protocol/port differences and intersect chained SSH/VTY ACL source permissions.
 - Generate guarded H3C IPv4 dedicated basic ACL creation and VTY rebinding, retaining stricter permissions and existing shared ACLs; require explicit initial targets and reject occupied or referenced ACL numbers.
 - Show the highest operation risk in human-readable remediation plans.
