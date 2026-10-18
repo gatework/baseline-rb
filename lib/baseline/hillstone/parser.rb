@@ -89,10 +89,11 @@ module Baseline
             next
           end
           options = parse_keyword_options(parts.drop(3), flags: [ "prefer" ], keys: %w[key source vrouter])
-          unless options && (!options["key"] || /\A[1-9]\d*\z/.match?(options["key"]))
+          unless options && (!options["key"] || /\A[1-9]\d*\z/.match?(options["key"]) && options["key"].to_i <= 4_294_967_295)
             record_unknown_fact("ntp", [ entry ])
             next
           end
+          record_ntp_resource(address: parts[2], role: "server", vrf: options["vrouter"], options: options, entry: entry)
           sources << options["source"]
           analyze(entry) { parts[2] }
         end

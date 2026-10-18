@@ -6,14 +6,16 @@ module Baseline
   # 资源只持有配置生成所需的非秘密属性；未知字段不能进入报告。
   module ResourceSchema
     SYSLOG_FIELDS = %w[address name protocol port facility severity channel dscp filter source format types certificate_check].freeze
-    IDENTITY_FIELDS = %w[address name protocol port types].freeze
+    NTP_FIELDS = %w[address version key_id prefer source minpoll maxpoll burst iburst normal_sync authenticated].freeze
+    IDENTITY_FIELDS = %w[address name protocol port types role].freeze
     SCOPE_FIELDS = %w[vrf profile source].freeze
 
     # 校验完整资源数据，拒绝控制字符及未声明的配置字段。
     def self.validate!(kind:, identity:, scope:, attributes:, lines:, complete:)
-      valid = kind == "syslog.destination" && identity.is_a?(Hash) && !identity.empty? &&
+      fields = { "syslog.destination" => SYSLOG_FIELDS, "ntp.association" => NTP_FIELDS }[kind]
+      valid = fields && identity.is_a?(Hash) && !identity.empty? &&
         (identity.keys - IDENTITY_FIELDS).empty? && scope.is_a?(Hash) && (scope.keys - SCOPE_FIELDS).empty? &&
-        attributes.is_a?(Hash) && (attributes.keys - SYSLOG_FIELDS).empty? &&
+        attributes.is_a?(Hash) && (attributes.keys - fields).empty? &&
         lines.is_a?(Array) && lines.all? { |line| line.is_a?(Integer) && line.positive? } &&
         [ true, false ].include?(complete)
       raise ArgumentError, "Invalid configuration resource" unless valid
@@ -25,7 +27,11 @@ module Baseline
           when "port" then value.is_a?(Integer) && value.between?(1, 65_535)
           when "dscp" then value.is_a?(Integer) && value.between?(0, 63)
           when "severity" then value.is_a?(Integer) && value.between?(0, 7)
-          when "certificate_check" then [ true, false ].include?(value)
+          when "version" then value.is_a?(Integer) && value.between?(1, 4)
+          when "key_id" then value.is_a?(Integer) && value.between?(1, 4_294_967_295)
+          when "minpoll", "maxpoll" then value.is_a?(Integer) && value.between?(4, 17)
+          when "certificate_check", "prefer", "burst", "iburst", "normal_sync", "authenticated" then [ true, false ].include?(value)
+          when "role" then %w[server peer].include?(value)
           when "protocol" then %w[udp tcp secure-tcp ssl].include?(value)
           when "types" then value.is_a?(Array) && !value.empty? && value.uniq == value && value.all? { |item| token?(item) }
           else token?(value)

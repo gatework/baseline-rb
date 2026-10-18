@@ -150,7 +150,13 @@ module Baseline
             record_unknown_fact("ntp.authentication", definitions.map { |row| row[:entry] }, code: :ntp_server_unresolved)
             next
           end
-          { address: address, authenticated: ntp_authentication_state(prefix) }
+          authenticated = ntp_authentication_state(prefix)
+          attributes = { "address" => address }
+          attributes["authenticated"] = authenticated unless authenticated.nil?
+          resource = ConfigurationResource.new(kind: "ntp.association", identity: { "name" => name }, attributes: attributes,
+            lines: definitions.map { |row| row[:entry].line }, complete: !authenticated.nil?)
+          @fact_builder.record_resource(resource)
+          { address: address, authenticated: authenticated }
         end
         record_fact("ntp.servers", servers.map { |server| server[:address] }.uniq, entries.map { |row| row[:entry] })
         if servers.any? && servers.none? { |server| server[:authenticated].nil? }

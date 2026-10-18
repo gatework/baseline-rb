@@ -107,21 +107,30 @@ module Baseline
 
       # 提取时间服务器、认证要求与源接口。
       def parse_ntp
+        parse_ntp_associations("peer")
         ntp_entries = matching_blocks(/\A(?:no )?ntp server(?:\s|\z)/)
-        ntp_pattern = /\Antp server\s+(?:vrf\s+\S+\s+)?(?:(?:ip|ipv6)\s+)?((?!(?:vrf|ip|ipv6)(?:\s|\z))\S+)/
-        servers = configured_server_addresses("ntp.servers", ntp_pattern, ntp_entries, negate: "no") do |text, match|
-          options = parse_server_options(match.post_match, flags: %w[prefer normal-sync burst iburst],
-            integers: { "version" => 1..4, "key" => 1..65_535, "minpoll" => 4..17, "maxpoll" => 4..17 },
-            names: [ "use-vrf" ], interfaces: [ "source" ])
-          vrf = text[/\Antp server\s+vrf\s+(\S+)/, 1]
-          [ match[1], vrf || options["use-vrf"] ] if options && !(vrf && options.key?("use-vrf"))
-        end
-        record_fact("ntp.servers", servers, ntp_entries)
+        record_fact("ntp.servers", parse_ntp_associations("server"), ntp_entries)
         record_configured_state("ntp.authentication", /\Antp authenticate\z/, /\Ano ntp authenticate\z/)
         source_entries = matching_blocks(/\A(?:no )?ntp source(?:-interface)?\b/)
         source = effective_configured_value(/\Antp source(?:-interface)?\s+(\S+)\z/, entries: source_entries,
           family: /\A/, fact: "ntp.source", reset: /\Ano ntp source(?:-interface)?(?:\s+\S+)?\z/)
         record_fact("ntp.source", source, source_entries.last(1))
+      end
+
+      # 同地址的 peer 与 server 仍是不同的协议关联。
+      def parse_ntp_associations(role)
+        entries = matching_blocks(/\A(?:no )?ntp #{role}(?:\s|\z)/)
+        pattern = /\Antp #{role}\s+(?:vrf\s+\S+\s+)?(?:(?:ip|ipv6)\s+)?((?!(?:vrf|ip|ipv6)(?:\s|\z))\S+)/
+        configured_server_addresses(role == "server" ? "ntp.servers" : "ntp.associations", pattern, entries, negate: "no") do |text, match, negative, entry|
+          options = parse_server_options(match.post_match, flags: %w[prefer normal-sync burst iburst],
+            integers: { "version" => 1..4, "key" => 1..65_535, "minpoll" => 4..17, "maxpoll" => 4..17 },
+            names: [ "use-vrf" ], interfaces: [ "source" ])
+          vrf = text[/\Antp #{role}\s+vrf\s+(\S+)/, 1]
+          if options && !(vrf && options.key?("use-vrf"))
+            record_ntp_resource(address: match[1], role: role, vrf: vrf || options["use-vrf"], options: options, entry: entry, negative: negative)
+            [ match[1], vrf || options["use-vrf"] ]
+          end
+        end
       end
 
       # 提取日志目标与源接口，厂商命令不进入事实归约层。

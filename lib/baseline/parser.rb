@@ -304,6 +304,25 @@ module Baseline
       ResourceSchema.address?(value)
     end
 
+    # 各厂商的时间关联参数归一化到同一资源，不保存任何认证密钥值。
+    def record_ntp_resource(address:, role:, vrf:, options:, entry:, negative: false)
+      scope = { "vrf" => vrf || "default" }
+      mapping = { "key" => "key_id", "authkey" => "key_id", "authentication-keyid" => "key_id",
+        "priority" => "prefer", "source-interface" => "source", "normal-sync" => "normal_sync" }
+      attributes = options.reject { |key, _| %w[vpn-instance use-vrf vrouter].include?(key) }.to_h do |key, value|
+        [ mapping.fetch(key, key), key == "key" && value.is_a?(String) ? value.to_i : value ]
+      end
+      complete = scope.values.all? { |value| ResourceSchema.token?(value) } &&
+        attributes.values.grep(String).all? { |value| ResourceSchema.token?(value) }
+      unless complete
+        record_unknown_fact("ntp.associations", [ entry ], code: :unsupported_resource_identity)
+        return
+      end
+      resource = ConfigurationResource.new(kind: "ntp.association", identity: { "address" => address, "role" => role }, scope: scope,
+        attributes: attributes, lines: [ entry.line ])
+      @fact_builder.record_resource(resource, remove: negative)
+    end
+
     # 配置的监听端口仅替代当前服务的默认端口。
     def listener_port(command, default:, scope:, negate: "undo")
       prefix = Regexp.escape(command)

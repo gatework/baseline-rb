@@ -84,23 +84,30 @@ module Baseline
 
       # 提取时间服务器、认证要求与源接口。
       def parse_ntp
+        parse_ntp_associations("peer")
         ntp_entries = matching_blocks(/\A(?:undo )?ntp-service (?:ipv6 )?unicast-server(?:\s|\z)/)
-        ntp_pattern = /\Antp-service (?:ipv6 )?unicast-server\s+(?:vpn-instance\s+\S+\s+)?((?!(?:vpn-instance|ip|ipv6)(?:\s|\z))\S+)/
-        servers = configured_server_addresses("ntp.servers", ntp_pattern, ntp_entries, negate: "undo") do |text, match|
-          options = parse_server_options(match.post_match, flags: [ "priority" ],
-            integers: { "version" => 1..4, "authentication-keyid" => 1..4_294_967_295, "authkey" => 1..4_294_967_295 },
-            names: [ "vpn-instance" ], interfaces: [ "source-interface" ])
-          vpn = text[/\Antp-service (?:ipv6 )?unicast-server\s+vpn-instance\s+(\S+)/, 1]
-          if options && !(vpn && options.key?("vpn-instance")) && !(options.key?("authkey") && options.key?("authentication-keyid"))
-            [ match[1], vpn || options["vpn-instance"] ]
-          end
-        end
-        record_fact("ntp.servers", servers, ntp_entries)
+        record_fact("ntp.servers", parse_ntp_associations("server"), ntp_entries)
         record_configured_state("ntp.authentication", /\Antp-service authentication enable\z/, /\Aundo ntp-service authentication enable\z/)
         source_entries = matching_blocks(/\A(?:undo )?ntp-service source(?:-interface)?(?:\s|\z)/)
         source = effective_configured_value(/\Antp-service source(?:-interface)?\s+(.+)\z/, entries: source_entries,
           family: /\A/, fact: "ntp.source", reset: /\Aundo ntp-service source(?:-interface)?(?:\s+[a-zA-Z][\w.:\/-]*(?:\s+\d[\d.:\/-]*)?)?\z/)
         record_source_interface("ntp.source", source, source_entries.last(1))
+      end
+
+      # 对等关联与客户端服务器分别归约，撤销其中一种不能删除另一种。
+      def parse_ntp_associations(role)
+        entries = matching_blocks(/\A(?:undo )?ntp-service (?:ipv6 )?unicast-#{role}(?:\s|\z)/)
+        pattern = /\Antp-service (?:ipv6 )?unicast-#{role}\s+(?:vpn-instance\s+\S+\s+)?((?!(?:vpn-instance|ip|ipv6)(?:\s|\z))\S+)/
+        configured_server_addresses(role == "server" ? "ntp.servers" : "ntp.associations", pattern, entries, negate: "undo") do |text, match, negative, entry|
+          options = parse_server_options(match.post_match, flags: [ "priority" ],
+            integers: { "version" => 1..4, "authentication-keyid" => 1..4_294_967_295, "authkey" => 1..4_294_967_295 },
+            names: [ "vpn-instance" ], interfaces: [ "source-interface" ])
+          vpn = text[/\Antp-service (?:ipv6 )?unicast-#{role}\s+vpn-instance\s+(\S+)/, 1]
+          if options && !(vpn && options.key?("vpn-instance")) && !(options.key?("authkey") && options.key?("authentication-keyid"))
+            record_ntp_resource(address: match[1], role: role, vrf: vpn || options["vpn-instance"], options: options, entry: entry, negative: negative)
+            [ match[1], vpn || options["vpn-instance"] ]
+          end
+        end
       end
 
       # 提取日志目标与源接口，厂商命令不进入事实归约层。
