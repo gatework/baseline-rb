@@ -65,10 +65,11 @@ module Baseline
         defaults = matching_blocks(/\Aline class vty\z/).flat_map(&:children)
         vtys = matching_blocks(/\A(?:line|user-interface) vty\b/).map do |section|
           entries = defaults + section.children
+          login_entries = vty_login_entries(defaults, section.children)
           acl_entries = entries.reject { |entry| /\A(?:undo )?acl\s+ipv6\b|\A(?:undo )?acl\s+(?:name\s+)?\S+\s+outbound(?:\s|\z)/.match?(entry.text) }
-          { name: section.text, protocols: effective_configured_value(/\Aprotocol inbound\s+((?:all|ssh|stelnet|telnet)(?:\s+(?:ssh|stelnet|telnet))*)\z/, entries: entries,
+          { name: section.text, protocols: effective_configured_value(/\Aprotocol inbound\s+((?:all|ssh|stelnet|telnet)(?:\s+(?:ssh|stelnet|telnet))*)\z/, entries: login_entries,
               family: /\A(?:undo )?protocol inbound\b/, fact: "ssh.vty_ssh_only", reset: /\Aundo protocol inbound(?:\s+\S+)*\z/)&.split,
-            authentication: effective_configured_value(/\Aauthentication-mode\s+(scheme|aaa|password|none)\z/, entries: entries,
+            authentication: effective_configured_value(/\Aauthentication-mode\s+(scheme|aaa|password|none)\z/, entries: login_entries,
               family: /\A(?:undo )?authentication-mode\b/, fact: "ssh.vty_aaa", reset: /\Aundo authentication-mode(?: \S+)?\z/),
             local_authentication: effective_configured_value(/\Aauthentication-mode\s+(scheme|aaa|password|none)\z/, entries: section.children,
               family: /\A(?:undo )?authentication-mode\b/, fact: "ssh.vty_aaa", reset: /\Aundo authentication-mode(?: \S+)?\z/),
@@ -83,6 +84,9 @@ module Baseline
           [ name, configured_state(/\A#{command} enable\z/, /\A(?:undo #{command} enable|#{command} disable)\z/) ]
         end)
       end
+
+      # 默认按独立命令继承；厂商可覆盖绑定的登录设置语义。
+      def vty_login_entries(defaults, local) = defaults + local
 
       # 提取时间服务器、认证要求与源接口。
       def parse_ntp

@@ -8,6 +8,17 @@ module Baseline
     class Parser < Comware::Parser
       private
 
+      # Comware 范围内任一非默认登录设置会使协议及认证同时取范围级值。
+      # 未出现的范围级默认值仍保留未知，不从 class 另一项推导已通过。
+      def vty_login_entries(defaults, local)
+        return local if defaults.empty?
+        protocol = local.reverse.find { |entry| /\A(?:undo )?protocol inbound\b/.match?(entry.text) }
+        authentication = local.reverse.find { |entry| /\A(?:undo )?authentication-mode\b/.match?(entry.text) }
+        default_protocol = !protocol || /\A(?:protocol inbound all|undo protocol inbound)\z/.match?(protocol.text)
+        default_authentication = !authentication || /\A(?:authentication-mode password|undo authentication-mode)\z/.match?(authentication.text)
+        default_protocol && default_authentication ? defaults : local
+      end
+
       # 匹配当前平台显式启用 SSH 的命令。
       def ssh_enable_pattern = /\Assh server enable\z/
       # 匹配当前平台显式禁用 SSH 的命令。

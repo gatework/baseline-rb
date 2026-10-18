@@ -234,12 +234,36 @@ RSpec.describe Baseline::Audit do
     expect(config.fact_known?("ssh.enabled")).to be(false)
   end
 
-  it "resolves H3C VTY class inheritance and lets explicit line settings take priority" do
+  it "does not independently inherit H3C authentication when range transport overrides the class" do
     text = "sysname LAB\nline class vty\n authentication-mode scheme\n protocol inbound ssh\n#\nline vty 0 4\n#\nline vty 5 15\n protocol inbound telnet\n#\n"
     config = parse("h3c", text).configuration
-    expect(config.fact("ssh.vty_aaa")).to be(true)
+    expect(config.fact_known?("ssh.vty_aaa")).to be(false)
     expect(config.fact("ssh.vty_ssh_only")).to be(false)
     expect(config.fact("ssh.vty").map { |row| row[:protocols] }).to eq([ [ "ssh" ], [ "telnet" ] ])
+  end
+
+  it "does not inherit H3C class SSH restriction after a range authentication override" do
+    text = "sysname LAB\nline class vty\n authentication-mode scheme\n protocol inbound ssh\n#\nline vty 0 4\n authentication-mode none\n#\n"
+    config = parse("h3c", text).configuration
+    expect(config.fact("ssh.vty_aaa")).to be(false)
+    expect(config.fact_known?("ssh.vty_ssh_only")).to be(false)
+  end
+
+  it "lets non-default H3C class settings prevail over explicit range defaults" do
+    text = "sysname LAB\nline class vty\n authentication-mode scheme\n protocol inbound ssh\n#\nline vty 0 4\n authentication-mode password\n protocol inbound all\n#\n"
+    config = parse("h3c", text).configuration
+    expect(config).to be_complete
+    expect(config.fact("ssh.vty_aaa")).to be(true)
+    expect(config.fact("ssh.vty_ssh_only")).to be(true)
+  end
+
+  it "does not hide malformed H3C range resets behind valid class settings" do
+    [ "undo protocol inbound garbage", "undo authentication-mode garbage", "undo protocol inbound ssh telnet garbage" ].each do |command|
+      text = "sysname LAB\nline class vty\n authentication-mode scheme\n protocol inbound ssh\n#\nline vty 0 4\n #{command}\n#\n"
+      config = parse("h3c", text).configuration
+      expect(config.fact_known?("ssh.vty_ssh_only")).to be(false)
+      expect(config.fact_known?("ssh.vty_aaa")).to be(false)
+    end
   end
 
   it "checks authentication independently of omitted VTY transport defaults" do
