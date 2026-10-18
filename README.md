@@ -75,6 +75,8 @@ Additional syslog renderers support a verified subset of Huawei domain/VPN targe
 
 NTP target planning supports modelled server/peer objects on H3C, Huawei, IOS, and NX-OS. Legacy server-list rules retain peer associations; structured association rules explicitly manage their declared scopes. Server counts and approved addresses constrain the same projected configuration. Existing key references may be retained, but a new key ID does not establish key material. Authentication requirements block unauthenticated additions; complete key/trust-chain provisioning remains pending.
 
+VTY protocol narrowing is available for non-overlapping H3C/Huawei/IOS ranges when SSH enable evidence exists. H3C/Huawei additionally require explicit compatible authentication in each edited range (scheme/aaa); inherited authentication alone blocks generation because range protocol edits can change its effective behavior. Authentication and ACL commands are preserved. Explicit approved SSH shutdowns are supported for H3C/Huawei/NX-OS and marked high risk. Conflicting SSH-only and SSH-disabled requirements block changes. SSH key provisioning and selecting new authentication chains remain unresolved prerequisites, not silently generated defaults.
+
 Detailed vendor behavior, historical validation notes, and Motor-only integration are preserved in [the architecture reference](docs/architecture-zh.md). Host integration examples in that reference require Motor; they are not standalone gem APIs. Motor adapters live under `backend/lib/baseline`, `backend/lib/vxlan`, and `backend/lib/wireless` in the [Motor repository](https://github.com/gatework/motor/tree/main/backend/lib).
 
 ## Domain vocabulary

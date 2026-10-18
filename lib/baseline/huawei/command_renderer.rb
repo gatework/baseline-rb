@@ -14,6 +14,9 @@ module Baseline
       EXIT_VIEW = "quit"
       RESOURCE_KINDS = %w[syslog.destination ntp.association].freeze
       NTP_STYLE = :vrp
+      VTY_PROTOCOL_COMMAND = "protocol inbound ssh"
+      SSH_DISABLE_COMMAND = "undo stelnet server enable"
+      PREREQUISITES = CtxParser::Immutable.copy({ "ssh.vty_ssh_only" => { "ssh.enabled" => true } })
 
       private
 

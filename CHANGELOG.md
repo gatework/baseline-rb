@@ -4,6 +4,9 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+- Generate scoped H3C/Huawei/IOS VTY protocol narrowing with SSH enable prerequisites, overlap rejection, explicit compatible range authentication guards, and cross-rule conflict detection.
+- Generate explicitly approved H3C/Huawei/NX-OS SSH service shutdowns as high-risk review operations without altering key material; keep enablement blocked pending key/endpoint evidence.
+
 - Extend coordinated target planning to NTP server/peer associations on H3C, Huawei, IOS, and NX-OS; retain correct association attributes and peers under legacy server-list checks, and withhold unauthenticated additions under authentication requirements.
 
 - Extend syslog target rendering to verified Huawei, IOS, NX-OS, and StoneOS syntax subsets with exact scope/category handling and convergence regressions. Block unresolved IOS parallel transports and named-default VRFs instead of deleting by an ambiguous identity.

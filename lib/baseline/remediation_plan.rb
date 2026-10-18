@@ -21,7 +21,10 @@ module Baseline
       capacity_confirmation_required: "新增目标前需要确认设备目标容量，不能假定有空余槽位",
       capacity_exceeded: "批准的最终目标数量超出已确认容量",
       capacity_evidence_conflict: "当前对象数量与提供的容量证据不一致",
-      ntp_authentication_dependency: "时间认证已启用或被基线要求，新增关联需已核验的认证材料与可信引用"
+      ntp_authentication_dependency: "时间认证已启用或被基线要求，新增关联需已核验的认证材料与可信引用",
+      vty_scope_unresolved: "VTY 范围不完整、交叠或协议证据未解决，不能逐范围修改",
+      vty_authentication_dependency: "待修改范围缺少明确的兼容账户认证；不能假定认证继承不受协议命令影响",
+      approved_protocols_required: "仅支持明确收紧到 SSH；其他传输目标需显式批准协议"
     ).freeze
     Check = Data.define(:id, :status, :reason, :operation_ids, :requirements, :details) do
       # 检查结果不持有调用方可变参数。

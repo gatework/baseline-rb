@@ -71,6 +71,8 @@ puts report.to_text
 
 H3C/Huawei/IOS/NX-OS 的 NTP 目标支持 server/peer 对象增删及已建模选项替换；旧 `ntp.servers` 只管理 server，保留 peer。`ntp.associations` 配合 `managed_scopes` 可显式管理关联类型、VRF 和选项。与日志对象相同，数量和地址检查共同约束最终集合，净新增需已确认容量。既有 key 引用可以保留，但新 key 编号不能代替认证材料证据；全局认证已启用或策略要求认证时，缺少 key 引用的新关联不会生成。认证材料建立、可信 key 配置以及认证开关完整依赖尚在开发，不会仅打开开关后声称问题已修复。未知的隐式 prefer/burst 等状态不会被当成关闭。
 
+管理访问生成：H3C/Huawei/IOS 可按已解析且不交叠的 VTY 范围收紧入站协议到 SSH，前提是已知 SSH 启用；H3C/Huawei 还要求每个待修改范围明确配置兼容认证（scheme/aaa），仅有继承证据时受阻，避免范围级协议命令改变有效认证方式。只修改需要收紧的范围，保留登录方式及 ACL。协议限制与“关闭 SSH”批准值冲突时阻止生成。H3C/Huawei/NX-OS 可生成显式批准的 SSH 关闭命令，按高风险操作呈现；不会删除或生成密钥。启用 SSH、选择新的本地或远程认证链仍需密钥及端点/认证链证据，当前保持受阻，不能把任意 `authentication-mode` 替换当作完整认证修复。
+
 H3C 日志目标规划会同时检查数量、地址和对象规则，拒绝冲突批准值，并保留未受管属性及其他作用域。地址清单仅在对象均为公共路由域时生成简单增删；其他作用域需使用对象规则及 `managed_scopes`。增加净目标数需要规则内 `remediation: {maximum_targets: 4}` 等已核实的设备容量参数，不能照搬示例中的容量。纯替换没有容量参数时，只使用当前对象占用量作为容量下限，必要时先删除错误目标再新增，不将该下限称为设备上限。显式 `order: remove_before_add` 可优先撤销未批准目标；规划依据和提前删除步骤会保留在方案中。容量满时的提前删除与同对象替换可能短暂中断日志输出，需人工审核。
 
 `Remediation.capabilities(platform:)` 独立查询生成覆盖及前提，不与 `Audit.capabilities` 的解析能力混淆。运行 `bundle exec ruby -Ilib examples/remediation.rb` 查看合成示例；真实配置及凭据不得写入示例。

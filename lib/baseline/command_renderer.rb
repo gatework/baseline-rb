@@ -17,6 +17,8 @@ module Baseline
     EXIT_VIEW = "exit"
     PREREQUISITES = {}.freeze
     RESOURCE_KINDS = [].freeze
+    VTY_PROTOCOL_COMMAND = nil
+    SSH_DISABLE_COMMAND = nil
 
     # 原生命令依赖的独立事实由规划器核验，而非在命令里假定成立。
     def prerequisites(id) = self.class::PREREQUISITES.fetch(id, {})
@@ -24,6 +26,8 @@ module Baseline
     # 查询当前呈现器确实可生成的设置类型。
     def supports?(id)
       self.class::SOURCE_COMMANDS.key?(id) || id == "services.disabled" && self.class::DISABLE_COMMANDS.any? ||
+        id == "ssh.vty_ssh_only" && self.class::VTY_PROTOCOL_COMMAND ||
+        id == "ssh.enabled" && self.class::SSH_DISABLE_COMMAND ||
         id == "ssh.versions" && !self.class::SSH_VERSION_TWO.nil? ||
         self.class::RESOURCE_KINDS.include?(ResourceSchema::FACTS.key(id) ||
           { "syslog.servers" => "syslog.destination", "syslog.minimum_servers" => "syslog.destination",
@@ -35,7 +39,16 @@ module Baseline
       return render_ntp(operation) if operation.kind == "ntp.association" && self.class::RESOURCE_KINDS.include?(operation.kind)
       return render_resource(operation) unless operation.kind == "setting"
       id = operation.identity.fetch("rule")
-      commands = if self.class::SOURCE_COMMANDS.key?(id)
+      if id == "ssh.vty_ssh_only" && self.class::VTY_PROTOCOL_COMMAND && operation.after == true
+        view = operation.scope["vty"]
+        unless view.is_a?(String) && /\A(?:line|user-interface) vty \d+(?: \d+)?\z/.match?(view)
+          raise ArgumentError, "Invalid VTY view"
+        end
+        return [ CommandStep.new(view: [ view ], command: self.class::VTY_PROTOCOL_COMMAND, phase: operation.phase, operation_id: operation.id) ]
+      end
+      commands = if id == "ssh.enabled" && operation.after == false && self.class::SSH_DISABLE_COMMAND
+        [ self.class::SSH_DISABLE_COMMAND ]
+      elsif self.class::SOURCE_COMMANDS.key?(id)
         value = source_interface(operation.after)
         raise ArgumentError, "Invalid interface parameter" unless value
         [ "#{self.class::SOURCE_COMMANDS.fetch(id)} #{value}" ]

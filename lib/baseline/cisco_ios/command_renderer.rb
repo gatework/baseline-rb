@@ -13,6 +13,8 @@ module Baseline
       LEAVE = "end"
       RESOURCE_KINDS = %w[syslog.destination ntp.association].freeze
       NTP_STYLE = :ios
+      VTY_PROTOCOL_COMMAND = "transport input ssh"
+      PREREQUISITES = CtxParser::Immutable.copy({ "ssh.vty_ssh_only" => { "ssh.enabled" => true } })
 
       private
 

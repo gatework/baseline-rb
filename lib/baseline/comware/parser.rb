@@ -70,6 +70,8 @@ module Baseline
               family: /\A(?:undo )?protocol inbound\b/, fact: "ssh.vty_ssh_only", reset: /\Aundo protocol inbound(?:\s+\S+)*\z/)&.split,
             authentication: effective_configured_value(/\Aauthentication-mode\s+(scheme|aaa|password|none)\z/, entries: entries,
               family: /\A(?:undo )?authentication-mode\b/, fact: "ssh.vty_aaa", reset: /\Aundo authentication-mode(?: \S+)?\z/),
+            local_authentication: effective_configured_value(/\Aauthentication-mode\s+(scheme|aaa|password|none)\z/, entries: section.children,
+              family: /\A(?:undo )?authentication-mode\b/, fact: "ssh.vty_aaa", reset: /\Aundo authentication-mode(?: \S+)?\z/),
             acl: effective_configured_value(/\Aacl\s+(?!name\z)(?:name\s+)?(\S+)(?:\s+inbound)?\z/, entries: acl_entries,
               family: /\A(?:undo )?acl\b/, fact: "management.acl", reset: /\Aundo acl(?:\s+(?:name\s+)?\S+(?:\s+inbound)?)?\z/), line: section.line }
         end

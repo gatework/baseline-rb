@@ -12,6 +12,7 @@ module Baseline
       LEAVE = "end"
       RESOURCE_KINDS = %w[syslog.destination ntp.association].freeze
       NTP_STYLE = :nxos
+      SSH_DISABLE_COMMAND = "no feature ssh"
 
       private
 

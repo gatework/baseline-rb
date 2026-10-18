@@ -4,6 +4,7 @@ require_relative "configuration_operation"
 require_relative "remediation_plan"
 require_relative "syslog_remediation"
 require_relative "ntp_remediation"
+require_relative "vty_remediation"
 
 module Baseline
   # 每个指标都必须有规划结果；缺少实现或前提时显式受阻。
@@ -47,6 +48,12 @@ module Baseline
           reason = audit.configuration.complete? ? finding.reason : audit.configuration.status == :unsupported ? :unsupported_platform : :input_incomplete
           check(finding, :blocked, reason)
         elsif @renderer.supports?(finding.id)
+          if finding.id == "ssh.enabled" && finding.expected == true
+            next check(finding, :blocked, :unresolved_prerequisites, requirements: REQUIREMENTS.fetch(finding.id))
+          end
+          if finding.id == "ssh.enabled" && audit.findings.any? { |item| item.id == "ssh.vty_ssh_only" && item.status != :not_applicable && item.expected == true }
+            next check(finding, :blocked, :policy_conflict)
+          end
           missing = @renderer.prerequisites(finding.id).reject do |fact, expected|
             audit.configuration.fact_known?(fact) && audit.configuration.fact(fact) == expected
           end.keys
@@ -54,6 +61,8 @@ module Baseline
             check(finding, :blocked, :unresolved_prerequisites, requirements: missing)
           elsif (SyslogRemediation::IDS + NtpRemediation::IDS).include?(finding.id)
             compile_targets(finding, audit, operations, steps)
+          elsif finding.id == "ssh.vty_ssh_only"
+            compile_vty(finding, audit, operations, steps)
           else
             compile_setting(finding, operations, steps)
           end
@@ -66,6 +75,21 @@ module Baseline
     end
 
     private
+
+    # 所有范围先验证并完整渲染，再一次性加入方案。
+    def compile_vty(finding, audit, operations, steps)
+      proposed = VtyRemediation.new.call(finding, audit)
+      rendered = proposed.flat_map { |operation| @renderer.render(operation) }
+      operations.concat(proposed)
+      steps.concat(rendered)
+      check(finding, :planned, nil, operation_ids: proposed.map(&:id))
+    rescue TargetRemediation::Blocked => error
+      check(finding, :blocked, error.reason)
+    rescue CommandRenderer::UnsupportedOperation
+      check(finding, :blocked, :unsupported_setting)
+    rescue ArgumentError
+      check(finding, :blocked, :invalid_command_parameter)
+    end
 
     # 整个指标的操作全部成功呈现后才加入方案，避免删除后才发现新增语法不支持。
     def compile_targets(finding, audit, operations, steps)
@@ -87,7 +111,7 @@ module Baseline
     # 任何子命令失败都不把该操作部分加入输出；未知服务状态单独保留。
     def compile_setting(finding, operations, steps)
       operation = ConfigurationOperation.new(kind: "setting", identity: { "rule" => finding.id }, before: finding.actual,
-        after: finding.expected, risk: finding.severity)
+        after: finding.expected, risk: finding.id == "ssh.enabled" && finding.severity != "critical" ? "high" : finding.severity)
       rendered = @renderer.render(operation)
       operations << operation
       steps.concat(rendered)

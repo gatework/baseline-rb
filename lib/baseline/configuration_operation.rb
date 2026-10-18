@@ -16,7 +16,9 @@ module Baseline
         raise ArgumentError, "Invalid configuration operation"
       end
       if kind == "setting"
-        unless identity.is_a?(Hash) && identity.keys == [ "rule" ] && Rule::DEFINITIONS.key?(identity["rule"]) && action == :set && phase == :update && scope == {}
+        vty = identity.is_a?(Hash) && identity["rule"] == "ssh.vty_ssh_only" && scope.is_a?(Hash) && scope.keys == [ "vty" ] &&
+          scope["vty"].is_a?(String) && /\A(?:line|user-interface) vty \d+(?: \d+)?\z/.match?(scope["vty"])
+        unless identity.is_a?(Hash) && identity.keys == [ "rule" ] && Rule::DEFINITIONS.key?(identity["rule"]) && action == :set && phase == :update && (scope == {} || vty)
           raise ArgumentError, "Invalid setting operation"
         end
         Rule.new(identity.fetch("rule"), { "expected" => after }).validate_expected!(after)
