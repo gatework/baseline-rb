@@ -19,6 +19,7 @@ module Baseline
     RESOURCE_KINDS = [].freeze
     VTY_PROTOCOL_COMMAND = nil
     SSH_DISABLE_COMMAND = nil
+    SNMP_VERSION_REMOVAL = nil
 
     # 原生命令依赖的独立事实由规划器核验，而非在命令里假定成立。
     def prerequisites(id) = self.class::PREREQUISITES.fetch(id, {})
@@ -28,6 +29,7 @@ module Baseline
       self.class::SOURCE_COMMANDS.key?(id) || id == "services.disabled" && self.class::DISABLE_COMMANDS.any? ||
         id == "ssh.vty_ssh_only" && self.class::VTY_PROTOCOL_COMMAND ||
         id == "ssh.enabled" && self.class::SSH_DISABLE_COMMAND ||
+        id == "snmp.versions" && self.class::SNMP_VERSION_REMOVAL ||
         id == "ssh.versions" && !self.class::SSH_VERSION_TWO.nil? ||
         self.class::RESOURCE_KINDS.include?(ResourceSchema::FACTS.key(id) ||
           { "syslog.servers" => "syslog.destination", "syslog.minimum_servers" => "syslog.destination",
@@ -48,6 +50,14 @@ module Baseline
       end
       commands = if id == "ssh.enabled" && operation.after == false && self.class::SSH_DISABLE_COMMAND
         [ self.class::SSH_DISABLE_COMMAND ]
+      elsif id == "snmp.versions" && self.class::SNMP_VERSION_REMOVAL
+        before = operation.before
+        unless before.is_a?(Array) && (before - %w[v1 v2c v3]).empty? && before.include?("v3") && operation.after.include?("v3")
+          raise UnsupportedOperation, "existing_snmp_v3_required"
+        end
+        removed = (before - operation.after).uniq.sort
+        raise UnsupportedOperation, "no_version_removal" if removed.empty?
+        [ "#{self.class::SNMP_VERSION_REMOVAL} #{removed.join(' ')}" ]
       elsif self.class::SOURCE_COMMANDS.key?(id)
         value = source_interface(operation.after)
         raise ArgumentError, "Invalid interface parameter" unless value

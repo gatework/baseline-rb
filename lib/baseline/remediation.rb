@@ -23,7 +23,9 @@ module Baseline
       CtxParser::Immutable.copy(Audit.capabilities(platform: name).to_h do |id, capability|
         supported = capability[:status] != :unsupported && renderer.supports?(id)
         requirements = RemediationPlanner::REQUIREMENTS.fetch(id, [ "supported_rule_handler" ])
-        if supported && SyslogRemediation::IDS.include?(id)
+        if supported && id == "snmp.versions"
+          requirements = [ "existing_v3_access_verified", "snmp_v3_group_reference", "existing_enabled_snmp_v3" ]
+        elsif supported && SyslogRemediation::IDS.include?(id)
           requirements = [ "approved_syslog_targets", "maximum_targets_for_additions" ]
           requirements += [ "managed_scopes" ] if id == "syslog.destinations"
         elsif supported && NtpRemediation::IDS.include?(id)

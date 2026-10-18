@@ -222,6 +222,8 @@ module Baseline
           acl = settings[/\bacl\s+(?:name\s+)?(\S+)/, 1]
           user[:acl] = acl if acl
         end
+        withdrawals = matching_blocks(/\Aundo snmp-agent (?:usm-user|group)(?:\s|\z)/)
+        record_unknown_snmp_access(withdrawals, code: :unsupported_snmp_withdrawal) unless withdrawals.empty?
         @fact_builder.record_snmp_access(communities: communities, users: users.values, groups: groups,
           port: listener_port(snmp_port_command, default: 161, scope: "snmp.acl"))
       end

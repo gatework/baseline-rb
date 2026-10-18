@@ -4,6 +4,9 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+- Fold H3C SNMP version enable/removal state and reject stale version evidence after malformed commands.
+- Generate guarded H3C SNMP version removals only with existing authPriv/group evidence and explicit manual v3 access verification; retain principals and ACLs.
+
 - Respect the H3C VTY authentication/transport inheritance pair; range overrides no longer inherit a passing counterpart from the line class. Malformed range resets cannot fall back to valid class settings.
 
 - Generate scoped H3C/Huawei/IOS VTY protocol narrowing with SSH enable prerequisites, overlap rejection, explicit compatible range authentication guards, and cross-rule conflict detection.

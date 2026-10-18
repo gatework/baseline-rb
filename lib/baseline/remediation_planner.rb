@@ -54,11 +54,16 @@ module Baseline
           if finding.id == "ssh.enabled" && audit.findings.any? { |item| item.id == "ssh.vty_ssh_only" && item.status != :not_applicable && item.expected == true }
             next check(finding, :blocked, :policy_conflict)
           end
+          if finding.id == "snmp.versions" && audit.findings.any? { |item| item.id == "snmp.enabled" && item.status != :not_applicable && item.expected == false }
+            next check(finding, :blocked, :policy_conflict)
+          end
           missing = @renderer.prerequisites(finding.id).reject do |fact, expected|
             audit.configuration.fact_known?(fact) && audit.configuration.fact(fact) == expected
           end.keys
           if missing.any?
             check(finding, :blocked, :unresolved_prerequisites, requirements: missing)
+          elsif finding.id == "snmp.versions" && (required = snmp_version_requirements(audit)).any?
+            check(finding, :blocked, :unresolved_prerequisites, requirements: required)
           elsif (SyslogRemediation::IDS + NtpRemediation::IDS).include?(finding.id)
             compile_targets(finding, audit, operations, steps)
           elsif finding.id == "ssh.vty_ssh_only"
@@ -75,6 +80,18 @@ module Baseline
     end
 
     private
+
+    # 认证材料不能单独证明可用；保留组引用证据并要求审核方确认已验证 v3 管理路径。
+    def snmp_version_requirements(audit)
+      rule = @policy.rules.find { |item| item.id == "snmp.versions" }
+      required = rule.remediation["existing_v3_access_verified"] == true ? [] : [ "existing_v3_access_verified" ]
+      evidence = audit.configuration
+      groups, users = evidence.fact("snmp.groups"), evidence.fact("snmp.users")
+      usable = evidence.fact_known?("snmp.groups") && evidence.fact_known?("snmp.users") && groups.is_a?(Hash) && users.is_a?(Array) &&
+        users.any? { |user| user[:auth] && user[:priv] && groups.key?(user[:group]) && !groups[user[:group]][:write].nil? }
+      required << "snmp_v3_group_reference" unless usable
+      required
+    end
 
     # 所有范围先验证并完整渲染，再一次性加入方案。
     def compile_vty(finding, audit, operations, steps)
@@ -111,7 +128,7 @@ module Baseline
     # 任何子命令失败都不把该操作部分加入输出；未知服务状态单独保留。
     def compile_setting(finding, operations, steps)
       operation = ConfigurationOperation.new(kind: "setting", identity: { "rule" => finding.id }, before: finding.actual,
-        after: finding.expected, risk: finding.id == "ssh.enabled" && finding.severity != "critical" ? "high" : finding.severity)
+        after: finding.expected, risk: %w[ssh.enabled snmp.versions].include?(finding.id) && finding.severity != "critical" ? "high" : finding.severity)
       rendered = @renderer.render(operation)
       operations << operation
       steps.concat(rendered)

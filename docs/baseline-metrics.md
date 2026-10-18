@@ -53,3 +53,9 @@ NTP 与 Syslog 的配置资源保留了用于后续生成的对象参数。NTP �
 Comware 的范围级 `authentication-mode` 和 `protocol inbound` 相互绑定：任一范围级非默认设置都会使两项采用范围值；不能分别从 class 补齐另一项并判通过。范围级两项均为默认或未配置时，才保留 class 设置。未显式出现的范围默认值在当前审计中保留未知，避免跨版本推定。损坏的范围撤销命令不能被 class 覆盖掩盖。
 
 依据：[H3C Login management commands](https://www.h3c.com/en/d_202504/2410608_294551_0.htm)，`authentication-mode` / `protocol inbound` 的绑定规则。生成器额外要求 H3C/Huawei 待修改范围明确配置兼容认证；不能仅凭继承证据输出协议修正。
+
+## H3C SNMP 版本证据与收紧
+
+版本启用声明按集合累加，`undo snmp-agent sys-info version` 仅撤销所列版本。损坏声明、没有初始版本集合的局部撤销不能保留旧的通过值；Huawei 的固件语法单独处理。依据：[H3C SNMP command reference](https://www.h3c.com/en/Support/Resource_Center/EN/Home/Public/00-Public/Technical_Documents/Reference_Guides/Command_References/H3C_CR-24948/13/202601/2739237_294551_0.htm)。
+
+H3C 的版本修正只删除未批准版本，保留现有已启用的 v3、用户及来源限制。除了 authPriv 用户和组引用证据，还须在规则的 `remediation.existing_v3_access_verified` 声明人工已验证现有 v3 管理路径；该参数只能为布尔值。用户/组撤销语法尚未完整归约时，审计保留未知并阻止生成；不能借助这项收紧声明整个 SNMP 权限或认证链已修复。

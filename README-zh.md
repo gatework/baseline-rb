@@ -77,6 +77,8 @@ H3C 日志目标规划会同时检查数量、地址和对象规则，拒绝冲�
 
 `Remediation.capabilities(platform:)` 独立查询生成覆盖及前提，不与 `Audit.capabilities` 的解析能力混淆。运行 `bundle exec ruby -Ilib examples/remediation.rb` 查看合成示例；真实配置及凭据不得写入示例。
 
+H3C SNMP 版本收紧仅删除未批准版本，要求当前已启用 v3、具备 authPriv 用户及已解析的组引用，并在 `snmp.versions` 规则中声明 `remediation: {existing_v3_access_verified: true}`，确认人工已验证现有 v3 管理路径。此值不能由备份推定；用户或组撤销语法尚未完整归约时保持未知并受阻。操作按高风险呈现，不删除用户、community 或 ACL，不新建 v3 用户，也不删除全部活动版本。其他厂商版本收紧及完整 SNMP 权限/认证修正仍待实现。
+
 详细厂商语义、历史验证记录和 Motor 专用集成说明保留在[架构参考](docs/architecture-zh.md)。其中宿主集成代码需要 Motor，不属于独立 gem API。适配层位于 [Motor 仓库](https://github.com/gatework/motor/tree/main/backend/lib) 的 `backend/lib/baseline`、`backend/lib/vxlan` 和 `backend/lib/wireless`。
 
 ## 领域术语

@@ -80,8 +80,14 @@ module Baseline
       end
       @managed_scopes = CtxParser::Immutable.copy(options["managed_scopes"])
       @remediation = CtxParser::Immutable.copy(options.fetch("remediation", {}))
-      unless remediation.is_a?(Hash) && (remediation.keys - %w[maximum_targets order]).empty? &&
-          (remediation.empty? || %w[syslog.minimum_servers syslog.servers syslog.destinations ntp.minimum_servers ntp.servers ntp.associations].include?(id)) &&
+      remediation_keys = if id == "snmp.versions"
+        %w[existing_v3_access_verified]
+      elsif %w[syslog.minimum_servers syslog.servers syslog.destinations ntp.minimum_servers ntp.servers ntp.associations].include?(id)
+        %w[maximum_targets order]
+      else []
+      end
+      unless remediation.is_a?(Hash) && (remediation.keys - remediation_keys).empty? &&
+          (!remediation.key?("existing_v3_access_verified") || [ true, false ].include?(remediation["existing_v3_access_verified"])) &&
           (!remediation.key?("maximum_targets") || remediation["maximum_targets"].is_a?(Integer) && remediation["maximum_targets"].between?(1, 65_535)) &&
           (!remediation.key?("order") || %w[add_before_remove remove_before_add].include?(remediation["order"]))
         raise ArgumentError, "Invalid baseline remediation options"
