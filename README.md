@@ -73,6 +73,8 @@ H3C syslog plans can add/remove destinations and replace attributes while retain
 
 Additional syslog renderers support a verified subset of Huawei domain/VPN targets, IOS transport/port targets, NX-OS severity/facility/VRF targets, and StoneOS transport/port event/config category targets. Unknown native options block an entire metric's operations before any command is exposed. NX-OS port extensions, IOS parallel transport identity, and PAN-OS target changes remain unsupported by these renderers.
 
+NTP target planning supports modelled server/peer objects on H3C, Huawei, IOS, and NX-OS. Legacy server-list rules retain peer associations; structured association rules explicitly manage their declared scopes. Server counts and approved addresses constrain the same projected configuration. Existing key references may be retained, but a new key ID does not establish key material. Authentication requirements block unauthenticated additions; complete key/trust-chain provisioning remains pending.
+
 Detailed vendor behavior, historical validation notes, and Motor-only integration are preserved in [the architecture reference](docs/architecture-zh.md). Host integration examples in that reference require Motor; they are not standalone gem APIs. Motor adapters live under `backend/lib/baseline`, `backend/lib/vxlan`, and `backend/lib/wireless` in the [Motor repository](https://github.com/gatework/motor/tree/main/backend/lib).
 
 ## Domain vocabulary

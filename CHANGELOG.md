@@ -4,6 +4,8 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+- Extend coordinated target planning to NTP server/peer associations on H3C, Huawei, IOS, and NX-OS; retain correct association attributes and peers under legacy server-list checks, and withhold unauthenticated additions under authentication requirements.
+
 - Extend syslog target rendering to verified Huawei, IOS, NX-OS, and StoneOS syntax subsets with exact scope/category handling and convergence regressions. Block unresolved IOS parallel transports and named-default VRFs instead of deleting by an ambiguous identity.
 
 - Generate H3C syslog target additions, removals, and attribute replacements with atomic rendering, retained unmanaged options, shared count/address/object constraints, capacity-aware ordering, and independently modelled convergence tests.

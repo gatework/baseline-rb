@@ -2,10 +2,12 @@
 
 require_relative "command_step"
 require_relative "resource_schema"
+require_relative "ntp_commands"
 
 module Baseline
   # 共享单行参数校验和视图编排；厂商仅声明已支持的精确语法。
   class CommandRenderer
+    include NtpCommands
     class UnsupportedOperation < StandardError; end
     SOURCE_COMMANDS = {}.freeze
     DISABLE_COMMANDS = {}.freeze
@@ -23,11 +25,14 @@ module Baseline
     def supports?(id)
       self.class::SOURCE_COMMANDS.key?(id) || id == "services.disabled" && self.class::DISABLE_COMMANDS.any? ||
         id == "ssh.versions" && !self.class::SSH_VERSION_TWO.nil? ||
-        self.class::RESOURCE_KINDS.include?(ResourceSchema::FACTS.key(id) || (%w[syslog.servers syslog.minimum_servers].include?(id) ? "syslog.destination" : nil))
+        self.class::RESOURCE_KINDS.include?(ResourceSchema::FACTS.key(id) ||
+          { "syslog.servers" => "syslog.destination", "syslog.minimum_servers" => "syslog.destination",
+            "ntp.servers" => "ntp.association", "ntp.minimum_servers" => "ntp.association" }[id])
     end
 
     # 将完整操作转换为命令；任何一个子命令不受支持则整体拒绝该操作。
     def render(operation)
+      return render_ntp(operation) if operation.kind == "ntp.association" && self.class::RESOURCE_KINDS.include?(operation.kind)
       return render_resource(operation) unless operation.kind == "setting"
       id = operation.identity.fetch("rule")
       commands = if self.class::SOURCE_COMMANDS.key?(id)

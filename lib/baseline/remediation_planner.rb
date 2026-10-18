@@ -3,6 +3,7 @@
 require_relative "configuration_operation"
 require_relative "remediation_plan"
 require_relative "syslog_remediation"
+require_relative "ntp_remediation"
 
 module Baseline
   # 每个指标都必须有规划结果；缺少实现或前提时显式受阻。
@@ -51,8 +52,8 @@ module Baseline
           end.keys
           if missing.any?
             check(finding, :blocked, :unresolved_prerequisites, requirements: missing)
-          elsif SyslogRemediation::IDS.include?(finding.id)
-            compile_syslog(finding, audit, operations, steps)
+          elsif (SyslogRemediation::IDS + NtpRemediation::IDS).include?(finding.id)
+            compile_targets(finding, audit, operations, steps)
           else
             compile_setting(finding, operations, steps)
           end
@@ -67,8 +68,9 @@ module Baseline
     private
 
     # 整个指标的操作全部成功呈现后才加入方案，避免删除后才发现新增语法不支持。
-    def compile_syslog(finding, audit, operations, steps)
-      result = SyslogRemediation.new(policy: @policy).call(finding, audit)
+    def compile_targets(finding, audit, operations, steps)
+      handler = NtpRemediation::IDS.include?(finding.id) ? NtpRemediation : SyslogRemediation
+      result = handler.new(policy: @policy).call(finding, audit)
       proposed = result.operations
       rendered = proposed.flat_map { |operation| @renderer.render(operation) }
       operations.concat(proposed)

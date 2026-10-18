@@ -81,7 +81,7 @@ module Baseline
       @managed_scopes = CtxParser::Immutable.copy(options["managed_scopes"])
       @remediation = CtxParser::Immutable.copy(options.fetch("remediation", {}))
       unless remediation.is_a?(Hash) && (remediation.keys - %w[maximum_targets order]).empty? &&
-          (remediation.empty? || %w[syslog.minimum_servers syslog.servers syslog.destinations].include?(id)) &&
+          (remediation.empty? || %w[syslog.minimum_servers syslog.servers syslog.destinations ntp.minimum_servers ntp.servers ntp.associations].include?(id)) &&
           (!remediation.key?("maximum_targets") || remediation["maximum_targets"].is_a?(Integer) && remediation["maximum_targets"].between?(1, 65_535)) &&
           (!remediation.key?("order") || %w[add_before_remove remove_before_add].include?(remediation["order"]))
         raise ArgumentError, "Invalid baseline remediation options"

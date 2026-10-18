@@ -11,6 +11,8 @@ module Baseline
       SSH_VERSION_TWO = "ip ssh version 2"
       ENTER = "configure terminal"
       LEAVE = "end"
+      RESOURCE_KINDS = %w[syslog.destination ntp.association].freeze
+      NTP_STYLE = :ios
 
       private
 

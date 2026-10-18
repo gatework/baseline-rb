@@ -10,6 +10,8 @@ module Baseline
       DISABLE_COMMANDS = { "telnet" => "no feature telnet", "ftp" => "no feature ftp-server", "tftp" => "no feature tftp-server" }.freeze
       ENTER = "configure terminal"
       LEAVE = "end"
+      RESOURCE_KINDS = %w[syslog.destination ntp.association].freeze
+      NTP_STYLE = :nxos
 
       private
 

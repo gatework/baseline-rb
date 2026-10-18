@@ -26,6 +26,9 @@ module Baseline
         if supported && SyslogRemediation::IDS.include?(id)
           requirements = [ "approved_syslog_targets", "maximum_targets_for_additions" ]
           requirements += [ "managed_scopes" ] if id == "syslog.destinations"
+        elsif supported && NtpRemediation::IDS.include?(id)
+          requirements = [ "approved_ntp_associations", "maximum_targets_for_net_additions", "authentication_dependencies" ]
+          requirements += [ "managed_scopes" ] if id == "ntp.associations"
         end
         [ id, { status: supported ? :conditional : :unsupported,
           reason: supported ? nil : capability[:reason] || :remediation_unmodeled,

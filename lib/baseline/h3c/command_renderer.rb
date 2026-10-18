@@ -13,7 +13,8 @@ module Baseline
       ENTER = "system-view"
       LEAVE = "return"
       EXIT_VIEW = "quit"
-      RESOURCE_KINDS = [ "syslog.destination" ].freeze
+      RESOURCE_KINDS = %w[syslog.destination ntp.association].freeze
+      NTP_STYLE = :h3c
 
       private
 
