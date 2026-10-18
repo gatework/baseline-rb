@@ -8,6 +8,21 @@ module Baseline
     class Parser < Comware::Parser
       private
 
+      # 新建专用基本 ACL 前也检查其他业务的悬空引用，避免创建后意外激活。
+      def parse_access_lists
+        super
+        uses, pending = [], roots.dup
+        until pending.empty?
+          entry = pending.shift
+          pending.concat(entry.children)
+          entry.text.scan(/(?:\A|\s)(?:acl(?: (?:number|basic|advanced|name|ipv4|ipv6))*|packet-filter(?: (?:ipv4|ipv6|name))?)\s+(0*[2-3]\d{3})(?=\s|\z)/) do |match|
+            uses << { id: match.first.to_i.to_s, line: entry.line }
+          end
+        end
+        record_fact("acl.reference_uses", uses.uniq)
+        record_fact("acl.reserved_numeric_ids", uses.map { |use| use[:id] }.uniq)
+      end
+
       # Comware 范围内任一非默认登录设置会使协议及认证同时取范围级值。
       # 未出现的范围级默认值仍保留未知，不从 class 另一项推导已通过。
       def vty_login_entries(defaults, local)

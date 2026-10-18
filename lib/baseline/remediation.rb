@@ -25,6 +25,8 @@ module Baseline
         requirements = RemediationPlanner::REQUIREMENTS.fetch(id, [ "supported_rule_handler" ])
         if supported && id == "snmp.versions"
           requirements = [ "existing_v3_access_verified", "snmp_v3_group_reference", "existing_enabled_snmp_v3" ]
+        elsif supported && AccessRemediation::IDS.include?(id)
+          requirements = [ "fresh_acl_identity", "approved_access_limits", "access_targets_for_initial_binding", "resolved_endpoint_protocol_permissions" ]
         elsif supported && SyslogRemediation::IDS.include?(id)
           requirements = [ "approved_syslog_targets", "maximum_targets_for_additions" ]
           requirements += [ "managed_scopes" ] if id == "syslog.destinations"

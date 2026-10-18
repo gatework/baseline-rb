@@ -15,6 +15,7 @@ module Baseline
       EXIT_VIEW = "quit"
       RESOURCE_KINDS = %w[syslog.destination ntp.association].freeze
       NTP_STYLE = :h3c
+      ACCESS_STYLE = :h3c
       VTY_PROTOCOL_COMMAND = "protocol inbound ssh"
       SNMP_VERSION_REMOVAL = "undo snmp-agent sys-info version"
       SSH_DISABLE_COMMAND = "undo ssh server enable"

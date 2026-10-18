@@ -3,11 +3,13 @@
 require_relative "command_step"
 require_relative "resource_schema"
 require_relative "ntp_commands"
+require_relative "access_commands"
 
 module Baseline
   # 共享单行参数校验和视图编排；厂商仅声明已支持的精确语法。
   class CommandRenderer
     include NtpCommands
+    include AccessCommands
     class UnsupportedOperation < StandardError; end
     SOURCE_COMMANDS = {}.freeze
     DISABLE_COMMANDS = {}.freeze
@@ -20,6 +22,7 @@ module Baseline
     VTY_PROTOCOL_COMMAND = nil
     SSH_DISABLE_COMMAND = nil
     SNMP_VERSION_REMOVAL = nil
+    ACCESS_STYLE = nil
 
     # 原生命令依赖的独立事实由规划器核验，而非在命令里假定成立。
     def prerequisites(id) = self.class::PREREQUISITES.fetch(id, {})
@@ -30,6 +33,7 @@ module Baseline
         id == "ssh.vty_ssh_only" && self.class::VTY_PROTOCOL_COMMAND ||
         id == "ssh.enabled" && self.class::SSH_DISABLE_COMMAND ||
         id == "snmp.versions" && self.class::SNMP_VERSION_REMOVAL ||
+        %w[management.acl_bound management.acl_restricted management.sources].include?(id) && self.class::ACCESS_STYLE ||
         id == "ssh.versions" && !self.class::SSH_VERSION_TWO.nil? ||
         self.class::RESOURCE_KINDS.include?(ResourceSchema::FACTS.key(id) ||
           { "syslog.servers" => "syslog.destination", "syslog.minimum_servers" => "syslog.destination",
@@ -38,6 +42,7 @@ module Baseline
 
     # 将完整操作转换为命令；任何一个子命令不受支持则整体拒绝该操作。
     def render(operation)
+      return render_access(operation) if AccessOperationSchema::KINDS.include?(operation.kind)
       return render_ntp(operation) if operation.kind == "ntp.association" && self.class::RESOURCE_KINDS.include?(operation.kind)
       return render_resource(operation) unless operation.kind == "setting"
       id = operation.identity.fetch("rule")

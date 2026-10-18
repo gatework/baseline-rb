@@ -4,6 +4,10 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+- Preserve management endpoint protocol/port differences and intersect chained SSH/VTY ACL source permissions.
+- Generate guarded H3C IPv4 dedicated basic ACL creation and VTY rebinding, retaining stricter permissions and existing shared ACLs; require explicit initial targets and reject occupied or referenced ACL numbers.
+- Show the highest operation risk in human-readable remediation plans.
+
 - Fold H3C SNMP version enable/removal state and reject stale version evidence after malformed commands.
 - Generate guarded H3C SNMP version removals only with existing authPriv/group evidence and explicit manual v3 access verification; retain principals and ACLs.
 

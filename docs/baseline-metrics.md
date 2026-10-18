@@ -59,3 +59,12 @@ Comware 的范围级 `authentication-mode` 和 `protocol inbound` 相互绑定�
 版本启用声明按集合累加，`undo snmp-agent sys-info version` 仅撤销所列版本。损坏声明、没有初始版本集合的局部撤销不能保留旧的通过值；Huawei 的固件语法单独处理。依据：[H3C SNMP command reference](https://www.h3c.com/en/Support/Resource_Center/EN/Home/Public/00-Public/Technical_Documents/Reference_Guides/Command_References/H3C_CR-24948/13/202601/2739237_294551_0.htm)。
 
 H3C 的版本修正只删除未批准版本，保留现有已启用的 v3、用户及来源限制。除了 authPriv 用户和组引用证据，还须在规则的 `remediation.existing_v3_access_verified` 声明人工已验证现有 v3 管理路径；该参数只能为布尔值。用户/组撤销语法尚未完整归约时，审计保留未知并阻止生成；不能借助这项收紧声明整个 SNMP 权限或认证链已修复。
+
+
+## 管理 ACL 规划边界
+
+`management.access_endpoints` 按 VTY 与传输协议保留端口、串联 ACL、有效来源和完整程度；多个 ACL 同时生效时来源取交集，不从某一层补出更宽许可。`acl.identifiers` 保留定义及别名，H3C 的 `acl.reserved_numeric_ids` / `acl.reference_uses` 另保留已识别引用中的数字标识，防止新建 ACL 意外激活悬空引用。来源证据包含参与计算的各层 ACL 行号。
+
+命令生成目前限于 H3C `line vty`、IPv4 与全新基本 ACL 标识：现有有效来源与批准上限求交；首次建立必须另行批准实际目标。相同范围的多个传输协议只有在同一基本 ACL 能保留各自的最终许可时才可生成。创建阶段先于绑定更新，旧 ACL 和其他引用保持不动；显式空目标才能生成拒绝全部来源。此能力不代表所有业务 ACL 引用、固件默认值或 IPv6 已建模。
+
+厂商语法依据：[H3C VTY ACL 命令](https://www.h3c.com/en/d_202504/2410608_294551_0.htm)、[H3C SSH server ACL 命令](https://wwwsg-proxy.h3c.com/en/Support/Resource_Center/EN/Home/Public/00-Public/Technical_Documents/Reference_Guides/Command_References/H3C_CR-29707/09/202603/2792736_294551_0.htm)。这两种访问过滤处于不同层次；串联过滤按允许集合交集建模，尚未做真实设备下发验证。

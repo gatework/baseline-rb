@@ -5,6 +5,7 @@ require_relative "remediation_plan"
 require_relative "syslog_remediation"
 require_relative "ntp_remediation"
 require_relative "vty_remediation"
+require_relative "access_remediation"
 
 module Baseline
   # 每个指标都必须有规划结果；缺少实现或前提时显式受阻。
@@ -44,7 +45,7 @@ module Baseline
         status = { pass: :not_needed, not_applicable: :not_applicable }[finding.status]
         if status
           check(finding, status, nil)
-        elsif !audit.configuration.complete? || finding.status == :unknown
+        elsif !audit.configuration.complete? || finding.status == :unknown && !(AccessRemediation::IDS.include?(finding.id) && finding.reason == :fact_unavailable && !finding.expected.nil?)
           reason = audit.configuration.complete? ? finding.reason : audit.configuration.status == :unsupported ? :unsupported_platform : :input_incomplete
           check(finding, :blocked, reason)
         elsif @renderer.supports?(finding.id)
@@ -64,6 +65,8 @@ module Baseline
             check(finding, :blocked, :unresolved_prerequisites, requirements: missing)
           elsif finding.id == "snmp.versions" && (required = snmp_version_requirements(audit)).any?
             check(finding, :blocked, :unresolved_prerequisites, requirements: required)
+          elsif AccessRemediation::IDS.include?(finding.id)
+            compile_access(finding, audit, operations, steps)
           elsif (SyslogRemediation::IDS + NtpRemediation::IDS).include?(finding.id)
             compile_targets(finding, audit, operations, steps)
           elsif finding.id == "ssh.vty_ssh_only"
@@ -80,6 +83,21 @@ module Baseline
     end
 
     private
+
+    # 整个访问领域先完整渲染，再加入创建及重绑；不能只暴露前半段方案。
+    def compile_access(finding, audit, operations, steps)
+      result = AccessRemediation.new(policy: @policy).call(finding, audit)
+      rendered = result.operations.flat_map { |operation| @renderer.render(operation) }
+      operations.concat(result.operations)
+      steps.concat(rendered)
+      check(finding, :planned, nil, operation_ids: result.operations.map(&:id), details: result.details)
+    rescue TargetRemediation::Blocked => error
+      check(finding, :blocked, error.reason)
+    rescue CommandRenderer::UnsupportedOperation
+      check(finding, :blocked, :unsupported_setting)
+    rescue ArgumentError
+      check(finding, :blocked, :invalid_command_parameter)
+    end
 
     # 认证材料不能单独证明可用；保留组引用证据并要求审核方确认已验证 v3 管理路径。
     def snmp_version_requirements(audit)

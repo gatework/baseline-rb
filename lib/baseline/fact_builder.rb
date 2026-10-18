@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "acl"
+require_relative "management_access"
 require_relative "credential"
 require_relative "configuration_resource"
 
@@ -208,6 +209,10 @@ module Baseline
     # 归纳管理服务监听端点及其实际生效的访问限制。
     def record_management_facts
       record_fact("ssh.vty", vtys)
+      endpoints = ManagementAccess.endpoints(vtys: vtys, ssh_acl: @ssh_acl, ports: @management_ports, acls: @acls, issues: @issues)
+      record_fact("management.access_endpoints", endpoints)
+      record_fact("acl.identifiers", @acls.keys)
+
       if vtys.any? && vtys.all? { |entry| entry[:protocols] }
         protocols = vtys.flat_map { |entry| entry[:protocols] }.uniq
         record_fact("ssh.vty_ssh_only", protocols.any? && (protocols - %w[ssh stelnet]).empty?)
@@ -222,6 +227,15 @@ module Baseline
         vtys.map { |entry| { name: entry[:acl], ports: management_ports(entry[:protocols]) } }
       end
       record_acl_sources(bindings, protocol: "tcp", fact: "management.acl") unless @direct_acls["management.acl"]
+      if !@direct_acls["management.acl"] && endpoints.any? && endpoints.all? { |entry| entry[:complete] && entry[:bound] }
+        sources = Acl.cidrs_from_ranges(endpoints.flat_map { |entry| entry[:sources] }.map { |network| Acl.ipv4_range(network) })
+        record_fact("management.acl.sources", sources)
+        record_fact("management.acl.restricted", !sources.include?("0.0.0.0/0"))
+        lines = endpoints.flat_map { |entry| entry[:acl_chain] }.uniq.flat_map { |name| @acls.fetch(name).rules.map { |rule| rule[:line] } }.compact.uniq
+        %w[management.acl.sources management.acl.restricted].each { |fact| @sources[fact] = lines }
+
+      end
+
       if vtys.any?
         %w[ssh.vty_ssh_only ssh.vty_aaa management.acl.bound].each { |path| @sources[path] = vtys.map { |entry| entry[:line] } }
       end

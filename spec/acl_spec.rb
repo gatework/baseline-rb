@@ -19,6 +19,15 @@ RSpec.describe Baseline::Acl do
     expect(acl([]).permitted_source_networks(protocol: "tcp")).to be_nil
   end
 
+  it "intersects approved limits with effective sources without widening either side" do
+    expect(described_class.intersect_networks([ "192.0.2.0/24" ], [ "192.0.2.64/26", "198.51.100.0/24" ])).to eq([ "192.0.2.64/26" ])
+    expect(described_class.intersect_networks([ "0.0.0.0/0" ], [ "192.0.2.0/25", "192.0.2.128/25" ])).to eq([ "192.0.2.0/24" ])
+    expect(described_class.intersect_networks([ "192.0.2.0/26" ], [ "192.0.2.0/24" ])).to eq([ "192.0.2.0/26" ])
+    expect(described_class.intersect_networks([ "192.0.2.0/24" ], [ "198.51.100.0/24" ])).to eq([])
+    expect(described_class.intersect_networks([], [ "0.0.0.0/0" ])).to eq([])
+    expect(described_class.intersect_networks([ "255.255.255.255/32" ], [ "0.0.0.0/0" ])).to eq([ "255.255.255.255/32" ])
+  end
+
   def acl(rules)
     described_class.new(name: "MGMT", line: 1, rules: rules.map.with_index do |(action, source, protocol), index|
       { action: action, source: source, protocol: protocol || "ip", sequence: index }

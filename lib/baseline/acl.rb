@@ -56,6 +56,20 @@ module Baseline
       [ ip.to_range.first.to_i, ip.to_range.last.to_i ]
     end
 
+    # 双指针求来源集合交集，结果不能扩大已有许可或批准上限。
+    def self.intersect_networks(left, right)
+      first = merge_ranges(left.map { |cidr| ipv4_range(cidr) })
+      second = merge_ranges(right.map { |cidr| ipv4_range(cidr) })
+      left_index, right_index, intersections = 0, 0, []
+      while left_index < first.size && right_index < second.size
+        a, b = first[left_index], second[right_index]
+        start, finish = [ a.first, b.first ].max, [ a.last, b.last ].min
+        intersections << [ start, finish ] if start <= finish
+        a.last < b.last ? left_index += 1 : right_index += 1
+      end
+      cidrs_from_ranges(intersections)
+    end
+
     # 判断所有实际来源范围是否均在允许范围内。
     def self.networks_within?(actual, expected)
       each_network_coverage(actual, expected) { |_index, covered| return false unless covered }

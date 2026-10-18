@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "acl"
+require_relative "access_approval"
 require_relative "resource_schema"
 
 require "ctx_parser/immutable"
@@ -82,6 +83,8 @@ module Baseline
       @remediation = CtxParser::Immutable.copy(options.fetch("remediation", {}))
       remediation_keys = if id == "snmp.versions"
         %w[existing_v3_access_verified]
+      elsif %w[management.acl_bound management.acl_restricted management.sources].include?(id)
+        %w[access_targets]
       elsif %w[syslog.minimum_servers syslog.servers syslog.destinations ntp.minimum_servers ntp.servers ntp.associations].include?(id)
         %w[maximum_targets order]
       else []
@@ -92,6 +95,7 @@ module Baseline
           (!remediation.key?("order") || %w[add_before_remove remove_before_add].include?(remediation["order"]))
         raise ArgumentError, "Invalid baseline remediation options"
       end
+      AccessApproval.validate!(remediation["access_targets"]) if remediation.key?("access_targets")
       validate_applicability!
       freeze
     end
