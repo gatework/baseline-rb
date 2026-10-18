@@ -71,6 +71,8 @@ Optional `syslog.destinations`, `ntp.associations`, and `tacacs.endpoints` rules
 
 H3C syslog plans can add/remove destinations and replace attributes while retaining unmanaged options and checking related server-count/address constraints. Structured changes require explicit managed scopes. Net additions require verified device capacity in the rule's `remediation.maximum_targets`; a pure swap may use observed occupancy as a conservative capacity lower bound and remove wrong targets first. Plans expose the capacity source and ordering. `remediation.order: remove_before_add` explicitly prioritizes removal. No generated command is executed by this library.
 
+Additional syslog renderers support a verified subset of Huawei domain/VPN targets, IOS transport/port targets, NX-OS severity/facility/VRF targets, and StoneOS transport/port event/config category targets. Unknown native options block an entire metric's operations before any command is exposed. NX-OS port extensions, IOS parallel transport identity, and PAN-OS target changes remain unsupported by these renderers.
+
 Detailed vendor behavior, historical validation notes, and Motor-only integration are preserved in [the architecture reference](docs/architecture-zh.md). Host integration examples in that reference require Motor; they are not standalone gem APIs. Motor adapters live under `backend/lib/baseline`, `backend/lib/vxlan`, and `backend/lib/wireless` in the [Motor repository](https://github.com/gatework/motor/tree/main/backend/lib).
 
 ## Domain vocabulary

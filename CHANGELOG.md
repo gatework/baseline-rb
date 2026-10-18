@@ -4,6 +4,8 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+- Extend syslog target rendering to verified Huawei, IOS, NX-OS, and StoneOS syntax subsets with exact scope/category handling and convergence regressions. Block unresolved IOS parallel transports and named-default VRFs instead of deleting by an ambiguous identity.
+
 - Generate H3C syslog target additions, removals, and attribute replacements with atomic rendering, retained unmanaged options, shared count/address/object constraints, capacity-aware ordering, and independently modelled convergence tests.
 - Expose capacity provenance and early-removal decisions in per-check plan details. Reject ambiguous named-default routing scopes and reserved CLI keywords as destination names.
 

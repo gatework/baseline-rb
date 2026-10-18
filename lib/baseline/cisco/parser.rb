@@ -135,6 +135,7 @@ module Baseline
 
       # 提取日志目标与源接口，厂商命令不进入事实归约层。
       def parse_syslog
+        @ios_loghost_variants = {}
         log_entries = matching_blocks(nxos? ? /\A(?:no )?logging server(?:\s|\z)/ : /\A(?:no )?logging host(?:\s|\z)/)
         log_pattern = nxos? ? /\Alogging server\s+(\S+)/ : /\Alogging host\s+(?:ipv6\s+)?((?!ipv6(?:\s|\z))\S+)/
         unless nxos?
@@ -167,6 +168,20 @@ module Baseline
         complete = !options.nil? && [ *scope.values, *attributes.values.grep(String) ].all? { |value| ResourceSchema.token?(value) }
         complete &&= !attributes.key?("protocol") || %w[udp tcp].include?(attributes["protocol"])
         complete &&= !attributes.key?("facility") || /\A(?:local[0-7]|auth|authpriv|cron|daemon|ftp|kernel|lpr|mail|news|syslog|user|uucp)\z/.match?(attributes["facility"])
+        unless nxos?
+          identity = [ scope, match[1] ]
+          explicit_vrf = entry.text[/\bvrf\s+(\S+)/, 1]
+          if explicit_vrf == "default"
+            complete = false
+            record_unknown_fact("syslog.destinations", [ entry ], code: :ambiguous_routing_scope)
+          end
+          previous = @ios_loghost_variants[identity]
+          if !negative && previous && previous != attributes
+            complete = false
+            record_unknown_fact("syslog.destinations", [ entry ], code: :parallel_logging_transports_unresolved)
+          end
+          negative ? @ios_loghost_variants.delete(identity) : @ios_loghost_variants[identity] = attributes
+        end
         return unless ResourceSchema.token?(scope["vrf"])
 
         resource = ConfigurationResource.new(kind: "syslog.destination", identity: { "address" => match[1] },

@@ -7,13 +7,14 @@ require_relative "huawei/command_renderer"
 require_relative "cisco_ios/command_renderer"
 require_relative "cisco_nxos/command_renderer"
 require_relative "palo_alto/command_renderer"
+require_relative "hillstone/command_renderer"
 
 module Baseline
   # 同一次解析产生审计与修正意图，不接受另一份配置拼接既有报告。
   class Remediation
     RENDERERS = { "h3c" => H3c::CommandRenderer, "huawei" => Huawei::CommandRenderer,
       "cisco_ios" => CiscoIos::CommandRenderer, "cisco_nxos" => CiscoNxos::CommandRenderer,
-      "palo_alto" => PaloAlto::CommandRenderer }.freeze
+      "palo_alto" => PaloAlto::CommandRenderer, "hillstone" => Hillstone::CommandRenderer }.freeze
 
     # 查询的是实际生成覆盖，不将审计支持自动标记为生成支持。
     def self.capabilities(platform:)

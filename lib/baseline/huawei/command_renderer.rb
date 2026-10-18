@@ -12,6 +12,38 @@ module Baseline
       ENTER = "system-view"
       LEAVE = "return"
       EXIT_VIEW = "quit"
+      RESOURCE_KINDS = [ "syslog.destination" ].freeze
+
+      private
+
+      # VRP 域名使用 domain，VPN 位于目标之后，不套用 Comware 的前置格式。
+      def render_resource(operation)
+        unless operation.kind == "syslog.destination" && operation.identity.keys == [ "address" ] && operation.scope.keys == [ "vrf" ]
+          raise UnsupportedOperation, "unsupported_syslog_identity"
+        end
+        address = operation.identity.fetch("address")
+        raise ArgumentError, "Unsupported address spelling" if /[\[\]%]/.match?(address)
+        family = begin
+          IPAddr.new(address).ipv6? ? "ipv6 " : ""
+        rescue IPAddr::Error
+          "domain "
+        end
+        vrf = operation.scope.fetch("vrf")
+        target = "#{family}#{address}#{vrf == 'default' ? '' : " vpn-instance #{vrf}"}"
+        commands = []
+        commands << "undo info-center loghost #{target}" if %i[remove replace].include?(operation.action)
+        if operation.after
+          attributes = operation.after
+          unless (attributes.keys - %w[port facility channel protocol]).empty? &&
+              (!attributes.key?("protocol") || attributes["protocol"] == "udp") &&
+              (!attributes.key?("facility") || /\Alocal[0-7]\z/.match?(attributes["facility"]))
+            raise UnsupportedOperation, "unsupported_vrp_syslog_options"
+          end
+          tail = %w[port facility channel].filter_map { |key| "#{key} #{attributes[key]}" if attributes.key?(key) }
+          commands << [ "info-center loghost #{target}", *tail ].join(" ")
+        end
+        commands.map { |command| CommandStep.new(view: [], command: command, phase: operation.phase, operation_id: operation.id) }
+      end
     end
   end
 end

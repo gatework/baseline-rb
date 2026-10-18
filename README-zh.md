@@ -65,7 +65,9 @@ puts report.to_text
 
 `Remediation.new(policy:).call(configuration:, platform:, complete: false, context: {})` 将同次审计转换为人工审核方案，提供 `audit`、`checks`、`operations`、`steps`、`configuration_commands`、`to_h` 和 `to_text`。状态为 `noop/ready/partial/blocked`；任一受阻指标都保留在方案中。`ready` 表示所选指标有完整的命令方案，不表示已经执行、保存、生效或整机合规。命令不含自动保存或提交。
 
-当前支持 H3C/Huawei/IOS/NX-OS/PAN-OS 的 NTP/Syslog 源接口设置、H3C/Huawei/IOS 的 SSHv2 设置，以及各呈现器明确声明的服务关闭命令；服务种类及设备语法限制仍需检查。PAN-OS 使用原生接口名；存在显式服务路由源地址时，接口切换会受阻，需先核对地址依赖。H3C 另支持日志目标增删及属性替换，其他对象、ACL、SNMP 与认证链的完整命令生成仍在开发，未实现项会明确返回 `remediation_unmodeled`，不会当作完成。
+当前支持 H3C/Huawei/IOS/NX-OS/PAN-OS 的 NTP/Syslog 源接口设置、H3C/Huawei/IOS 的 SSHv2 设置，以及各呈现器明确声明的服务关闭命令；服务种类及设备语法限制仍需检查。PAN-OS 使用原生接口名；存在显式服务路由源地址时，接口切换会受阻，需先核对地址依赖。H3C/Huawei/IOS/NX-OS/Hillstone 另支持日志目标增删及属性替换的部分语法。其他对象、ACL、SNMP 与认证链的完整命令生成仍在开发，未实现项会明确返回 `remediation_unmodeled`，不会当作完成。
+
+日志对象生成限制：Huawei 使用 `domain` 和目标之后的 `vpn-instance`；IOS 传输端口修改需已知协议，重复同身份不同传输或名为 default 的 VRF 保持受阻；NX-OS 目前只生成地址、级别、facility 和 use-vrf 子集，port 扩展尚未核验；Hillstone 要求显式协议/端口/类别身份，当前支持 event/config 类别。错误选项会整体阻止该指标操作，不输出“只删除而无法新增”的部分方案。不同厂商/固件的默认值和容量不能互相套用。
 
 H3C 日志目标规划会同时检查数量、地址和对象规则，拒绝冲突批准值，并保留未受管属性及其他作用域。地址清单仅在对象均为公共路由域时生成简单增删；其他作用域需使用对象规则及 `managed_scopes`。增加净目标数需要规则内 `remediation: {maximum_targets: 4}` 等已核实的设备容量参数，不能照搬示例中的容量。纯替换没有容量参数时，只使用当前对象占用量作为容量下限，必要时先删除错误目标再新增，不将该下限称为设备上限。显式 `order: remove_before_add` 可优先撤销未批准目标；规划依据和提前删除步骤会保留在方案中。容量满时的提前删除与同对象替换可能短暂中断日志输出，需人工审核。
 
