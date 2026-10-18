@@ -4,6 +4,9 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+- Expose immutable scoped syslog resources through `Evidence#resources`, retaining Comware/VRP, IOS/NX-OS, StoneOS category and PAN-OS profile/server identities alongside existing audit facts. Mark unparsed options incomplete and exclude them from resource data.
+- Keep Cisco syslog destinations in other VRFs when a destination in one VRF is cancelled.
+
 - Keep H3C SSH ACL denial logging separate from ACL bindings, so enabling or disabling logging cannot hide missing management restrictions.
 - Distinguish Huawei log destination domains and source-port controls; source-port declarations no longer inflate syslog server counts or invalidate source-interface evidence.
 - Normalize split Comware/VRP NTP and syslog source interface type/number declarations and recognize their resets.

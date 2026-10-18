@@ -5,9 +5,9 @@ require "ipaddr"
 module Baseline
   # 资源只持有配置生成所需的非秘密属性；未知字段不能进入报告。
   module ResourceSchema
-    SYSLOG_FIELDS = %w[address name protocol port facility severity channel dscp filter source format types].freeze
+    SYSLOG_FIELDS = %w[address name protocol port facility severity channel dscp filter source format types certificate_check].freeze
     IDENTITY_FIELDS = %w[address name protocol port types].freeze
-    SCOPE_FIELDS = %w[vrf profile].freeze
+    SCOPE_FIELDS = %w[vrf profile source].freeze
 
     # 校验完整资源数据，拒绝控制字符及未声明的配置字段。
     def self.validate!(kind:, identity:, scope:, attributes:, lines:, complete:)
@@ -25,6 +25,7 @@ module Baseline
           when "port" then value.is_a?(Integer) && value.between?(1, 65_535)
           when "dscp" then value.is_a?(Integer) && value.between?(0, 63)
           when "severity" then value.is_a?(Integer) && value.between?(0, 7)
+          when "certificate_check" then [ true, false ].include?(value)
           when "protocol" then %w[udp tcp secure-tcp ssl].include?(value)
           when "types" then value.is_a?(Array) && !value.empty? && value.uniq == value && value.all? { |item| token?(item) }
           else token?(value)

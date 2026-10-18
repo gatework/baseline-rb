@@ -69,6 +69,8 @@ puts report.to_text
 
 `FactBuilder` 汇总配置证据，`Policy` 提供批准值，`Evaluator` 生成合规判定。`Acl#permitted_source_networks` 按有序规则、协议和目标端口计算允许的 IPv4 来源网段：`nil` 表示证据未解决，`[]` 表示没有允许来源。`FactBuilder#record_credential` 记录安全的凭据属性。部分证据可以证明确定违规，但不能证明合规。
 
+`Evidence#resources` 提供不可变的 Syslog 配置对象，保留厂商身份、作用域、选项及来源行，避免将去重地址误用为配置对象。每项 `ConfigurationResource#complete?` 只表示该对象语法是否被完整理解，不代表配置采集完整、引用链已生效或设备合规；未知选项不会复制进资源数据。资源层正在为离线修正方案提供基础，当前尚无公开的命令生成入口。
+
 厂商代码按命名空间组织：`Baseline::Hillstone::Parser` 和 `Baseline::Hillstone::Document` 同放在 `baseline/hillstone/`；Palo Alto 使用相同布局。六个平台解析器复用 `Baseline::Parser`、`Comware::Parser` 或 `Cisco::Parser`。单个平台可用 `require "baseline/hillstone/parser"` 独立加载；完整评估入口仍为 `require "baseline"`。
 
 解析辅助方法直接描述提取意图：`matching_blocks`、`configured_values`、`last_configured_value`、`configured_state` 和 `parse_acl_source_network`。SNMP 写权限规则统一为 `snmp.write_enabled`，禁止写入时配置 `expected: false`。自定义策略需迁移旧键 `snmp.read_only`；旧类名与规则键不保留兼容别名。

@@ -110,8 +110,10 @@ module Baseline
           parts = command_tokens(entry)
           options = parts.drop(3)
           source = nil
+          scope = { "vrf" => "default" }
           if %w[vrouter source-interface].include?(options.first)
             source = options[1] if options.first == "source-interface"
+            scope = options.first == "vrouter" ? { "vrf" => options[1] } : { "source" => options[1] }
             options = options.drop(2)
           end
           valid = server_address?(parts[2]) && %w[tcp udp secure-tcp].include?(options[0]) && parse_service_port(options[1])&.positive?
@@ -121,6 +123,17 @@ module Baseline
           unless valid
             record_unknown_fact("syslog", [ entry ])
             next
+          end
+          types = tail.first == "type" ? tail.drop(1).uniq.sort : []
+          identity = { "address" => parts[2], "protocol" => options[0], "port" => options[1].to_i }
+          identity["types"] = types unless types.empty?
+          attributes = options.include?("server-cert-check-disable") ? { "certificate_check" => false } : {}
+          if scope.values.all? { |value| ResourceSchema.token?(value) } && types.all? { |value| ResourceSchema.token?(value) }
+            resource = ConfigurationResource.new(kind: "syslog.destination", identity: identity, scope: scope,
+              attributes: attributes, lines: [ entry.line ])
+            @fact_builder.record_resource(resource)
+          else
+            record_unknown_fact("syslog.destinations", [ entry ], code: :unsupported_resource_identity)
           end
           sources << source
           analyze(entry) { parts[2] }

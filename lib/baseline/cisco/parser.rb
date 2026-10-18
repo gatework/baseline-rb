@@ -133,12 +133,36 @@ module Baseline
           log_entries.sort_by!(&:index)
           log_pattern = /\Alogging\s+(?:host\s+(?:ipv6\s+)?)?((?!(?:host|ipv6)(?:\s|\z))\S+)/
         end
-        hosts = configured_server_addresses("syslog.servers", log_pattern, log_entries, negate: "no")
+        hosts = configured_server_addresses("syslog.servers", log_pattern, log_entries, negate: "no") do |text, match, negative, entry|
+          record_loghost_resource(match, negative, entry)
+          [ match[1], text[/\b(?:use-vrf|vrf)\s+(\S+)/, 1] ]
+        end
         record_fact("syslog.servers", hosts, log_entries)
         source_entries = matching_blocks(/\A(?:no )?logging source-interface\b/)
         source = effective_configured_value(/\Alogging source-interface\s+(\S+)\z/, entries: source_entries,
           family: /\A/, fact: "syslog.source", reset: /\Ano logging source-interface(?:\s+\S+)?\z/)
         record_fact("syslog.source", source, source_entries.last(1))
+      end
+
+      # NX-OS 的级别、VRF 与 IOS 的传输选项分别解释，不从尾部盲拼命令。
+      def record_loghost_resource(match, negative, entry)
+        tail = match.post_match.strip
+        severity = tail[/\A([0-7])(?:\s|\z)/, 1] if nxos?
+        tail = tail.sub(/\A[0-7](?:\s|\z)/, "") if severity
+        names = nxos? ? %w[use-vrf facility] : %w[vrf transport]
+        options = parse_server_options(tail, integers: { "port" => 1..65_535 }, names: names)
+        scope = { "vrf" => entry.text[/\b(?:use-vrf|vrf)\s+(\S+)/, 1] || "default" }
+        attributes = (options || {}).reject { |key, _| %w[use-vrf vrf].include?(key) }
+        attributes["protocol"] = attributes.delete("transport") if attributes.key?("transport")
+        attributes["severity"] = severity.to_i if severity
+        complete = !options.nil? && [ *scope.values, *attributes.values.grep(String) ].all? { |value| ResourceSchema.token?(value) }
+        complete &&= !attributes.key?("protocol") || %w[udp tcp].include?(attributes["protocol"])
+        complete &&= !attributes.key?("facility") || /\A(?:local[0-7]|auth|authpriv|cron|daemon|ftp|kernel|lpr|mail|news|syslog|user|uucp)\z/.match?(attributes["facility"])
+        return unless ResourceSchema.token?(scope["vrf"])
+
+        resource = ConfigurationResource.new(kind: "syslog.destination", identity: { "address" => match[1] },
+          scope: scope, attributes: complete ? attributes : {}, lines: [ entry.line ], complete: complete)
+        @fact_builder.record_resource(resource, remove: negative)
       end
 
       # 提取轮询权限、用户安全属性及来源限制。

@@ -107,4 +107,51 @@ RSpec.describe "Baseline configuration resources" do
     expect(report.configuration.resources.first.identity).to eq("address" => "logs.example.test")
     expect(report.configuration.resources.first.attributes).to eq("port" => 1514)
   end
+
+  {
+    "cisco_ios" => [ "logging host 192.0.2.20 vrf A transport tcp port 1514", "logging host 192.0.2.20 vrf B transport udp port 2514",
+      "no logging host 192.0.2.20 vrf A", { "protocol" => "udp", "port" => 2514 } ],
+    "cisco_nxos" => [ "logging server 192.0.2.20 6 use-vrf A", "logging server 192.0.2.20 5 use-vrf B port 2514 facility local6",
+      "no logging server 192.0.2.20 use-vrf A", { "severity" => 5, "port" => 2514, "facility" => "local6" } ]
+  }.each do |platform, (first, second, removal, attributes)|
+    it "retains scoped logging resources and cancellation on #{platform}" do
+      policy = Baseline::Policy.new("version" => 1, "checks" => { "syslog.minimum_servers" => { "expected" => 1 } })
+      report = Baseline::Audit.new(policy: policy).call(configuration: "hostname LAB\n#{first}\n#{second}\n#{removal}\n",
+        platform: platform, complete: true)
+      expect(report.findings.first.status).to eq(:pass)
+      expect(report.configuration.resources.size).to eq(1)
+      item = report.configuration.resources.first
+      expect(item.scope).to eq("vrf" => "B")
+      expect(item.identity).to eq("address" => "192.0.2.20")
+      expect(item.attributes).to eq(attributes)
+      expect(item).to be_complete
+    end
+  end
+
+  it "retains each Hillstone logging category and routing scope" do
+    policy = Baseline::Policy.new("version" => 1, "checks" => { "syslog.minimum_servers" => { "expected" => 1 } })
+    text = "hostname LAB\nlogging syslog 192.0.2.20 vrouter A udp 514 type event\n" \
+      "logging syslog 192.0.2.20 vrouter A udp 514 type config\n" \
+      "logging syslog 192.0.2.20 vrouter B tcp 1514 type event\nEnd\n"
+    report = Baseline::Audit.new(policy: policy).call(configuration: text, platform: "hillstone", complete: true)
+    expect(report.configuration.resources.size).to eq(3)
+    expect(report.configuration.resources.map(&:key).uniq.size).to eq(3)
+    expect(report.configuration.resources).to all(be_complete)
+    expect(report.configuration.resources.last.scope).to eq("vrf" => "B")
+    expect(report.configuration.resources.last.identity).to eq("address" => "192.0.2.20", "protocol" => "tcp", "port" => 1514, "types" => [ "event" ])
+  end
+
+  it "retains PAN-OS profile/server identities and latest leaf values" do
+    policy = Baseline::Policy.new("version" => 1, "checks" => { "syslog.minimum_servers" => { "expected" => 1 } })
+    prefix = "set shared log-settings syslog OPS server LOG"
+    text = "set deviceconfig system hostname LAB\n#{prefix} server 192.0.2.20\n#{prefix} port 514\n#{prefix} port 1514\n" \
+      "#{prefix} transport TCP\n#{prefix} facility LOG_LOCAL6\n#{prefix} format BSD\n"
+    report = Baseline::Audit.new(policy: policy).call(configuration: text, platform: "palo_alto", complete: true)
+    expect(report.configuration.resources.size).to eq(1)
+    item = report.configuration.resources.first
+    expect(item.scope).to eq("profile" => "OPS")
+    expect(item.identity).to eq("name" => "LOG")
+    expect(item.attributes).to eq("address" => "192.0.2.20", "port" => 1514, "protocol" => "tcp", "facility" => "LOG_LOCAL6", "format" => "BSD")
+    expect(item).to be_complete
+  end
 end

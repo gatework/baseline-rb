@@ -96,3 +96,4 @@
 - 前置接口检查：Task 2 resources供Task 3消费；Task 3 operation供Task 4/5呈现；Task 6验证所有层。无接口冲突。
 
 - Task 1 complete: 368 examples / 0 failures, RuboCop55 files clean, offline example pass. 973份真实备份重跑无异常、显式命令对照无偏差、不完整输入零pass；187份management.acl_bound从unknown变fail，其他规则状态未变。
+- Task 2 in progress: Syslog资源已覆盖六类现有适配器；保留VRF、Hillstone传输/端口/类别、PAN-OS profile/server叶子及安全元数据。386 examples / 0 failures，RuboCop58 files clean；973份真实备份零异常、旧规则状态不变、零显式命令偏差、不完整输入零pass。实际资源3342项，其中1项未知选项标记incomplete。NTP/TACACS资源、引用关系与结构化策略尚未完成，不能据此认定Task2完成。

@@ -183,10 +183,42 @@ module Baseline
           address = definitions.reverse.find { |row| row[:tokens][6] == "server" }
           value = address && configured_server_address(address[:tokens].take(7))
           record_unknown_fact("syslog.servers", definitions.map { |row| row[:entry] }, code: :syslog_server_unresolved) unless value
+          record_syslog_resource(definitions, value) if value
           value
         end
         record_fact("syslog.servers", servers.uniq, entries.map { |row| row[:entry] })
         record_configured_scalar("syslog.source", %w[deviceconfig system route service syslog source interface])
+      end
+
+      # 命名配置对象按叶子最后值归约，未知字段不进入公开资源数据。
+      def record_syslog_resource(definitions, address)
+        profile, name = definitions.first[:tokens].values_at(3, 5)
+        unless [ profile, name ].all? { |value| ResourceSchema.token?(value) }
+          record_unknown_fact("syslog.destinations", definitions.map { |row| row[:entry] }, code: :unsupported_resource_identity)
+          return
+        end
+        attributes = { "address" => address }
+        complete = true
+        definitions.group_by { |row| row[:tokens][6] }.each do |field, rows|
+          row = rows.last
+          value = row[:tokens][7]
+          valid = row[:tokens].size == 8
+          valid &&= case field
+          when "server" then ResourceSchema.address?(value)
+          when "port" then /\A\d+\z/.match?(value.to_s) && value.to_i.between?(1, 65_535)
+          when "transport" then %w[UDP TCP SSL].include?(value)
+          when "facility" then /\ALOG_(?:USER|LOCAL[0-7])\z/.match?(value.to_s)
+          when "format" then %w[BSD IETF].include?(value)
+          else false
+          end
+          complete &&= valid
+          next unless valid && field != "server"
+          key = field == "transport" ? "protocol" : field
+          attributes[key] = field == "port" ? value.to_i : field == "transport" ? value.downcase : value
+        end
+        resource = ConfigurationResource.new(kind: "syslog.destination", identity: { "name" => name }, scope: { "profile" => profile },
+          attributes: attributes, lines: definitions.map { |row| row[:entry].line }, complete: complete)
+        @fact_builder.record_resource(resource)
       end
 
       # 轮询用户、团体字与出站 SNMP Trap 配置相互独立。
