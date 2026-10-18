@@ -7,12 +7,13 @@ module Baseline
   module ResourceSchema
     SYSLOG_FIELDS = %w[address name protocol port facility severity channel dscp filter source format types certificate_check].freeze
     NTP_FIELDS = %w[address version key_id prefer source minpoll maxpoll burst iburst normal_sync authenticated].freeze
-    IDENTITY_FIELDS = %w[address name protocol port types role].freeze
-    SCOPE_FIELDS = %w[vrf profile source].freeze
+    TACACS_FIELDS = %w[address port source key_present timeout single_connection].freeze
+    IDENTITY_FIELDS = %w[address name protocol port types role priority family].freeze
+    SCOPE_FIELDS = %w[vrf profile source group].freeze
 
     # 校验完整资源数据，拒绝控制字符及未声明的配置字段。
     def self.validate!(kind:, identity:, scope:, attributes:, lines:, complete:)
-      fields = { "syslog.destination" => SYSLOG_FIELDS, "ntp.association" => NTP_FIELDS }[kind]
+      fields = { "syslog.destination" => SYSLOG_FIELDS, "ntp.association" => NTP_FIELDS, "tacacs.endpoint" => TACACS_FIELDS }[kind]
       valid = fields && identity.is_a?(Hash) && !identity.empty? &&
         (identity.keys - IDENTITY_FIELDS).empty? && scope.is_a?(Hash) && (scope.keys - SCOPE_FIELDS).empty? &&
         attributes.is_a?(Hash) && (attributes.keys - fields).empty? &&
@@ -30,8 +31,12 @@ module Baseline
           when "version" then value.is_a?(Integer) && value.between?(1, 4)
           when "key_id" then value.is_a?(Integer) && value.between?(1, 4_294_967_295)
           when "minpoll", "maxpoll" then value.is_a?(Integer) && value.between?(4, 17)
-          when "certificate_check", "prefer", "burst", "iburst", "normal_sync", "authenticated" then [ true, false ].include?(value)
-          when "role" then %w[server peer].include?(value)
+          when "timeout" then value.is_a?(Integer) && value.between?(1, 65_535)
+          when "certificate_check", "prefer", "burst", "iburst", "normal_sync", "authenticated", "key_present", "single_connection" then [ true, false ].include?(value)
+          when "role" then %w[server peer authentication authorization accounting all].include?(value)
+          when "priority" then %w[primary secondary host backup1 backup2].include?(value)
+          when "family" then %w[ipv4 ipv6].include?(value)
+          when "name", "group", "profile" then name?(value)
           when "protocol" then %w[udp tcp secure-tcp ssl].include?(value)
           when "types" then value.is_a?(Array) && !value.empty? && value.uniq == value && value.all? { |item| token?(item) }
           else token?(value)
@@ -44,6 +49,11 @@ module Baseline
     # 白名单词元不接受空白、分号及 CLI 视图控制字符。
     def self.token?(value)
       value.is_a?(String) && value.bytesize.between?(1, 253) && /\A[a-zA-Z0-9_][a-zA-Z0-9_.:\/-]*\z/.match?(value)
+    end
+
+    # 某些厂商的引号对象名允许空格，但不接受换行及命令分隔符。
+    def self.name?(value)
+      value.is_a?(String) && value.bytesize.between?(1, 253) && /\A[a-zA-Z0-9_][a-zA-Z0-9_.:\/ -]*\z/.match?(value) && !value.end_with?(" ")
     end
 
     # 地址与 DNS 名沿用同一校验契约，资源和旧事实不能对非法目标判断不同。

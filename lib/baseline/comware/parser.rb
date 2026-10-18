@@ -221,7 +221,12 @@ module Baseline
       def parse_authentication
         schemes = matching_blocks(tacacs_section_pattern).to_h do |section|
           server_types = matching_blocks(tacacs_server_family_pattern, section.children).group_by { |entry| entry.text.delete_prefix("undo ").split[1] }
-            .transform_values { |entries| configured_server_addresses("tacacs", tacacs_server_pattern, entries, negate: "undo") }
+            .transform_values do |entries|
+              configured_server_addresses("tacacs", tacacs_server_pattern, entries, negate: "undo") do |text, match, negative, entry|
+                record_tacacs_endpoint(section, text, match, negative, entry)
+                match[1]
+              end
+            end
           servers = server_types.values.flatten.uniq
           keys = section.children.filter_map do |entry|
             match = tacacs_key_pattern.match(entry.text)
@@ -270,6 +275,22 @@ module Baseline
           match = /\Asuper password(?: level \d+)?\s+(simple|cipher|hash)\s+(.+)\z/.match(entry.text)
           record_credential("super", "enable", match ? match[1] : "unknown", match&.[](2), entry)
         end
+      end
+
+      # 服务器职责和主备属于身份，不能把相同地址的不同职责合并。
+      def record_tacacs_endpoint(section, text, match, negative, entry)
+        tail = match.post_match.strip
+        port = tail[/\A(\d+)(?:\s|\z)/, 1]
+        tail = tail.sub(/\A\d+(?:\s|\z)/, "") if port
+        options = parse_server_options(tail, flags: [ "secondary" ], names: %w[vpn-instance source-ip])
+        priority = %w[primary secondary].include?(text.split.first) ? text.split.first : options&.fetch("secondary", false) ? "secondary" : "primary"
+        attributes = {}
+        attributes["port"] = port.to_i if port && port.to_i.between?(1, 65_535)
+        attributes["source"] = options["source-ip"] if options && options["source-ip"]
+        complete = !options.nil? && (!port || attributes.key?("port"))
+        record_tacacs_resource(identity: { "address" => match[1], "role" => text.split[1], "priority" => priority },
+          scope: { "group" => section.text.split.last, "vrf" => options&.fetch("vpn-instance", "default") || "default" },
+          attributes: complete ? attributes : {}, entry: entry, negative: negative, complete: complete)
       end
 
       # 解析认证域引用及其服务器组。

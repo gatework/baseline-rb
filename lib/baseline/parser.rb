@@ -323,6 +323,15 @@ module Baseline
       @fact_builder.record_resource(resource, remove: negative)
     end
 
+    # TACACS 对象仅保存职责、引用身份与密钥存在性，不保存密钥值。
+    def record_tacacs_resource(identity:, scope:, attributes:, entry:, negative: false, complete: true)
+      resource = ConfigurationResource.new(kind: "tacacs.endpoint", identity: identity, scope: scope,
+        attributes: attributes, lines: [ entry.line ], complete: complete)
+      @fact_builder.record_resource(resource, remove: negative)
+    rescue ArgumentError
+      record_unknown_fact("tacacs.endpoints", [ entry ], code: :unsupported_resource_identity)
+    end
+
     # 配置的监听端口仅替代当前服务的默认端口。
     def listener_port(command, default:, scope:, negate: "undo")
       prefix = Regexp.escape(command)

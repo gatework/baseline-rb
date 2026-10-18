@@ -271,6 +271,7 @@ module Baseline
             address = server.reverse.find { |row| row[:tokens][6] == "address" }
             value = address && configured_server_address(address[:tokens].take(7))
             record_unknown_fact("tacacs.servers", server.map { |row| row[:entry] }, code: :tacacs_server_unresolved) unless value
+            record_tacacs_endpoint(name, server, value) if value
             value
           end
           record_unknown_fact("tacacs.servers", entries.map { |row| row[:entry] }, code: :tacacs_server_unresolved) if servers.empty?
@@ -289,6 +290,32 @@ module Baseline
         login = selected ? tacacs_login_state(selected, schemes) : false
         login.nil? ? record_unknown_fact("tacacs.login", code: :tacacs_scheme_unresolved) : record_fact("tacacs.login", login)
         parse_local_accounts
+      end
+
+      # 命名服务器地址可独立修改；秘密叶子仅贡献配置存在性。
+      def record_tacacs_endpoint(profile, rows, address)
+        attributes = { "address" => address }
+        complete = true
+        rows.group_by { |row| row[:tokens][6] }.each do |field, definitions|
+          row = definitions.last
+          value = row[:tokens][7]
+          case field
+          when "address"
+            complete &&= row[:tokens].size == 8 && ResourceSchema.address?(value)
+          when "port"
+            valid = row[:tokens].size == 8 && /\A\d+\z/.match?(value.to_s) && value.to_i.between?(1, 65_535)
+            complete &&= valid
+            attributes["port"] = value.to_i if valid
+          when "secret"
+            valid = row[:tokens].size == 8 && value.is_a?(String) && !value.empty?
+            attributes["key_present"] = valid
+            complete &&= valid
+          else
+            complete = false
+          end
+        end
+        record_tacacs_resource(identity: { "name" => rows.first[:tokens][5] }, scope: { "profile" => profile },
+          attributes: attributes, entry: rows.first[:entry], complete: complete)
       end
 
       # 认证序列具有顺序；后备 TACACS 不能视为首选 TACACS 登录。

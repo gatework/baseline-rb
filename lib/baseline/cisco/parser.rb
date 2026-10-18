@@ -315,7 +315,10 @@ module Baseline
         global_key = matching_blocks(/\Atacacs-server key\s+/)
         global_key.each { |entry| record_tacacs_key("tacacs", entry.text.sub(/\Atacacs-server key\s+/, ""), entry) }
         legacy_hosts = matching_blocks(/\A(?:no )?tacacs-server host(?:\s|\z)/)
-        hosts = configured_server_addresses("tacacs", /\Atacacs-server host\s+(\S+)/, legacy_hosts, negate: "no")
+        hosts = configured_server_addresses("tacacs", /\Atacacs-server host\s+(\S+)/, legacy_hosts, negate: "no") do |_text, match, negative, entry|
+          record_tacacs_endpoint({ "address" => match[1] }, match, entry, negative: negative, keyed: global_key.any?)
+          match[1]
+        end
         servers |= hosts
         active_hosts = {}
         legacy_hosts.each do |entry|
@@ -331,7 +334,12 @@ module Baseline
           end
         end
         matching_blocks(/\Atacacs server\s+/).each do |section|
-          hosts = configured_server_addresses("tacacs", /\Aaddress ipv[46]\s+(\S+)/, matching_blocks(/\A(?:no )?address ipv[46](?:\s|\z)/, section.children), negate: "no")
+          hosts = configured_server_addresses("tacacs", /\Aaddress ipv[46]\s+(\S+)/, matching_blocks(/\A(?:no )?address ipv[46](?:\s|\z)/, section.children), negate: "no") do |text, match, negative, entry|
+            identity = { "name" => section.text.split.last, "family" => text.split[1] }
+            keyed_section = matching_blocks(/\Akey\s+/, section.children).any? || global_key.any?
+            record_tacacs_endpoint(identity, match, entry, negative: negative, keyed: keyed_section)
+            match[1]
+          end
           aliases[section.text.split.last] = hosts
           servers |= hosts
           matching_blocks(/\Akey\s+/, section.children).each do |entry|
@@ -349,6 +357,19 @@ module Baseline
         %w[authorization accounting].each { |kind| record_tacacs_action_usage(kind, servers, groups) }
         record_fact("tacacs.keys_present", global_key.any? || (servers - keyed).empty?) unless servers.empty?
         parse_local_accounts
+      end
+
+      # 旧式主机及命名服务器保留各自身份，内联 key 只提取存在性。
+      def record_tacacs_endpoint(identity, match, entry, negative:, keyed:)
+        tail = match.post_match.strip
+        key = /(?:\A|\s)key\s+(.+)\z/.match(tail)
+        options_text = key ? tail[0...key.begin(0)] : tail
+        options = parse_server_options(options_text, flags: [ "single-connection" ], integers: { "port" => 1..65_535, "timeout" => 1..65_535 })
+        attributes = (options || {}).transform_keys { |name| name == "single-connection" ? "single_connection" : name }
+        attributes["address"] = match[1] unless identity.key?("address")
+        attributes["key_present"] = keyed || !key.nil?
+        record_tacacs_resource(identity: identity, scope: {}, attributes: attributes,
+          entry: entry, negative: negative, complete: !options.nil?)
       end
 
       # 授权和计费按动作及命令级别分别覆盖，只有全部最终声明都首选 TACACS 才确认使用。

@@ -241,6 +241,8 @@ module Baseline
           servers = endpoints.filter_map do |entry|
             values = command_tokens(entry)
             if server_address?(values[1]) && (values.size == 2 || values.size == 4 && values[2] == "vrouter")
+              record_tacacs_resource(identity: { "address" => values[1], "priority" => values[0] },
+                scope: { "group" => parts[1], "vrf" => values[3] || "default" }, attributes: {}, entry: entry)
               analyze(entry) { values[1] }
             else
               record_unknown_fact("tacacs", [ entry ])
