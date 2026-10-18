@@ -173,3 +173,14 @@ H3C 现有方案的缺省路由端点支持物理主槽位替换、逐地址/端
 `snmp.write_enabled: false` 的人工审核信息保留在 `check.details.permission_grants`。写团体字以配置指纹内序号定位，给出来源行和替换为只读的材料、NMS 同步及原视图/ACL 保留要求，不公开团体字或其摘要。组授权列出已解析的各安全级别定义、读/写/通知视图、IPv4/IPv6 ACL 和已知用户消费者；`revoke_write` 是审核意图，不是已验证厂商命令。未解析权限和孤立用户使用 `verify`，`inventory_complete: false` 与补证要求保留，已知违规不能掩盖其他未知主体。
 
 H3C 文档分别定义组名和安全级别，以及省略读视图时的默认读权限、未配置写视图时无写权限。但这不能单独证明重复执行 group 命令会撤回原写视图，更不能推断删组再建不影响用户。原生权限迁移仍需完整命令/引用验证，目前检查为 blocked，能力查询明确 unsupported，并给出逐对象要求。默认不批准相反的写权限扩张。依据：[H3C SNMP 组命令](https://www.h3c.com/en/Support/Resource_Center/EN/Home/Public/00-Public/Technical_Documents/Reference_Guides/Command_References/H3C_CR-18349/09/202404/2100798_294551_0.htm)。
+
+
+## NTP 材料、可信声明与关联证据
+
+`ntp.authentication` 继续保持已发布的显式开关契约，不能把开关通过当作完整认证或同步成功。Comware/VRP `ntp.key_slots` 独立记录 key ID、算法、存储格式、材料存在性、完整性、可信状态及来源行；`ntp.authentication_bindings` 对每个 server/peer 给出引用、配置就绪性和具体缺证原因。材料替换及删除先归约，旧材料不进入凭据记录。损坏的最终声明产生未知材料；未知凭据使用 `present: nil`，不覆盖其他已确认的明文/旧格式违规。密文不用于推断强度或对端一致性。局部输入不能证明完整清单或认证就绪。
+
+H3C profile 支持 md5 与文档中的 hmac-sha-1/256/384/512 拼写及显式 cipher/simple；VRP profile 独立支持 md5、hmac-sha256、aes-128-cmac、aes-256-cmac 和 cipher/未限定格式的明文。算法列表表示可识别语法，并非安全推荐。密钥 ACL 及未确认语法保持未知。H3C 删除密钥自动撤销可信状态；未确认的 VRP 删除联动保持未知，需要后续显式可靠声明。未知的最后认证开关语句不会回落到旧启用值。
+
+新的批准关联可引用已有、完整、可信材料，并要求 `ntp_peer_key_compatibility_verified: true` 外部核验 ID、算法及材料。规划器传给呈现器的 `verified_ntp_key_ids` 是本次方案内的非秘密依赖证据；独立呈现不自行假定可信材料存在。不生成材料命令，不改变认证开关或可信声明。独立测试模型应用原生命令后核对对象审计、配置就绪图、无关文本及第二次零变更；这些不是设备/NTP 对端测试。
+
+依据：[H3C 密钥及可靠声明](https://www.h3c.com/en/Support/Resource_Center/EN/Home/Public/00-Public/Technical_Documents/Reference_Guides/Command_References/H3C_CR-28394/15/202508/2623951_294551_0.htm)、[H3C 可靠声明与密钥删除联动](https://www.h3c.com/en/d_202112/1504433_294551_0.htm)、[Huawei NTP 认证配置及算法](https://info.support.huawei.com/hedex/api/pages/EDOC1100277644/AEM10221/03/resources/software/nev8r10_vrpv8r16/user/galaxy/vrp_ntp_cfg_0025.html)。其他产品/版本需对应 profile 证据，不能从语法相近推断已覆盖。

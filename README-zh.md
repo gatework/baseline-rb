@@ -206,3 +206,8 @@ H3C `tacacs.endpoints` 支持现有缺省路由方案内的非秘密 Comware 7 �
 
 
 `snmp.write_enabled: false` 审核方案在 `details.permission_grants` 列出已知及待核实授权：匿名团体字序号、已解析的组安全级别/视图/ACL、已知用户引用、来源行及材料/NMS 依赖。组修改需保留读视图、通知、安全级别和 ACL；写团体字替换需批准材料。缺少组定义或用户引用时要求补证。此类检查继续受阻，等待厂商权限迁移验证；不生成删组、秘密或占位命令。参见[权限审核示例](examples/remediation_snmp_permissions.rb)。
+
+
+Comware/VRP `ntp.key_slots` 保留最终非秘密材料及可信状态，`ntp.authentication_bindings` 关联 server/peer 对象、密钥和认证开关。`configured_ready` 只描述已建模配置前提齐全，不代表对端材料相符或同步成功。替换、撤销及损坏更新不会证明旧材料仍有效；H3C 删除材料同时清除可信状态，尚未确认的 VRP 删除联动保持未知，直到后续明确声明。最终密钥凭据参与存储/强度审核，不保留材料；未知 NTP 凭据不会掩盖其他已确认的不安全凭据。
+
+新的批准 `ntp.associations` key 引用可复用已知可信 Comware/VRP 材料，前提是通过 `ntp_peer_key_compatibility_verified: true` 记录外部对端核验。数字 ID 本身不足以授权生成，不创建新秘密。呈现器仅使用规划器提供的已验证 ID，独立调用不能假定前提成立；保留既有引用时，已建模材料损坏、缺失或未可信也会受阻。密钥 ACL、其他厂商材料 profile 和原生认证/可信切换仍需补齐。参见[认证关联示例](examples/remediation_ntp_authentication.rb)。

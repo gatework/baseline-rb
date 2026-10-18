@@ -8,6 +8,7 @@ module Baseline
       "local_user" => [ "local_fallback_access_verified" ], "line" => [ "line_access_recovery_verified" ],
       "enable" => [ "privileged_access_recovery_verified" ], "snmp" => [ "snmp_manager_update" ],
       "snmp_user" => [ "snmp_manager_update", "snmp_group_reference_verified" ],
+      "ntp" => [ "ntp_peer_key_update", "ntp_trusted_key_reference_verified", "time_synchronization_recovery_verified" ],
       "tacacs" => [ "tacacs_peer_update", "authentication_reference_evidence", "local_fallback_access_verified" ]
     }.transform_values(&:freeze).freeze
 

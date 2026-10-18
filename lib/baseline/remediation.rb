@@ -38,7 +38,7 @@ module Baseline
           requirements += [ "managed_scopes" ] if id == "syslog.destinations"
         elsif supported && NtpRemediation::IDS.include?(id)
           requirements = [ "approved_ntp_associations", "maximum_targets_for_net_additions", "authentication_dependencies" ]
-          requirements += [ "managed_scopes" ] if id == "ntp.associations"
+          requirements += %w[managed_scopes ntp_peer_key_compatibility_verified known_trusted_ntp_key] if id == "ntp.associations"
         elsif supported && TacacsRemediation::IDS.include?(id)
           requirements = %w[approved_tacacs_endpoints managed_scopes syntax_profile local_fallback_access_verified
             tacacs_key_compatibility_verified existing_scheme_role_key preserved_domain_references maximum_targets_for_net_additions]

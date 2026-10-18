@@ -181,7 +181,7 @@ module Baseline
       end
       result = handler.new(policy: @policy).call(finding, audit)
       proposed = result.operations
-      rendered = proposed.flat_map { |operation| @renderer.render(operation) }
+      rendered = proposed.flat_map { |operation| @renderer.render(operation, verified_ntp_key_ids: result.details.fetch(:verified_ntp_key_ids, [])) }
       operations.concat(proposed)
       steps.concat(rendered)
       check(finding, :planned, nil, operation_ids: proposed.map(&:id), details: result.details)

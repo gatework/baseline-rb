@@ -87,7 +87,9 @@ module Baseline
         %w[access_targets global_acl_supported]
       elsif %w[management.acl_bound management.acl_restricted management.sources].include?(id)
         %w[access_targets]
-      elsif %w[syslog.minimum_servers syslog.servers syslog.destinations ntp.minimum_servers ntp.servers ntp.associations].include?(id)
+      elsif id == "ntp.associations"
+        %w[maximum_targets order ntp_peer_key_compatibility_verified]
+      elsif %w[syslog.minimum_servers syslog.servers syslog.destinations ntp.minimum_servers ntp.servers].include?(id)
         %w[maximum_targets order]
       elsif id == "tacacs.endpoints"
         %w[maximum_targets order syntax_profile local_fallback_access_verified tacacs_key_compatibility_verified]
@@ -100,9 +102,10 @@ module Baseline
           (!remediation.key?("order") || %w[add_before_remove remove_before_add].include?(remediation["order"]))
         raise ArgumentError, "Invalid baseline remediation options"
       end
-      unless (!remediation.key?("syntax_profile") || remediation["syntax_profile"] == "comware7") &&
+      unless (!remediation.key?("ntp_peer_key_compatibility_verified") || [ true, false ].include?(remediation["ntp_peer_key_compatibility_verified"])) &&
+          (!remediation.key?("syntax_profile") || remediation["syntax_profile"] == "comware7") &&
           %w[local_fallback_access_verified tacacs_key_compatibility_verified].all? { |key| !remediation.key?(key) || [ true, false ].include?(remediation[key]) }
-        raise ArgumentError, "Invalid TACACS remediation approval"
+        raise ArgumentError, "Invalid baseline remediation approval"
       end
       AccessApproval.validate!(remediation["access_targets"], domain: id.start_with?("snmp.") ? :snmp : :management) if remediation.key?("access_targets")
       validate_applicability!

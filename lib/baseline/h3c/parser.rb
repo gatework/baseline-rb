@@ -8,6 +8,10 @@ module Baseline
     class Parser < Comware::Parser
       private
 
+      # Comware 7 删除材料同时撤销可信状态，算法拼写不能套用 VRP。
+      def ntp_delete_clears_trust? = true
+      def ntp_key_algorithms = %w[md5 hmac-sha-1 hmac-sha-256 hmac-sha-384 hmac-sha-512]
+
       # 新建专用基本 ACL 前也检查其他业务的悬空引用，避免创建后意外激活。
       def parse_access_lists
         super

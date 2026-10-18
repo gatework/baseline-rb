@@ -8,6 +8,13 @@ module Baseline
     class Parser < Comware::Parser
       private
 
+      # VRP 使用无连字符的 SHA256 名称，并允许未限定格式的明文材料。
+      def ntp_key_algorithms = %w[md5 hmac-sha256 aes-128-cmac aes-256-cmac]
+      def ntp_key_secret(value)
+        match = /\A(?:(cipher) )?(\S+)\z/.match(value)
+        match ? [ match[1] || "plain", match[2] ] : [ nil, nil ]
+      end
+
       # VRP 的域名目标使用 domain 关键字，不能把该词当成服务器地址。
       def loghost_pattern
         /\Ainfo-center loghost\s+(?:vpn-instance\s+\S+\s+)?(?:ipv6\s+|domain\s+)?((?!(?:vpn-instance|ipv6|domain)(?:\s|\z))\S+)/

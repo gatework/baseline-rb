@@ -3,12 +3,14 @@
 require_relative "../parser"
 require_relative "../snmp_options"
 require_relative "authentication"
+require_relative "ntp_authentication"
 
 module Baseline
   module Comware
     # 复用 Comware 与 VRP 结构，由厂商子类选择账号、SSH 和 TACACS 语法。
     class Parser < Baseline::Parser
       include Authentication
+      include NtpAuthentication
       BINDING_KINDS = { "tacacs.endpoint" => [ "aaa.domain" ].freeze }.freeze
       private
 
@@ -97,7 +99,7 @@ module Baseline
         parse_ntp_associations("peer")
         ntp_entries = matching_blocks(/\A(?:undo )?ntp-service (?:ipv6 )?unicast-server(?:\s|\z)/)
         record_fact("ntp.servers", parse_ntp_associations("server"), ntp_entries)
-        record_configured_state("ntp.authentication", /\Antp-service authentication enable\z/, /\Aundo ntp-service authentication enable\z/)
+        parse_ntp_authentication(ntp_authentication_switch)
         source_entries = matching_blocks(/\A(?:undo )?ntp-service source(?:-interface)?(?:\s|\z)/)
         source = effective_configured_value(/\Antp-service source(?:-interface)?\s+(.+)\z/, entries: source_entries,
           family: /\A/, fact: "ntp.source", reset: /\Aundo ntp-service source(?:-interface)?(?:\s+[a-zA-Z][\w.:\/-]*(?:\s+\d[\d.:\/-]*)?)?\z/)

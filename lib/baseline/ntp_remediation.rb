@@ -16,10 +16,31 @@ module Baseline
       if required && result.operations.any? { |operation| operation.action == :add && !operation.after.key?("key_id") }
         raise Blocked, :ntp_authentication_dependency
       end
-      result
+      verified = verify_key_dependencies!(result.operations, audit.configuration)
+      Result.new(operations: result.operations, details: CtxParser::Immutable.copy(result.details.merge(verified_ntp_key_ids: verified)))
     end
 
     private
+
+    # 新引用必须关联已知可信材料及外部对端证据；保留引用也不能绕过已知损坏的材料。
+    def verify_key_dependencies!(operations, evidence)
+      keyed = operations.select { |operation| operation.after&.key?("key_id") }
+      changed = keyed.select { |operation| operation.before&.fetch("key_id", nil) != operation.after["key_id"] }
+      if changed.any? && @policy.rules.find { |rule| rule.id == "ntp.associations" && rule.enabled? }&.remediation&.fetch("ntp_peer_key_compatibility_verified", false) != true
+        raise Blocked.new(:ntp_authentication_dependency, requirements: [ "ntp_peer_key_compatibility_verified" ])
+      end
+      slots = evidence.fact("ntp.key_slots")
+      checked = slots ? keyed : changed
+      by_id = (slots || []).to_h { |slot| [ slot[:key_id], slot ] }
+      checked.each do |operation|
+        key_id = operation.after.fetch("key_id")
+        slot = by_id[key_id]
+        unless evidence.fact_known?("ntp.key_slots") && slot && slot[:present] == true && slot[:complete] && slot[:trusted] == true
+          raise Blocked.new(:ntp_authentication_dependency, requirements: [ "known_trusted_ntp_key:#{key_id}" ])
+        end
+      end
+      changed.map { |operation| operation.after.fetch("key_id") }.uniq.sort
+    end
 
     def legacy_identity(address) = { "address" => address, "role" => "server" }
     def countable_objects(objects) = objects.select { |object| object["identity"]["role"] == "server" || object["identity"].key?("name") }

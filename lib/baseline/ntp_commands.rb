@@ -5,7 +5,7 @@ module Baseline
   module NtpCommands
     private
 
-    def render_ntp(operation)
+    def render_ntp(operation, verified_key_ids: [])
       identity, scope = operation.identity, operation.scope
       unless identity.keys.sort == %w[address role] && scope.keys == [ "vrf" ] && %w[server peer].include?(identity["role"])
         raise CommandRenderer::UnsupportedOperation, "unsupported_ntp_identity"
@@ -33,7 +33,10 @@ module Baseline
         if %w[prefer burst iburst normal_sync].any? { |field| fields[field] == false }
           raise CommandRenderer::UnsupportedOperation, "implicit_ntp_option_state_unverified"
         end
-        if fields.key?("key_id") && operation.before&.fetch("key_id", nil) != fields["key_id"]
+        unless verified_key_ids.is_a?(Array) && verified_key_ids.all? { |key| key.is_a?(Integer) && key.between?(1, 4_294_967_295) }
+          raise ArgumentError, "Invalid verified NTP key identities"
+        end
+        if fields.key?("key_id") && operation.before&.fetch("key_id", nil) != fields["key_id"] && !verified_key_ids.include?(fields["key_id"])
           raise CommandRenderer::UnsupportedOperation, "ntp_key_material_unverified"
         end
         tail = []

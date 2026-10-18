@@ -4,6 +4,9 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+- Record final Comware/VRP NTP key material metadata, trust state, association configuration prerequisites and sanitized credential evidence; reject stale material/trust/switch updates without masking independently proven unsafe storage.
+- Reuse existing trusted NTP keys for newly approved associations only with external peer-compatibility verification; retain renderer dependency guards and verify convergence through an independent command model.
+
 - List SNMP write-grant review requirements per anonymous community, group definition and known user reference; preserve view/security/ACL dependencies and unresolved evidence without generating permission or secret commands.
 
 - Generate nonsecret Comware 7 TACACS endpoint changes within existing default-routing schemes, preserving role keys and shared domain references; require explicit targets, scope, external fallback/key verification and capacity evidence.

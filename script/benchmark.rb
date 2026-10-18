@@ -86,3 +86,20 @@ end
     raise "Missing complete domain binding evidence" unless report.compliant? && report.configuration.fact("aaa.domain_bindings").size == size * 3
   end
 end
+
+# 密钥、可信引用及关联按索引连接，合成规模只测本地配置证据构建。
+[ 10, 100 ].each do |size|
+  rows = size.times.map do |index|
+    id = index + 1
+    "ntp-service authentication-keyid #{id} authentication-mode md5 cipher SYNTHETIC-KEY\n" \
+      "ntp-service reliable authentication-keyid #{id}\nntp-service unicast-server 192.0.2.#{id} authentication-keyid #{id}\n"
+  end.join
+  configuration = "sysname LAB\nntp-service authentication enable\n#{rows}"
+  policy = Baseline::Policy.new("version" => 1, "checks" => { "ntp.authentication" => { "expected" => true } })
+  audit = Baseline::Audit.new(policy: policy)
+  measure("NTP material and trust bindings #{size}") do
+    report = audit.call(configuration: configuration, platform: "h3c", complete: true)
+    bindings = report.configuration.fact("ntp.authentication_bindings")
+    raise "Missing complete NTP key evidence" unless report.compliant? && bindings.size == size && bindings.all? { |binding| binding[:configured_ready] }
+  end
+end
