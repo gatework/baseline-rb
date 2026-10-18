@@ -182,3 +182,5 @@ Publish dependency gems first. A Git tag, a successful build, or a workflow file
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+Credential review plans identify unsafe-storage and observable weak-password objects in `check.details[:credentials]`, with source lines, purpose, deviations, material requirements, and consumer/recovery dependencies. Opaque strength requires external evidence rather than an assertion of weakness. SNMP authentication/privacy material remains distinct. These checks stay blocked: ordinary plans contain neither replacement secrets nor placeholder commands. Command capabilities remain unsupported and explain the manual material requirements. See the [credential example](examples/remediation_credentials.rb).

@@ -22,6 +22,7 @@ RSpec.describe "Vendor-independent SNMPv3 assessment" do
       expect(report.findings.map(&:status)).to eq([ :pass, :pass ])
       expect(report).to be_compliant
       expect(report.findings.last.lines).not_to be_empty
+      expect(report.configuration.fact("credentials.records").select { |entry| entry[:kind] == "snmp_user" }.map { |entry| entry[:purpose] }).to eq(%w[authentication privacy])
       expect(report.to_h.to_json + report.to_text).not_to include("SYNTHETIC-AUTH", "SYNTHETIC-PRIV")
       weak = audit.call(configuration: source.sub(privacy, ""), platform: platform, complete: true)
       expect(weak.findings.map(&:status)).to eq([ :pass, :fail ])

@@ -260,7 +260,8 @@ module Baseline
               next
             end
             user[key] = !row[:tokens].last.empty?
-            record_credential("snmp:#{name}", "snmp_user", credential_storage_format(row[:tokens].last), row[:tokens].last, row[:entry])
+            record_credential("snmp:#{name}", "snmp_user", credential_storage_format(row[:tokens].last), row[:tokens].last, row[:entry],
+              purpose: key == :auth ? "authentication" : "privacy")
           end
           user
         end

@@ -237,8 +237,8 @@ module Baseline
     end
 
     # 记录凭据属性，不保留凭据秘密值。
-    def record_credential(owner, kind, format, secret, entry)
-      value = analyze(entry) { Credential.new(owner: owner, kind: kind, format: format, secret: secret, line: entry.line) }
+    def record_credential(owner, kind, format, secret, entry, purpose: nil)
+      value = analyze(entry) { Credential.new(owner: owner, kind: kind, format: format, secret: secret, line: entry.line, purpose: purpose) }
       index = @fact_builder.record_credential(value)
       capture(entry, value.to_h, [ "facts", "credentials.records", index ])
     end
@@ -373,10 +373,10 @@ module Baseline
 
     # 提取 SNMP 凭据属性，不持久化秘密值。
     def record_snmp_credentials(owner, modes, entry, format: nil)
-      modes.each_value do |value|
+      modes.each do |kind, value|
         next if value == false
         stored_format, secret = value || [ "unknown", nil ]
-        record_credential(owner, "snmp_user", stored_format || format || "unknown", secret, entry)
+        record_credential(owner, "snmp_user", stored_format || format || "unknown", secret, entry, purpose: { auth: "authentication", priv: "privacy" }.fetch(kind))
       end
       record_unknown_fact("snmp.v3_auth_priv", [ entry ], code: :invalid_snmp_security) if modes.value?(nil)
       modes.transform_values { |value| value ? true : value }

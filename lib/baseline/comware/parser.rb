@@ -311,7 +311,7 @@ module Baseline
             match = tacacs_key_pattern.match(entry.text)
             next unless match
             kind, format, secret = match.captures
-            record_credential("tacacs:#{section.text.split.last}", "tacacs", format, secret, entry)
+            record_credential("tacacs:#{section.text.split.last}", "tacacs", format, secret, entry, purpose: kind)
             kind
           end
           [ section.text.split.last, { servers: servers, server_types: server_types, key_types: keys.uniq, line: section.line } ]

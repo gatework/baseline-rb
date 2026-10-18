@@ -98,3 +98,11 @@ Comware/VRP 的 `snmp.enabled` 按命令顺序归约：独立 `snmp-agent` 和 `
 H3C 的 `calculate-password` 是不启用服务的工具命令，参数不进入报告；此例外不跨平台套用到 VRP。未建模的合法命令仍可能产生未知，需要继续补充厂商语法证据。`snmp.enabled` 描述代理功能状态，不单独证明监听可达、NMS 连通、版本或 MIB 权限合规。
 
 依据：[H3C 启用与密码计算命令](https://www.h3c.com/en/d_201506/873135_294551_0.htm)、[Huawei SNMP 系统视图命令](https://info.support.huawei.com/enterprise/en/doc/EDOC1100459901/30eb7700/snmp-configuration-commands)、[H3C 全局 ACL 编号和命名范围](https://www.h3c.com/en/d_202507/2589658_294551_0.htm)。
+
+## 凭据轮换与补证对象
+
+`credentials.storage` 和 `credentials.strength` 的审核方案在 `details.credentials` 中列出需要处理的对象：配置内序号、账号/用途、来源行、具体偏差、`rotate` 或 `verify`、所需材料及依赖。序号只在当前配置指纹内有效；团体字保持匿名，不用秘密或其摘要作为身份。SNMP 的 authentication/privacy 用途在六类适配器中分别保留；Comware/VRP TACACS 密钥保留各自职责或 shared 用途。
+
+明文/旧格式存储，以及可观察到的弱口令要求批准替换材料、厂商支持的保护格式和人工轮换过程。方案按消费者提示 NMS 同步、TACACS 对端同步、认证引用及本地后备/恢复路径验证；这些是待核实条件，不表示已建立完整引用图或已验证管理连通性。未知存储格式要求补存储证据；密文/散列的强度要求外部证据，不能因此直接断言需要轮换。规则允许相反存储目标时，不生成降级到明文的命令。
+
+此处理不会生成带秘密或秘密占位符的命令，检查仍为 blocked；缺策略、不适用或不完整输入不会被改写为轮换授权。能力查询仍把秘密命令生成标为 unsupported，同时给出人工材料处理原因和条件。[凭据审核示例](../examples/remediation_credentials.rb) 展示对象要求和秘密排除。

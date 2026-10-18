@@ -7,6 +7,7 @@ require_relative "ntp_remediation"
 require_relative "vty_remediation"
 require_relative "access_remediation"
 require_relative "snmp_access_remediation"
+require_relative "credential_remediation"
 
 module Baseline
   # 每个指标都必须有规划结果；缺少实现或前提时显式受阻。
@@ -24,7 +25,8 @@ module Baseline
       "management.acl_bound" => [ "approved_acl_identity", "approved_access_targets", "shared_reference_evidence" ],
       "management.acl_restricted" => [ "approved_acl_identity", "approved_access_targets", "shared_reference_evidence" ],
       "management.sources" => [ "approved_acl_identity", "approved_access_targets", "shared_reference_evidence" ], "services.disabled" => [],
-      "credentials.storage" => [ "replacement_credential_reference" ], "credentials.strength" => [ "replacement_credential_reference" ],
+      "credentials.storage" => [ "credential_object_evidence", "approved_replacement_credential", "supported_protected_storage_format", "manual_rotation_procedure" ],
+      "credentials.strength" => [ "credential_object_evidence", "external_password_strength_evidence", "approved_replacement_for_observed_weak_passwords", "manual_rotation_procedure" ],
       "tacacs.minimum_servers" => [ "approved_tacacs_targets" ], "tacacs.servers" => [ "approved_tacacs_endpoints", "authentication_reference_evidence" ],
       "tacacs.login" => [ "approved_authentication_chain", "local_fallback_evidence" ],
       "tacacs.authorization" => [ "approved_authorization_chain" ], "tacacs.accounting" => [ "approved_accounting_chain" ],
@@ -48,6 +50,9 @@ module Baseline
         status = { pass: :not_needed, not_applicable: :not_applicable }[finding.status]
         if status
           check(finding, status, nil)
+        elsif CredentialRemediation.applicable?(finding, audit.configuration)
+          result = CredentialRemediation.new.call(finding, audit.configuration)
+          check(finding, :blocked, result.fetch(:reason), requirements: result.fetch(:requirements), details: result.fetch(:details))
         elsif !audit.configuration.complete? || finding.status == :unknown && !((AccessRemediation::IDS + SnmpAccessRemediation::IDS).include?(finding.id) && finding.reason == :fact_unavailable && !finding.expected.nil?)
           reason = audit.configuration.complete? ? finding.reason : audit.configuration.status == :unsupported ? :unsupported_platform : :input_incomplete
           check(finding, :blocked, reason)

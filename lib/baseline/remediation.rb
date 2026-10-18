@@ -38,8 +38,13 @@ module Baseline
           requirements = [ "approved_ntp_associations", "maximum_targets_for_net_additions", "authentication_dependencies" ]
           requirements += [ "managed_scopes" ] if id == "ntp.associations"
         end
+        reason = if capability[:status] != :unsupported && CredentialRemediation::IDS.include?(id)
+          id == "credentials.storage" ? :credential_rotation_required : :credential_strength_verification_required
+        else
+          supported ? nil : capability[:reason] || :remediation_unmodeled
+        end
         [ id, { status: supported ? :conditional : :unsupported,
-          reason: supported ? nil : capability[:reason] || :remediation_unmodeled,
+          reason: reason,
           requirements: requirements, prerequisites: renderer.prerequisites(id) } ]
       end)
     end

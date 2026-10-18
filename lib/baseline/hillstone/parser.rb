@@ -220,7 +220,8 @@ module Baseline
             next
           end
           security.each_slice(3) do |mode|
-            record_credential("snmp:#{parts[2]}", "snmp_user", credential_storage_format(mode[2]), mode[2], entry)
+            record_credential("snmp:#{parts[2]}", "snmp_user", credential_storage_format(mode[2]), mode[2], entry,
+              purpose: mode[0] == "auth-protocol" ? "authentication" : "privacy")
           end
           analyze(entry) { { name: parts[2], group: parts[4], auth: security.any?, priv: security.size == 6, line: entry.line } }
         rescue ArgumentError, IPAddr::Error

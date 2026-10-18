@@ -9,7 +9,7 @@ module Baseline
     attr_reader :attributes
 
     # 提取可安全报告的凭据属性，随后丢弃传入的秘密值。
-    def initialize(owner:, kind:, format:, secret:, line:)
+    def initialize(owner:, kind:, format:, secret:, line:, purpose: nil)
       storage = case format.to_s
       when "plain", "simple", "0" then "plaintext"
       when "4", "5", "7" then "legacy"
@@ -17,6 +17,7 @@ module Baseline
       else "unknown"
       end
       values = { owner: owner, kind: kind, storage: storage, format: format.to_s, present: !secret.to_s.empty?, line: line }
+      values[:purpose] = purpose if purpose
       if storage == "plaintext"
         text = secret.to_s
         values.merge!(length: text.length, character_classes: [ /[a-z]/, /[A-Z]/, /\d/, /[^a-zA-Z\d]/ ].count { |pattern| pattern.match?(text) },

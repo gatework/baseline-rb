@@ -192,3 +192,5 @@ CI 在 Linux、macOS 上执行测试、lint、示例、构建和隔离安装。`
 ## 许可证
 
 MIT，见 [LICENSE](LICENSE)。
+
+凭据审核方案在 `check.details[:credentials]` 中逐对象列出不安全存储或可观察的弱口令，保留来源行、用途、具体偏差、材料及消费者/恢复依赖。密文强度要求外部证据，不直接判弱；SNMP 认证与加密材料分别标识。此类检查仍受阻，普通方案不包含替换秘密或占位命令；能力查询继续标记秘密命令生成不支持，并解释人工材料要求。参见[凭据审核示例](examples/remediation_credentials.rb)。

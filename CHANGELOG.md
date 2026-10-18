@@ -4,6 +4,9 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+- Require validated Comware/VRP SNMP commands as implicit enable evidence; preserve ordered explicit state and the H3C password-calculation exception.
+- Report per-object credential rotation/material and external-strength-evidence requirements without producing secret-bearing commands; retain SNMP authentication/privacy and Comware/VRP TACACS key purposes.
+
 - Intersect H3C global, group, and user SNMP ACLs; report fully parsed unbound IPv4 principals as unrestricted rather than unknown.
 - Generate conditional H3C global SNMP ACL creation/binding without rewriting secrets or per-principal filters; reject cross-domain fresh ACL allocation conflicts.
 - Parse SNMP access options by argument position, preserve safe group definitions, replace stale H3C VACM user/credential state, and recognize command-wide cipher qualifiers and documented SHA-2 names.
