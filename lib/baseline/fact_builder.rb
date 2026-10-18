@@ -2,6 +2,7 @@
 
 require_relative "acl"
 require_relative "credential"
+require_relative "configuration_resource"
 
 require "ctx_parser/result"
 
@@ -15,6 +16,7 @@ module Baseline
       @confirmed_complete = complete
       @complete = complete && issues.empty?
       @values, @sources, @issues, @acls = {}, {}, issues.dup, {}
+      @resources = {}
       @vtys, @communities, @snmp_users, @credentials = [], [], [], []
       @credential_lines = {}
       @snmp_groups = {}
@@ -68,6 +70,19 @@ module Baseline
     # 记录事实不可用的原因，并保留对应的来源行。
     def record_unknown_fact(path, lines: [], code: :unsupported_syntax)
       @issues << { code: code, fact: path, lines: lines.uniq }
+    end
+
+    # 同一作用域对象按最终声明覆盖，跨作用域对象彼此独立。
+    def record_resource(resource, remove: false)
+      raise ArgumentError, "A configuration resource is required" unless resource.is_a?(ConfigurationResource)
+      raise ArgumentError, "Resource removal must be boolean" unless [ true, false ].include?(remove)
+
+      if remove && resource.complete?
+        @resources.delete(resource.key)
+      else
+        @resources[resource.key] = resource.to_h
+      end
+      true
     end
 
     # 将别名关联到同一 ACL；保留定义冲突，避免后续定义静默覆盖。
@@ -153,7 +168,7 @@ module Baseline
       @issues << { code: :input_not_confirmed_complete } unless @confirmed_complete
       status = complete? && @values.key?("hostname") ? :complete : :partial
       CtxParser::Result.new(status: status,
-        records: [ { "facts" => @values, "sources" => @sources } ], issues: @issues.uniq)
+        records: [ { "facts" => @values, "sources" => @sources, "resources" => @resources.values } ], issues: @issues.uniq)
     end
 
     private

@@ -126,7 +126,7 @@ module Baseline
           record_unknown_fact(scope, [ entry ], code: :invalid_server_address)
           next
         end
-        identity = block_given? ? yield(text, match) : address
+        identity = block_given? ? yield(text, match, negative, entry) : address
         unless identity
           record_unknown_fact(scope, [ entry ], code: :unsupported_server_options)
           next
@@ -301,13 +301,7 @@ module Baseline
 
     # 服务器目标只接受 IP 地址或 DNS 名称，不接受网段或空词元。
     def server_address?(value)
-      return false unless value.is_a?(String) && !value.empty?
-      IPAddr.new(value)
-      !value.include?("/")
-    rescue IPAddr::Error
-      value.bytesize <= 253 && !/\A[\d.]+\z/.match?(value) && value.delete_suffix(".").split(".", -1).all? do |label|
-        /\A[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\z/i.match?(label)
-      end
+      ResourceSchema.address?(value)
     end
 
     # 配置的监听端口仅替代当前服务的默认端口。

@@ -1,13 +1,14 @@
 # frozen_string_literal: true
 
 require "ctx_parser/immutable"
+require_relative "configuration_resource"
 
 module Baseline
   # 在归一化配置中区分输入完整性、已知事实与局部不支持的语法。
   class Evidence
     PARTIAL_SCOPE_FACTS = { "snmp.enabled" => true, "snmp.community_present" => true, "credentials.present" => true,
       "snmp.write_enabled" => true, "credentials.storage_safe" => false }.freeze
-    attr_reader :platform, :sha256, :status, :facts, :sources, :issues
+    attr_reader :platform, :sha256, :status, :facts, :sources, :issues, :resources
 
     # 冻结配置事实及其平台、来源身份。
     def initialize(platform:, sha256:, result:, input_complete: result.status == :complete)
@@ -17,6 +18,7 @@ module Baseline
       record = result.records.first || {}
       @facts = CtxParser::Immutable.copy(record.fetch("facts", {}))
       @sources = CtxParser::Immutable.copy(record.fetch("sources", {}))
+      @resources = record.fetch("resources", []).map { |resource| ConfigurationResource.new(**resource) }.freeze
       @issues = CtxParser::Immutable.copy(result.issues)
       freeze
     end
@@ -48,7 +50,8 @@ module Baseline
 
     # 返回公开的数据结构，并保留状态与诊断信息。
     def to_h
-      { platform: platform, sha256: sha256, status: status, input_complete: input_complete?, facts: facts, sources: sources, issues: issues }
+      { platform: platform, sha256: sha256, status: status, input_complete: input_complete?, facts: facts, sources: sources, issues: issues,
+        resources: resources.map(&:to_h) }
     end
 
     # 展示对象身份与状态，避免泄露原始回显或凭据。

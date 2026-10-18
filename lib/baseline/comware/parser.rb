@@ -106,7 +106,8 @@ module Baseline
       # 提取日志目标与源接口，厂商命令不进入事实归约层。
       def parse_syslog
         log_entries = matching_blocks(/\A(?:undo )?info-center loghost(?:\s|\z)/).reject { |entry| /\A(?:undo )?info-center loghost source(?:-port)?(?:\s|\z)/.match?(entry.text) }
-        hosts = configured_server_addresses("syslog.servers", loghost_pattern, log_entries, negate: "undo") do |text, match|
+        hosts = configured_server_addresses("syslog.servers", loghost_pattern, log_entries, negate: "undo") do |text, match, negative, entry|
+          record_loghost_resource(text, match, negative, entry)
           [ match[1], text[/\bvpn-instance\s+(\S+)/, 1] ]
         end
         record_fact("syslog.servers", hosts, log_entries)
@@ -119,6 +120,23 @@ module Baseline
       # 保留地址族与 VPN 前缀，独立日志控制命令不属于目标地址。
       def loghost_pattern
         /\Ainfo-center loghost\s+(?:vpn-instance\s+\S+\s+)?(?:ipv6\s+)?((?!(?:vpn-instance|ipv6|domain)(?:\s|\z))\S+)/
+      end
+
+      # 在同一次目标提取中保留作用域及选项，未知尾部不可产生可执行资源。
+      def record_loghost_resource(text, match, negative, entry)
+        options = parse_server_options(match.post_match, integers: { "port" => 1..65_535, "dscp" => 0..63 },
+          names: %w[vpn-instance facility channel filter])
+        scope = { "vrf" => text[/\bvpn-instance\s+(\S+)/, 1] || "default" }
+        attributes = (options || {}).reject { |key, _| key == "vpn-instance" }
+        complete = !options.nil? && [ *scope.values, *attributes.values.grep(String) ].all? { |value| ResourceSchema.token?(value) }
+        complete &&= !(text.start_with?("info-center loghost vpn-instance ") && options.key?("vpn-instance"))
+        complete &&= !attributes.key?("facility") || /\Alocal[0-7]\z/.match?(attributes["facility"])
+        attributes = {} unless complete
+        return unless ResourceSchema.token?(scope["vrf"])
+
+        resource = ConfigurationResource.new(kind: "syslog.destination", identity: { "address" => match[1] },
+          scope: scope, attributes: attributes, lines: [ entry.line ], complete: complete)
+        @fact_builder.record_resource(resource, remove: negative)
       end
 
       # 接口类型和编号可分写；非法尾部不能回落到旧接口或截取首个词元。
