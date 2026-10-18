@@ -147,8 +147,8 @@ module Baseline
         enabled = nxos? ? configured_state(/\Asnmp-server protocol enable\z/, /\Ano snmp-server protocol enable\z/) : nil
         enabled = nxos? || snmp_entries.any? if enabled.nil? && (@fact_builder.complete? || snmp_entries.any?)
         record_fact("snmp.enabled", enabled)
-        communities = {}
-        matching_blocks(/\Asnmp-server community\b/).each do |entry|
+        communities, community_acls = {}, {}
+        configured_community_entries.each do |entry|
           match = /\Asnmp-server community\s+(\S+)(?:\s+(.*))?\z/.match(entry.text)
           unless match
             record_unknown_snmp_access([ entry ])
@@ -162,6 +162,14 @@ module Baseline
           community[:write] = SNMP_ROLE_WRITE[role] if role
           acl = nxos? ? settings[/\buse-ipv4acl\s+(\S+)/, 1] : settings[/\A(?:ro|rw)\s+(\S+)\z/i, 1]
           community[:acl] = acl if acl
+          unless nxos?
+            access = (community_acls[match[1]] ||= { value: acl, conflicted: false })
+            access[:conflicted] ||= access[:value] != acl
+            if access[:conflicted]
+              community.delete(:acl)
+              record_unknown_fact("snmp.acl", [ entry ], code: :conflicting_community_acl)
+            end
+          end
           record_credential("snmp-community", "snmp", "plain", match[1], entry) unless @fact_builder.credential_recorded?(community[:line])
         end
         versions = communities.any? ? %w[v1 v2c] : []
@@ -224,6 +232,24 @@ module Baseline
           record_unknown_fact("snmp.acl", legacy_groups, code: :unsupported_snmp_group)
         end
         record_fact("snmp.versions", versions) unless versions.empty?
+      end
+
+      # IOS 的 no 声明撤销整项团体字；先归约有效来源，避免留下访问或凭据事实。
+      def configured_community_entries
+        return matching_blocks(/\Asnmp-server community\b/) if nxos?
+
+        active = {}
+        matching_blocks(/\A(?:no )?snmp-server community\b/).each do |entry|
+          if (match = /\Ano snmp-server community\s+(\S+)\z/.match(entry.text))
+            analyze(entry) { active.delete(match[1]) }
+          elsif entry.text.start_with?("no ")
+            record_unknown_snmp_access([ entry ])
+          else
+            name = entry.text.split[2]
+            (active[name] ||= []) << entry
+          end
+        end
+        active.values.flatten.sort_by(&:line)
       end
 
       # NX-OS 通常会同步 CLI 与 SNMP 账号；缺少证据时不能构造虚拟用户。
@@ -318,8 +344,12 @@ module Baseline
       # 解析各 VTY 实际选用的登录列表，包括命名列表。
       def record_tacacs_login_usage(servers, groups)
         pattern = /\Aaaa authentication login\s+(\S+)\s+(.+)\z/
-        lists = matching_blocks(pattern).each_with_object({}) do |entry, result|
-          name, methods = analyze(entry) { entry.text.match(pattern).captures }
+        family = /\A(?:no )?aaa authentication login\s+(\S+)(?:\s|\z)/
+        lists = matching_blocks(family).each_with_object({}) do |entry, result|
+          name = entry.text[family, 1]
+          match = pattern.match(entry.text)
+          # 最后同名声明决定列表证据；撤销或损坏不能复用先前的方法。
+          methods = match ? analyze(entry) { match[2] } : nil
           result[name] = { methods: methods, entry: entry }
         end
         entries = @fact_builder.vtys.filter_map { |vty| lists[vty[:authentication_list]]&.fetch(:entry) }.uniq
@@ -329,7 +359,7 @@ module Baseline
           elsif vty[:authentication] != "aaa"
             false
           elsif (list = lists[vty[:authentication_list]])
-            tacacs_login_method_state(list[:methods], servers, groups)
+            list[:methods] ? tacacs_login_method_state(list[:methods], servers, groups) : :authentication_list_unresolved
           else
             :authentication_list_unresolved
           end

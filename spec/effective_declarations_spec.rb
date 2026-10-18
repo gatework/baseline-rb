@@ -3,6 +3,20 @@
 require_relative "spec_helper"
 
 RSpec.describe "Baseline effective declarations" do
+  it "does not prove management restrictions from conflicting explicit ACL sequence identities" do
+    samples = {
+      "cisco_ios" => "hostname LAB\nip access-list standard MGMT\n 10 deny any\n 10 permit any\n!\nline vty 0 4\n transport input ssh\n login local\n access-class MGMT in\n",
+      "h3c" => "sysname LAB\nacl number 2000\n rule 10 deny source any\n rule 10 permit source any\n#\nline vty 0 4\n protocol inbound ssh\n authentication-mode scheme\n acl 2000 inbound\n",
+      "huawei" => "sysname LAB\nacl number 2000\n rule 10 deny source any\n rule 10 permit source any\n#\nuser-interface vty 0 4\n protocol inbound ssh\n authentication-mode aaa\n acl 2000 inbound\n"
+    }
+    samples.each do |platform, source|
+      report = audit(platform, source, "management.sources" => [ "192.0.2.0/24" ])
+      expect(report.findings.first.status).to eq(:unknown)
+      ordered = source.sub("10 permit", "20 permit")
+      expect(audit(platform, ordered, "management.sources" => [ "192.0.2.0/24" ]).findings.first.status).to eq(:pass)
+    end
+  end
+
   def audit(platform, body, checks)
     policy = Baseline::Policy.new("version" => 1, "checks" => checks.transform_values { |expected| { "expected" => expected } })
     Baseline::Audit.new(policy: policy).call(configuration: body, platform: platform, complete: true)
@@ -143,6 +157,27 @@ RSpec.describe "Baseline effective declarations" do
       expect(audit("cisco_ios", body + selected + other, checks).findings.first.status).to eq(:fail)
       expect(audit("cisco_ios", body + selected + "aaa #{kind} exec default\n", checks).findings.first.status).to eq(:unknown)
       expect(audit("cisco_ios", body + selected + "no aaa #{kind} exec default\n", checks).findings.first.status).to eq(:unknown)
+    end
+  end
+
+  it "does not reuse Cisco TACACS login lists after cancellation or malformed replacement" do
+    body = "hostname LAB\naaa new-model\ntacacs-server host 192.0.2.10\n"
+    %w[cisco_ios cisco_nxos].each do |platform|
+      %w[default OPERATORS].each do |name|
+        selected = "aaa authentication login #{name} group tacacs+\n"
+        vty = "line vty 0 4\n transport input ssh\n login authentication #{name}\n"
+        [ "no aaa authentication login #{name}", "aaa authentication login #{name}" ].each do |replacement|
+          report = audit(platform, body + selected + replacement + "\n" + vty, "tacacs.login" => true)
+          expect(report.findings.first.status).to eq(:unknown)
+          expect(report.findings.first.lines).not_to include(4)
+          restored = audit(platform, body + replacement + "\n" + selected + vty, "tacacs.login" => true)
+          expect(restored.findings.first.status).to eq(:pass)
+        end
+        local = audit(platform, body + selected + "aaa authentication login #{name} local\n" + vty, "tacacs.login" => true)
+        expect(local.findings.first.status).to eq(:fail)
+        independent = audit(platform, body + selected + "no aaa authentication login UNUSED\n" + vty, "tacacs.login" => true)
+        expect(independent.findings.first.status).to eq(:pass)
+      end
     end
   end
 

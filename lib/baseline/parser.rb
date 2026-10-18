@@ -244,6 +244,12 @@ module Baseline
     # 注册有序 ACL 规则与别名，同时保留不支持的语法。
     def register_acl(name, entries, aliases: [], supported: true, source: nil, &block)
       commands = entries.reject { |entry| /\A(?:\d+\s+)?(?:description|remark|step|statistics|hardware-count)\b/.match?(entry.text) }
+      # 厂商显式序号是规则身份；重复身份不能靠来源先后消解。无序号规则保留原有顺序语义。
+      sequences = commands.filter_map do |entry|
+        match = /\A(?:access-list\s+\S+\s+)?(?:rule\s+)?(\d+)\s+(?:permit|deny)\b/.match(entry.text)
+        Integer(match[1], 10) if match
+      end
+      duplicate_sequences = sequences.uniq.size != sequences.size
       parsed = commands.map.with_index do |entry, index|
         value = analyze(entry) { block.call(entry, index) }
         cursor.mark(entry.index, state: :unsupported) unless value
@@ -256,8 +262,9 @@ module Baseline
         source ? source.line_range.cover?(line) : damaged_numbered_acl?(cursor.lines.fetch(line - 1).text, name)
       end
       acl = Acl.new(name: name, line: entries.first&.line, rules: parsed.compact,
-        supported: supported && !damaged && parsed.none?(&:nil?))
-      if @fact_builder.register_acl(acl, aliases: aliases, lines: entries.map(&:line)).any?
+        supported: supported && !damaged && !duplicate_sequences && parsed.none?(&:nil?))
+      conflicts = @fact_builder.register_acl(acl, aliases: aliases, lines: entries.map(&:line))
+      if duplicate_sequences || conflicts.any?
         entries.each { |entry| cursor.mark(entry.index, state: :unsupported) }
       end
     end

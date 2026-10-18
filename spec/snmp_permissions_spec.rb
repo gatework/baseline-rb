@@ -4,6 +4,42 @@ require_relative "spec_helper"
 require "baseline"
 
 RSpec.describe "Baseline SNMP access permissions" do
+  it "removes cancelled IOS communities and their credential evidence" do
+    source = "hostname LAB\nsnmp-server community SYNTHETIC RW\nno snmp-server community SYNTHETIC\n"
+    definition = Baseline::Policy.new("version" => 1, "checks" => { "snmp.write_enabled" => { "expected" => false } })
+    report = Baseline::Audit.new(policy: definition).call(configuration: source, platform: "cisco_ios", complete: true)
+
+    expect(report.findings.first.status).to eq(:pass)
+    expect(report.configuration.fact("snmp.communities")).to eq([])
+    expect(report.configuration.fact("credentials.records")).to eq([])
+    restored = Baseline::Audit.new(policy: definition).call(configuration: source + "snmp-server community SYNTHETIC RW\n",
+      platform: "cisco_ios", complete: true)
+    expect(restored.findings.first.status).to eq(:fail)
+    expect(restored.configuration.fact("snmp.communities").first[:line]).to eq(4)
+    expect(restored.configuration.fact("credentials.records").map { |row| row[:line] }).to eq([ 4 ])
+  end
+
+  it "keeps independently configured IOS communities when another is removed" do
+    report = audit("cisco_ios", "snmp-server community ONE RW", "snmp-server community TWO RW", "no snmp-server community ONE")
+    expect(permission(report).status).to eq(:fail)
+    expect(report.configuration.fact("snmp.communities").size).to eq(1)
+    expect(report.configuration.fact("credentials.records").map { |row| row[:line] }).to eq([ 4 ])
+  end
+
+  it "does not certify an old IOS community ACL after contradictory access declarations" do
+    source = "hostname LAB\nip access-list standard SNMP\n permit 192.0.2.0 0.0.0.255\n!\n" \
+      "snmp-server community SYNTHETIC RO SNMP\n"
+    definition = Baseline::Policy.new("version" => 1, "checks" => { "snmp.sources" => { "expected" => [ "192.0.2.0/24" ] } })
+    [ "snmp-server community SYNTHETIC RO\n", "snmp-server community SYNTHETIC RO OTHER\n" ].each do |last|
+      report = Baseline::Audit.new(policy: definition).call(configuration: source + last, platform: "cisco_ios", complete: true)
+      expect(report.findings.first.status).to eq(:unknown)
+      expect(report.configuration.fact("snmp.communities").first).not_to have_key(:acl)
+    end
+    repeated = Baseline::Audit.new(policy: definition).call(configuration: source + "snmp-server community SYNTHETIC RO SNMP\n",
+      platform: "cisco_ios", complete: true)
+    expect(repeated.findings.first.status).to eq(:pass)
+  end
+
   let(:policy) do
     Baseline::Policy.new("version" => 1, "checks" => {
       "snmp.write_enabled" => { "expected" => false }, "ssh.enabled" => { "expected" => true }

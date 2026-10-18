@@ -2,6 +2,17 @@
 
 Changes to the public contract are recorded here. Versions follow Semantic Versioning.
 
+## 0.3.1 (2026-10-18)
+
+- Withhold IOS SNMP ACL facts after contradictory community access declarations, while accepting equivalent repeats and preserving NX-OS incremental attributes.
+
+- Clear Bundler bootstrap variables when verifying packages in an isolated gem installation, including calls made through bundle exec.
+
+- Remove cancelled IOS SNMP communities and their credential evidence before deriving access and permission facts.
+
+- Keep management restrictions unknown when vendor ACL rules repeat an explicit sequence identity.
+- Stop reusing Cisco TACACS login methods after the final named list is cancelled or malformed; independent lists remain available.
+
 ## 0.3.0 (2026-10-18)
 
 - Breaking: rename mutable fact assembly to `FactBuilder`, immutable parsed snapshots to `Evidence`, multiline quoted-value documents to `MultilineDocument`, and the PAN-OS prefix lookup to `CommandIndex#matching_prefix`.
