@@ -97,6 +97,23 @@ module Baseline
       def tacacs_server_pattern = /\A(?:primary|secondary) (?:authentication|authorization|accounting)\s+(\S+)/
       # 完整选择服务器命令族，缺失地址也必须保留为损坏证据。
       def tacacs_server_family_pattern = /\A(?:undo )?(?:primary|secondary) (?:authentication|authorization|accounting)(?:\s|\z)/
+      # 每种职责只有一个主服务器；多台备服务器仍按地址独立保留。
+      # 在资源提取前选出最终主槽位，避免旧地址误充冗余或悬空消费者。
+      def tacacs_server_entries(entries)
+        primary, others = nil, []
+        entries.each do |entry|
+          if /\Aundo primary (?:authentication|authorization|accounting)\z/.match?(entry.text)
+            primary = nil
+            analyze(entry) { false }
+          elsif entry.text.start_with?("primary ")
+            primary = entry
+          else
+            others << entry
+          end
+        end
+        others << primary if primary
+        others.sort_by(&:line)
+      end
       # 匹配已配置 TACACS 密钥的存储格式。
       def tacacs_key_pattern = /\Akey (authentication|authorization|accounting) (simple|cipher) (.+)\z/
       # 按职责识别缺值、替换和撤销，不能回落到旧密钥。

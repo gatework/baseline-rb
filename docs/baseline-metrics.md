@@ -116,3 +116,5 @@ Comware/VRP 的同名方案或模板重新进入会合并声明；整组撤销�
 `tacacs.keys` 的 `details.key_slots` 对缺失材料列出 provision、批准密钥材料、保护存储格式、人工配置步骤及高风险；对损坏状态列出 verify 和补证要求。端点引用按组和职责关联，共享密钥关联模板全部端点；端点未解析、缺少消费者范围、对端同步、AAA 引用或本地后备访问仍列为待核实依赖，不假称认证链已经可用。没有方案时要求批准方案和端点；不会从备份发明它们。检查保持 blocked，不生成秘密、占位符或移除密钥的降级命令。参见[材料要求示例](../examples/remediation_tacacs.rb)。
 
 语法依据：[H3C Comware 7 key/undo key 命令](https://www.h3c.com/en/Support/Resource_Center/EN/Home/Public/00-Public/Technical_Documents/Reference_Guides/Command_References/H3C_S6520X_MS4600_CRs_R6628Pxx-10752/09/202407/2215673_294551_0.htm)、[Huawei 模板共享密钥撤销](https://info.support.huawei.com/hedex/api/pages/EDOC1100363264/AEN0403J/06/resources/command/yunshan/HWTACACS-SERVER-SHARED-KEY%28HWTACACSOM%29.html)。Comware 旧版本带秘密参数的撤销形式未按 Comware 7 处理；未知形式保留未知，不声称跨版本验证。
+
+H3C 每种认证/授权/计费职责的主服务器按单槽位归约，替换和无地址 `undo primary <role>` 在提取地址/资源前生效；被替换地址不能再充当冗余服务器或密钥消费者。多台 secondary 和独立职责保持分离，此单主槽位规则不跨平台套用到 Huawei。依据：[H3C 主备服务器数量与命令](https://wwwsg-proxy.h3c.com/en/Support/Resource_Center/EN/Home/Wireless/00-Public/Configure___Deploy/Configuration_Guides/H3C_AC_CG_R5426P02/13/202104/1399926_294551_0.htm)。

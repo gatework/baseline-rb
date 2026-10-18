@@ -303,6 +303,7 @@ module Baseline
           section, children = sections.first, sections.flat_map(&:children)
           server_types = matching_blocks(tacacs_server_family_pattern, children).group_by { |entry| entry.text.delete_prefix("undo ").split[1] }
             .transform_values do |entries|
+              entries = tacacs_server_entries(entries)
               configured_server_addresses("tacacs", tacacs_server_pattern, entries, negate: "undo") do |text, match, negative, entry|
                 record_tacacs_endpoint(section, text, match, negative, entry)
                 match[1]
@@ -364,6 +365,9 @@ module Baseline
           record_credential("super", "enable", match ? match[1] : "unknown", match&.[](2), entry)
         end
       end
+
+      # 默认保持地址集合语义；厂商可先归约只允许一个目标的服务器槽位。
+      def tacacs_server_entries(entries) = entries
 
       # 同名方案重新进入时合并声明；整组撤销后不得残留服务器、密钥或资源。
       def tacacs_sections

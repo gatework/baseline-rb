@@ -4,6 +4,8 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+- Keep only the final H3C primary TACACS server per responsibility, apply unqualified resets, and retain multiple secondary servers; replaced primary addresses cannot inflate redundancy or remain as resources.
+
 - Reduce Comware/VRP TACACS scheme keys in order across replacement, withdrawal, and reopened/deleted schemes; exclude stale credentials and resources.
 - Report missing or unresolved scheme key material by responsibility and known endpoint, retaining manual peer/AAA/fallback prerequisites without secret commands.
 
