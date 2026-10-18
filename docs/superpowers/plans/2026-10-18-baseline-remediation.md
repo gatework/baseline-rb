@@ -97,3 +97,5 @@
 
 - Task 1 complete: 368 examples / 0 failures, RuboCop55 files clean, offline example pass. 973份真实备份重跑无异常、显式命令对照无偏差、不完整输入零pass；187份management.acl_bound从unknown变fail，其他规则状态未变。
 - Task 2 in progress: Syslog资源已覆盖六类现有适配器；保留VRF、Hillstone传输/端口/类别、PAN-OS profile/server叶子及安全元数据。386 examples / 0 failures，RuboCop58 files clean；973份真实备份零异常、旧规则状态不变、零显式命令偏差、不完整输入零pass。实际资源3342项，其中1项未知选项标记incomplete。NTP/TACACS资源、引用关系与结构化策略尚未完成，不能据此认定Task2完成。
+- 用户补充要求全部指标完全覆盖：已新增30项显式评估验收表，每项七种状态，共219项指标契约测试（含重复观测和损坏适用条件回归）。不能将评估器测试覆盖误称为所有厂商语法或修正配置完整实现。
+- NTP资源已覆盖六类现有适配器，区分server/peer、VRF、主备槽位及认证key引用。修正重复服务器计数/集合比较和异常类型范围事实错误排除检查的问题。全套616 examples / 0 failures，RuboCop60 files clean。973份真实备份重跑：零异常，较Task1无规则状态变化，显式对照无偏差，不完整输入零pass，候选秘密匹配为零。TACACS资源、引用关系、结构化策略、生成器及跨指标修正闭环仍待完成。

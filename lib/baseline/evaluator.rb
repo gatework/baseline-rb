@@ -89,7 +89,7 @@ module Baseline
       case operator
       when :set_equals then { missing: expected - actual, unexpected: actual - expected }
       when :subset then { unexpected: actual - expected }
-      when :count_at_least then { minimum: expected, actual_count: actual.size }
+      when :count_at_least then { minimum: expected, actual_count: actual.uniq.size }
       when :all_disabled then { enabled: expected.select { |name| actual[name] == true } }
       else {}
       end
@@ -108,6 +108,7 @@ module Baseline
         values.each do |name, criterion|
           known = key == "facts" ? configuration.applicability_fact_known?(name) : context.key?(name)
           value = key == "facts" ? configuration.fact(name) : context[name]
+          known &&= valid_scope_fact?(name, value) if key == "facts"
           if !known
             unknown = true
           elsif !(criterion.is_a?(Array) ? criterion.include?(value) : criterion == value)
@@ -116,6 +117,15 @@ module Baseline
         end
       end
       unknown ? nil : true
+    end
+
+    # 错误类型的范围事实不能作为不匹配条件排除检查。
+    def valid_scope_fact?(name, value)
+      case Rule::APPLICABILITY_FACTS[name]
+      when :boolean then value == true || value == false
+      when :string then value.is_a?(String) && !value.strip.empty?
+      else false
+      end
     end
 
     # 按声明的比较运算符处理归一化策略值。
@@ -134,8 +144,8 @@ module Baseline
         return [ :unknown, :fact_type_mismatch ] unless actual.is_a?(Array) && actual.all? { |item| item.is_a?(String) }
         passed = case operator
         when :subset then (actual - expected).empty?
-        when :set_equals then actual.sort == expected.sort
-        when :count_at_least then actual.size >= expected
+        when :set_equals then actual.uniq.sort == expected.sort
+        when :count_at_least then actual.uniq.size >= expected
         when :networks_within
           outside = Acl.unapproved_networks(actual, expected)
           details = { outside_approved: outside }

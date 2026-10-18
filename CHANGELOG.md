@@ -4,6 +4,11 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+- Retain scoped NTP association resources, including separate server/peer identities, source interfaces, version, preference, key references, and PAN-OS primary/secondary slots without secret values.
+- Count distinct NTP, syslog, and TACACS servers rather than duplicate observations; compare approved server sets independently of duplicate observations.
+- Keep malformed applicability facts unknown instead of using them to exclude security checks.
+- Add explicit acceptance cases for all 30 baseline metrics, covering passing, deviating, missing evidence, missing approval, out-of-scope, incomplete, and unsupported syntax states.
+
 - Expose immutable scoped syslog resources through `Evidence#resources`, retaining Comware/VRP, IOS/NX-OS, StoneOS category and PAN-OS profile/server identities alongside existing audit facts. Mark unparsed options incomplete and exclude them from resource data.
 - Keep Cisco syslog destinations in other VRFs when a destination in one VRF is cancelled.
 

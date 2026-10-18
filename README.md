@@ -63,7 +63,7 @@ Management-source checks currently model supported IPv4 ACL semantics. PAN-OS in
 
 The library performs no device access, backup collection, remediation, or database writes. Motor persistence and `Baseline::Check` belong to the host application.
 
-`Evidence#resources` exposes immutable syslog configuration objects with vendor identities, scopes, options, and source lines. `ConfigurationResource#complete?` describes understood object syntax; it does not establish input completeness, active references, or compliance. Unsupported options are excluded from resource data. This layer prepares offline remediation planning; command generation is not yet available.
+`Evidence#resources` exposes immutable syslog objects and NTP associations with vendor identities, scopes, options, and source lines. `ConfigurationResource#complete?` describes understood object syntax; it does not establish input completeness, active references, or compliance. Unsupported options are excluded from resource data. This layer prepares offline remediation planning; command generation is not yet available.
 
 Detailed vendor behavior, historical validation notes, and Motor-only integration are preserved in [the architecture reference](docs/architecture-zh.md). Host integration examples in that reference require Motor; they are not standalone gem APIs. Motor adapters live under `backend/lib/baseline`, `backend/lib/vxlan`, and `backend/lib/wireless` in the [Motor repository](https://github.com/gatework/motor/tree/main/backend/lib).
 
