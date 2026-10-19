@@ -2,7 +2,7 @@
 
 Changes to the public contract are recorded here. Versions follow Semantic Versioning.
 
-## Unreleased
+## 0.8.0 (2026-10-20)
 
 - Generate explicitly approved Huawei S-series VTY AAA-mode corrections with native UI/profile proofs while preserving shared schemes, templates, methods and ACLs.
 - Preserve Huawei local-case username semantics in AAA evidence and require exact matching approval; reject the other vendor's VTY mode rather than certifying it.
