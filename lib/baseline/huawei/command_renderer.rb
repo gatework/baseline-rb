@@ -18,6 +18,7 @@ module Baseline
       NTP_STYLE = :vrp
       SNMP_PERMISSION_PROFILES = [ "vrp_v600" ].freeze
       ACCESS_STYLE = :vrp
+      VTY_AUTHENTICATION_PROFILE = "vrp_s_series"
       VTY_PROTOCOL_COMMAND = "protocol inbound ssh"
       SSH_DISABLE_COMMAND = "undo stelnet server enable"
       PREREQUISITES = CtxParser::Immutable.copy({ "ssh.vty_ssh_only" => { "ssh.enabled" => true } })

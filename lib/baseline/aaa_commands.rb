@@ -9,7 +9,8 @@ module Baseline
     private
 
     def render_aaa(operation, verified_ids:)
-      unless self.class::TACACS_STYLE == :h3c && verified_ids.is_a?(Array) &&
+      native = operation.kind == VtyAuthenticationSchema::KIND ? self.class::VTY_AUTHENTICATION_PROFILE == operation.scope["syntax_profile"] : self.class::TACACS_STYLE == :h3c
+      unless native && verified_ids.is_a?(Array) &&
           verified_ids.all? { |id| id.is_a?(String) && /\A[0-9a-f]{64}\z/.match?(id) } && verified_ids.include?(operation.id)
         raise CommandRenderer::UnsupportedOperation, "management_method_preconditions_unverified"
       end
@@ -17,7 +18,7 @@ module Baseline
       schema.validate!(identity: operation.identity, scope: operation.scope, before: operation.before, after: operation.after, action: operation.action, phase: operation.phase)
       if operation.kind == VtyAuthenticationSchema::KIND
         view = operation.identity.fetch("vty")
-        commands = [ "authentication-mode scheme", "protocol inbound #{operation.after.fetch('protocols').first}" ]
+        commands = [ "authentication-mode #{operation.after.fetch('authentication')}", "protocol inbound #{operation.after.fetch('protocols').first}" ]
       else
         view = "domain #{operation.scope.fetch('domain')}"
         methods = operation.after["methods"].map { |method| method["kind"] == "local" ? "local" : "hwtacacs-scheme #{method.fetch('group')}" }

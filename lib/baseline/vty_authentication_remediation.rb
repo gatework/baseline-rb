@@ -15,7 +15,7 @@ module Baseline
 
     def call(audit)
       finding = audit.findings.find { |item| item.id == "ssh.vty_aaa" }
-      return unless finding && finding.expected == true && %i[fail unknown].include?(finding.status) && audit.configuration.platform == "h3c"
+      return unless finding && finding.expected == true && %i[fail unknown].include?(finding.status) && VtyAuthenticationSchema.profile_for(audit.configuration.platform)
       options = @policy.rules.find { |rule| rule.id == finding.id }.remediation
       return if options.empty?
       transport = audit.findings.find { |item| item.id == "ssh.vty_ssh_only" && item.status != :not_applicable && item.expected == true }
@@ -27,12 +27,12 @@ module Baseline
 
     def build(audit, finding, related, transport, options)
       evidence = audit.configuration
-      row = ManagementAuthentication.new(audit: audit).call(options: options, role: "authentication")
-      require!(row[:methods].map { |method| method.transform_keys(&:to_s) } == options["methods"], "existing_approved_management_method_chain")
+      profile = options["syntax_profile"]
+      ManagementAuthentication.new(audit: audit).login_path!(options: options)
       require!(evidence.fact_known?("ssh.vty"), "resolved_vty_inventory")
       vtys = evidence.fact("ssh.vty")
       names = vtys.map { |vty| vty[:name] }
-      require!(VtyAuthenticationSchema.ranges?(names) && names.sort == options.fetch("vty_ranges", []).sort, "complete_matching_vty_scope")
+      require!(VtyAuthenticationSchema.ranges?(names, syntax_profile: profile) && names.sort == options.fetch("vty_ranges", []).sort, "complete_matching_vty_scope")
       login = audit.findings.find { |item| item.id == "tacacs.login" && item.status != :not_applicable && !item.expected.nil? }
       uses_tacacs = options["methods"].first["kind"] == "tacacs"
       raise Blocked, :policy_conflict if login && login.expected != uses_tacacs
@@ -45,13 +45,13 @@ module Baseline
       risk = [ finding, *related ].any? { |item| item.severity == "critical" } ? "critical" : "high"
       operations = vtys.filter_map do |vty|
         before = { "authentication" => vty[:authentication], "protocols" => vty[:protocols], "local_protocols" => vty[:local_protocols] }
-        require!(VtyAuthenticationSchema.settings?(before), "known_vty_authentication_and_protocols")
-        after = { "authentication" => "scheme", "protocols" => transport ? [ "ssh" ] : vty[:protocols] }
+        require!(VtyAuthenticationSchema.settings?(before, syntax_profile: profile), "known_vty_authentication_and_protocols")
+        after = { "authentication" => VtyAuthenticationSchema::PROFILES.fetch(profile)[:mode], "protocols" => transport ? [ "ssh" ] : vty[:protocols] }
         next if before.except("local_protocols") == after
-        if VtyAuthenticationSchema.temporary_rebind?(before)
+        if VtyAuthenticationSchema.temporary_rebind?(before, syntax_profile: profile)
           require!(options["temporary_vty_protocol_rebind_approved"] == true, "temporary_vty_protocol_rebind_approved")
         end
-        ConfigurationOperation.new(kind: VtyAuthenticationSchema::KIND, identity: { "vty" => vty[:name] }, scope: { "syntax_profile" => "comware7" },
+        ConfigurationOperation.new(kind: VtyAuthenticationSchema::KIND, identity: { "vty" => vty[:name] }, scope: { "syntax_profile" => profile },
           before: before, after: after, action: :replace, phase: :activate, risk: risk)
       end
       require!(operations.any?, "resolved_vty_authentication_deviation")
@@ -59,7 +59,7 @@ module Baseline
       steps = operations.flat_map { |operation| @renderer.render(operation, verified_aaa_operation_ids: ids) }
       checks = [ finding, *related ].to_h do |item|
         [ item.id, { status: :planned, reason: nil, operation_ids: ids, details: { preserved_management_method_chain: true,
-          explicit_vty_protocol_pair: true, temporary_protocol_rebind: operations.any? { |operation| VtyAuthenticationSchema.temporary_rebind?(operation.before) }, verification_scope: :configured_inventory_and_external_management_approval } } ]
+          explicit_vty_protocol_pair: true, temporary_protocol_rebind: operations.any? { |operation| VtyAuthenticationSchema.temporary_rebind?(operation.before, syntax_profile: profile) }, verification_scope: :configured_inventory_and_external_management_approval } } ]
       end
       Result.new(operations: operations.freeze, steps: steps.freeze, checks: CtxParser::Immutable.copy(checks))
     rescue Blocked => error

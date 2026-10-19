@@ -120,6 +120,7 @@ module Baseline
       syntax_profiles = case id
       when "ntp.authentication" then %w[comware_legacy comware7 vrp_s_series]
       when "snmp.write_enabled" then SnmpGroupMigrationSchema::PROFILES
+      when "ssh.vty_aaa" then VtyAuthenticationSchema::PROFILES.keys
       else [ "comware7" ]
       end
       unless (!remediation.key?("ntp_peer_key_compatibility_verified") || [ true, false ].include?(remediation["ntp_peer_key_compatibility_verified"])) &&
@@ -131,7 +132,7 @@ module Baseline
       SyslogReferenceSchema.validate_migrations!(remediation["binding_migrations"]) if remediation.key?("binding_migrations")
       SnmpGroupMigrationSchema.validate_approvals!(remediation["group_migrations"]) if remediation.key?("group_migrations")
       AaaChainSchema.validate_approval!(remediation) if AaaChainSchema::IDS.key?(id) || id == "ssh.vty_aaa"
-      if remediation.key?("vty_ranges") && !VtyAuthenticationSchema.ranges?(remediation["vty_ranges"])
+      if remediation.key?("vty_ranges") && !VtyAuthenticationSchema.ranges?(remediation["vty_ranges"], syntax_profile: remediation["syntax_profile"])
         raise ArgumentError, "Invalid approved VTY scope"
       end
       validate_applicability!

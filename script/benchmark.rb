@@ -254,3 +254,21 @@ end
     raise "Expected full VTY account-mode plan" unless plan.status == :ready && plan.operations.size == size && plan.steps.size == size * 2
   end
 end
+
+# VRP 的完整三职责本地路径与大小写语义也走公开模式规划，不借 Comware 实现。
+[ 1, 8, 32 ].each do |size|
+  names = size.times.map { |index| "user-interface vty #{index}" }
+  source = "sysname LAB\ndomain ADMIN admin\n#\naaa\n authentication-scheme AUTH\n  authentication-mode local-case\n" \
+    " authorization-scheme AUTHZ\n  authorization-mode local\n accounting-scheme ACCT\n  accounting-mode none\n" \
+    " domain ADMIN\n  authentication-scheme AUTH\n  authorization-scheme AUTHZ\n  accounting-scheme ACCT\n#\n" +
+    names.map { |name| "#{name}\n authentication-mode password\n protocol inbound all\n#\n" }.join
+  policy = Baseline::Policy.new("version" => 1, "checks" => { "ssh.vty_aaa" => { "expected" => true, "remediation" => {
+    "management_domain" => "ADMIN", "methods" => [ { "kind" => "local", "case_sensitive" => true } ], "syntax_profile" => "vrp_s_series",
+    "vty_ranges" => names, "local_fallback_access_verified" => true, "management_consumers_verified" => true
+  } } })
+  service = Baseline::Remediation.new(policy: policy)
+  measure("VRP VTY authentication #{size} ranges") do
+    plan = service.call(configuration: source, platform: :huawei, complete: true)
+    raise "Expected full Huawei account-mode plan" unless plan.status == :ready && plan.operations.size == size && plan.steps.size == size * 2
+  end
+end

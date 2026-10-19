@@ -26,6 +26,7 @@ module Baseline
     PREREQUISITES = {}.freeze
     RESOURCE_KINDS = [].freeze
     VTY_PROTOCOL_COMMAND = nil
+    VTY_AUTHENTICATION_PROFILE = nil
     SSH_DISABLE_COMMAND = nil
     SNMP_VERSION_REMOVAL = nil
     ACCESS_STYLE = nil
@@ -45,7 +46,8 @@ module Baseline
 
     # 查询当前呈现器确实可生成的设置类型。
     def supports?(id)
-      (AaaChainSchema::IDS.key?(id) || id == "ssh.vty_aaa") && self.class::TACACS_STYLE == :h3c ||
+      AaaChainSchema::IDS.key?(id) && self.class::TACACS_STYLE == :h3c ||
+        id == "ssh.vty_aaa" && !self.class::VTY_AUTHENTICATION_PROFILE.nil? ||
         id == "ntp.authentication" && self.class::NTP_AUTHENTICATION_COMMANDS.any? ||
         id == "snmp.write_enabled" && self.class::SNMP_PERMISSION_PROFILES.any? ||
         source_requires_associations?(id) || self.class::SOURCE_COMMANDS.key?(id) || id == "services.disabled" && self.class::DISABLE_COMMANDS.any? ||

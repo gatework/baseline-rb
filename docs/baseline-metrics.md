@@ -317,4 +317,16 @@ Cisco 全局、命名对象和旧式 host 内联 key 共用材料语法校验；
 
 Comware 的模式/协议在范围级共同决定是否继承 class。`local_protocols` 与有效协议分开记录并进入操作指纹。若模式改变会使非 all 的继承协议在后续显式命令之前暂时回落到设备默认值，必须另外声明 `temporary_vty_protocol_rebind_approved: true`，核实目标版本过渡行为和受控管理通道；否则整项受阻。该批准不能解释为无中断或无短暂协议范围变化。所有产物仍需人工审核，恢复需新快照和单独认证恢复规划。
 
-依据：[H3C 登录管理命令](https://www.h3c.com/en/d_202206/1617620_294551_0.htm) 的 authentication-mode、protocol inbound 及其 class 关联规则。独立状态模型验证最终配置、联动指标、无关配置保留及第二次零变更，不替代真实固件接受及登录验证。Huawei/IOS/NX-OS 的原生 VTY 账户模式仍未由此实现。
+依据：[H3C 登录管理命令](https://www.h3c.com/en/d_202206/1617620_294551_0.htm) 的 authentication-mode、protocol inbound 及其 class 关联规则。独立状态模型验证最终配置、联动指标、无关配置保留及第二次零变更，不替代真实固件接受及登录验证。Huawei S 系列 VTY 模式使用下节独立的 VRP profile；IOS/NX-OS 原生账户模式仍未由此实现。
+
+## Huawei S 系列 VTY 账户模式
+
+`ssh.vty_aaa` 为 true 时可选择 `syntax_profile: vrp_s_series`，以完整且不交叠的 `user-interface vty` 范围作为 `vty_ranges`。使用与现有选中管理域严格一致的 `management_domain`、`methods`，并提供管理消费者、本地后备及适用的对端核验。原生命令为 authentication-mode aaa，随后显式保留有效的 all/ssh/telnet 协议；策略要求 SSH-only 时再统一收紧并核验 SSH 启用。不能混用 Comware 7 的 line vty 或 scheme 模式，也不套用其 class 协议临时重绑批准。
+
+Huawei 的 local 与 local-case 用户名匹配规则不同。`aaa.bindings` 和全域引用图为后者的本地方法保留 `case_sensitive: true`；策略 methods 也须在对应 local 项明确声明该字段，不能把观察到的 local-case 当作普通 local 批准。此字段仅适用于 VRP profile，不转换或重写任何共享方法方案。TACACS 路径核验模板名称、职责端点及既有 shared 密钥，不从其他模板或相同地址借用材料证明。
+
+切入 AAA 前，H3C/Huawei 都要求选中域的认证、授权、计费三项已解析，远程职责的端点、材料和对端核验齐备；否则全部模式修正受阻。两者的运行复查均包含 AAA 职责与本地后备，即使策略仅配置 SSH 指标。外部核验必须涵盖账户服务类型、授权、计费启动失败/中断时的后备及实际用户路径，不能从本地后备声明推断可登录。不同版本的计费失败缺省行为存在差异；本规划不修改计费失败策略，也不证明后备在所有故障下可用。
+
+域、共享认证/授权/计费方案、HWTACACS 模板、密钥、用户、其他范围及 ACL 均保留；恢复仍需独立认证规划，Huawei 的保存/commit 流程仍须按目标版本确认。独立状态模型验证原生 UI 命令、最终指标、共享配置保留及二次零变更。现有真实备份不含 Huawei 样本，当前 Huawei 证据来自原厂语法、合成配置及安装包验证，不能称为真机或该备份集上的 Huawei 验收。
+
+依据：[Huawei VTY 认证模式命令](https://support.huawei.com/enterprise/en/doc/EDOC1100214493/677f04d0)、[Huawei local/local-case 语义](https://info.support.huawei.com/hedex/api/pages/EDOC1100210438/AEK0901G/09/resources/dc/local-user_ap-group_view.html)、[Huawei HWTACACS、本地认证与计费故障说明](https://support.huawei.com/enterprise/en/doc/EDOC1100411502/5561445f/example-for-configuring-hwtacacs-and-local-authentication-command-authorization-and-command-auditing-for-administrators)。

@@ -6,6 +6,7 @@ module Baseline
   module Huawei
     # 区分 Huawei VRP 的 AAA 嵌套、模板引用与 Comware 域语法。
     class Parser < Comware::Parser
+      VTY_AUTHENTICATION_MODES = %w[aaa password none].freeze
       private
 
       # VRP 的 IPv6 和 VPN 位于目标之后，优选标志为 preference，不能复用 Comware 命令位置。
@@ -115,7 +116,15 @@ module Baseline
         valid = tokens && tokens.any? && tokens.uniq == tokens && (tokens - allowed).empty? && (!tokens.include?("none") || tokens.last == "none")
         valid &&= !(tokens.include?("local") && tokens.include?("local-case"))
         valid &&= tokens.one? if role == "accounting"
-        methods = valid ? tokens.map { |token| token == "hwtacacs" ? { kind: "tacacs", group: group } : { kind: token == "local-case" ? "local" : token } } : nil
+        methods = valid ? tokens.map do |token|
+          if token == "hwtacacs"
+            { kind: "tacacs", group: group }
+          elsif token == "local-case"
+            { kind: "local", case_sensitive: true }
+          else
+            { kind: token }
+          end
+        end : nil
         reason = methods ? nil : :unsupported_authentication_method
         reason = :tacacs_scheme_unresolved if methods&.any? { |method| method[:kind] == "tacacs" } && !ResourceSchema.token?(group)
         analyze(entry) { true } if methods

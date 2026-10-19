@@ -25,7 +25,9 @@ module Baseline
         supported = capability[:status] != :unsupported && renderer.supports?(id)
         requirements = RemediationPlanner::REQUIREMENTS.fetch(id, [ "supported_rule_handler" ])
         if supported && id == "ssh.vty_aaa"
-          requirements = AaaChainSchema::APPROVALS + %w[vty_ranges complete_matching_vty_scope existing_approved_management_method_chain known_vty_authentication_and_protocols temporary_vty_protocol_rebind_approved_for_inherited_protocol_changes]
+          requirements = AaaChainSchema::APPROVALS + %w[vty_ranges complete_matching_vty_scope existing_approved_management_method_chain
+            exact_existing_methods_including_local_case resolved_management_login_roles known_vty_authentication_and_protocols]
+          requirements += name == "h3c" ? [ "temporary_vty_protocol_rebind_approved_for_inherited_protocol_changes" ] : [ "existing_shared_tacacs_key_for_remote_roles" ]
         elsif supported && AaaChainSchema::IDS.key?(id)
           requirements = AaaChainSchema::APPROVALS + %w[resolved_selected_management_domain stable_approved_tacacs_endpoints existing_scheme_role_key]
         elsif supported && id == "ntp.authentication"

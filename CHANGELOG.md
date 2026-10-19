@@ -4,6 +4,10 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+- Generate explicitly approved Huawei S-series VTY AAA-mode corrections with native UI/profile proofs while preserving shared schemes, templates, methods and ACLs.
+- Preserve Huawei local-case username semantics in AAA evidence and require exact matching approval; reject the other vendor's VTY mode rather than certifying it.
+- Verify all selected management login roles before activating AAA and always require AAA-role/recovery runtime validation for account-mode operations.
+
 - Plan approved Comware 7 VTY account-mode corrections while preserving effective protocols and existing management methods, jointly checking SSH-only and TACACS-login outcomes.
 - Bind native proofs to range-level protocol evidence and require explicit approval for temporary class-protocol rebinding; reject incomplete scope and coupled render failures atomically.
 

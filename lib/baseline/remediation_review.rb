@@ -19,6 +19,7 @@ module Baseline
     def call(platform:, operations:, checks:, renderer:)
       changed = operations.any?
       domains = checks.select { |check| check.operation_ids.any? }.map { |check| check.id.split(".").first }.uniq
+      domains << "tacacs" if operations.any? { |operation| operation.kind.start_with?("aaa.") }
       inverse, unavailable = [], []
       operations.reverse_each do |operation|
         restored, reason = inverse_operation(operation, renderer)

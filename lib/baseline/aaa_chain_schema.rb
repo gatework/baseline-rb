@@ -11,9 +11,10 @@ module Baseline
 
     def self.name?(value) = ResourceSchema.token?(value) && value.bytesize <= 32
 
-    def self.methods?(value, approved: false)
+    def self.methods?(value, approved: false, syntax_profile: nil)
       return false unless value.is_a?(Array) && value.any? && value.all? do |method|
         method.is_a?(Hash) && (method.keys == [ "kind" ] && %w[local none].include?(method["kind"]) ||
+          syntax_profile == "vrp_s_series" && method == { "kind" => "local", "case_sensitive" => true } ||
           method.keys.sort == %w[group kind] && %w[tacacs radius ldap].include?(method["kind"]) && name?(method["group"]))
       end
       kinds = value.map { |method| method["kind"] }
@@ -22,7 +23,7 @@ module Baseline
 
     def self.validate_approval!(value)
       valid = (!value.key?("management_domain") || name?(value["management_domain"])) &&
-        (!value.key?("methods") || methods?(value["methods"], approved: true))
+        (!value.key?("methods") || methods?(value["methods"], approved: true, syntax_profile: value["syntax_profile"]))
       raise ArgumentError, "Invalid management method approval" unless valid
     end
 

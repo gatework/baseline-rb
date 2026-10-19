@@ -228,3 +228,5 @@ Comware/VRP `ntp.key_slots` 保留最终非秘密材料及可信状态，`ntp.au
 资源、解析后的批准值、旧地址集合、撤销、引用元数据及类型化操作指纹共用服务器地址身份。IPv6 写法变体和 ASCII DNS 大小写变体不再被计为独立目标，也不生成新增后删除同一端点的命令对；结构化重复身份在规划前被拒绝。命名对象标识、职责、接口及作用域保留各自语义；相对/绝对 DNS 名称保持区别。不执行 DNS 查询，也不把 IPv4 映射 IPv6 合并为 IPv4。显式 NTP 认证状态未解析时，不新增无密钥目标。参见[地址身份示例](examples/address_identity.rb)。
 
 Comware 7 的 `tacacs.login`、`tacacs.authorization`、`tacacs.accounting` 可在明确批准后修改选中现有域的 login 方法链，支持 TACACS 优先加本地后备，或批准的本地替代。需逐职责端点及既有密钥、外部对端/管理消费者/本地恢复核验；不选择候选组，不改其他域和非登录方法，端点生命周期变化仍需先处理；Comware 7 VTY 模式也可按完整范围和现有链批准修正，继承协议的临时重新绑定需单独批准。详见[认证链契约](docs/baseline-metrics.md)。
+
+Huawei S 系列可按 `syntax_profile: vrp_s_series` 及完整 `user-interface vty` 范围批准修正 VTY 账户模式，使用原生 `authentication-mode aaa`，保留域、共享方案、模板及现有方法顺序。`local-case` 的本地用户名语义以 `case_sensitive: true` 单独保留并要求明确批准；认证、授权、计费路径及后备访问均需核验。参见[Huawei 示例](examples/remediation_huawei_vty_authentication.rb)及[认证契约](docs/baseline-metrics.md)。
