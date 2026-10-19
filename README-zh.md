@@ -166,6 +166,8 @@ Hillstone SNMPv3 根据 [StoneOS CLI 手册](https://kb.hillstonenet.com/en/wp-c
 
 PAN-OS NTP 对象修正使用 `ntp.associations`、`primary-ntp-server` / `secondary-ntp-server` 名称及显式空作用域（`managed_scopes: [{}]`）。地址更新保留槽位认证子树；已认证地址变化须提供 `ntp_peer_key_compatibility_verified: true`。新增槽位须明确 `authenticated: false`；新建或变更认证材料仍列为人工前提。删除仅作用于批准槽位；未知选项或删除后丢失启用认证规则所需证据时受阻。见[离线示例](examples/remediation_palo_alto_ntp.rb)。命令不提交候选配置。
 
+StoneOS NTP 支持批准服务器清单、逐服务器来源/prefer 更新及路由域迁移。须声明 `ntp.associations` 和受管路由作用域；共同的 `ntp.source` 值通过这些批准对象设置，不能扩大作用域。原生操作按全局服务器地址定位，保留省略字段，并遵守文档规定的三服务器上限。既有 key 引用要求材料已知；新引用或路由迁移还须外部核验对端兼容性。不生成密钥、服务开关或认证开关命令。参见[人工审核示例](examples/remediation_hillstone_ntp.rb)与[StoneOS 契约](docs/baseline-metrics.md)。
+
 PAN-OS `syslog.destinations` 还可明确要求 `syslog.device`、`syslog.forwarding`、`syslog.zone` 绑定，区分服务器定义、设备日志直接引用，以及共享转发 profile 到本机或指定 vsys 安全规则的引用链。profile、匹配项和规则名保持大小写；明确要求的 `disabled`、`log_start`、`log_end` 必须有显式证据。过滤式及动作内容不导出，也不作为投递成功证明。未知引用、模板及不完整输入保持未知。见[配置引用示例](examples/palo_alto_syslog_bindings.rb)。
 
 引用变更可通过明确的 `remediation.binding_migrations` 管理既有设备日志或共享转发匹配项。声明来源/去向 profile、受管范围及服务器最终 bindings；共享匹配项还须批准完整规则/zone 消费者集合。方案先增加新接收成员、再删除旧成员，保留过滤式、动作及其他接收者；证据不完整或容量顺序不安全时受阻。参见[人工审核示例](examples/remediation_palo_alto_syslog_migration.rb)与[引用契约](docs/baseline-metrics.md)。

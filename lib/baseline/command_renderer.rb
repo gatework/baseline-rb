@@ -31,9 +31,12 @@ module Baseline
     # 原生命令依赖的独立事实由规划器核验，而非在命令里假定成立。
     def prerequisites(id) = self.class::PREREQUISITES.fetch(id, {})
 
+    # 某些平台的来源配置属于关联对象，不能伪装成一个全局设置命令。
+    def source_requires_associations?(_id) = false
+
     # 查询当前呈现器确实可生成的设置类型。
     def supports?(id)
-      self.class::SOURCE_COMMANDS.key?(id) || id == "services.disabled" && self.class::DISABLE_COMMANDS.any? ||
+      source_requires_associations?(id) || self.class::SOURCE_COMMANDS.key?(id) || id == "services.disabled" && self.class::DISABLE_COMMANDS.any? ||
         id == "ssh.vty_ssh_only" && !self.class::VTY_PROTOCOL_COMMAND.nil? ||
         id == "ssh.enabled" && !self.class::SSH_DISABLE_COMMAND.nil? ||
         %w[snmp.acl_bound snmp.acl_restricted snmp.sources].include?(id) && !self.class::SNMP_GLOBAL_ACL.nil? ||

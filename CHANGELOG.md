@@ -4,6 +4,11 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+- Generate guarded StoneOS NTP server additions, removals, field updates, routing moves and per-server source changes with explicit associations/scopes and the native three-server capacity limit.
+- Reduce StoneOS NTP server and authentication-key lifecycles before deriving evidence, record documented authentication defaults, and keep material references separate from explicit trust-declaration protocols.
+- Preserve unknown material, native identity and cross-rule source constraints; reuse existing StoneOS keys only after the required peer compatibility verification, without exporting or generating key values.
+- Distinguish an explicitly named default vrouter from implicit routing in StoneOS NTP and Syslog, preserving qualifiers and preventing unintended deletion through an implicit default scope.
+
 - Plan explicitly approved PAN-OS shared Syslog receiver migrations within existing device-log or forwarding matches, preserving filters, actions, unrelated receivers and rule/zone selection.
 - Require complete shared-consumer approval and projected profile bindings, create destination servers before migration, and block capacity orders that remove a last referenced server too early.
 - Inventory match membership independently of server existence or active consumers, including empty receiver sets and unused forwarding definitions, without exporting filter or action payloads.

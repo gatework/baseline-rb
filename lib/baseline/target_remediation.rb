@@ -27,12 +27,12 @@ module Baseline
         raise Blocked, :resource_unresolved
       end
       current = audit.configuration.fact(structured_id)
-      applicable = audit.findings.select { |item| self.class::IDS.include?(item.id) && item.status != :not_applicable }
+      applicable = applicable_findings(audit)
       structured = applicable.find { |item| item.id == structured_id }
       legacy = applicable.find { |item| item.id == servers_id }
       effective = structured || legacy
       raise Blocked, :approved_targets_required unless effective && effective.expected
-      raise Blocked, :structured_policy_unresolved unless %i[pass fail].include?(effective.status)
+      raise Blocked, :structured_policy_unresolved unless plannable_targets?(effective, audit.configuration)
 
       @legacy_mode = effective.id != structured_id
       if effective.id == structured_id
@@ -49,7 +49,7 @@ module Baseline
       ResourceSchema.validate_expected!(self.class::KIND, targets)
       current_by_key = current.to_h { |object| [ key(object), object ] }
       desired = targets.map do |object|
-        attributes = current_by_key[key(object)]&.fetch("attributes", {}) || {}
+        attributes = attributes_for_target(object, current_by_key)
         object.merge("attributes" => attributes.merge(object.fetch("attributes", {})))
       end
       validate_native_address_identities!(current, desired)
@@ -69,6 +69,7 @@ module Baseline
         next unless managed_object?(object, managed) && !wanted.key?(key(object))
         operations << operation(object, :remove, object.fetch("attributes", {}), nil, risk)
       end
+      operations = normalize_operations(operations)
       raise Blocked, :resource_unresolved if operations.empty? && !allow_empty_operations?
       operations, details = order_for_capacity(operations, current, projected, applicable)
       ordered = operations.sort_by { |item| { prepare: -1, create: 0, update: 1, remove: 2 }.fetch(item.phase) }.freeze
@@ -85,6 +86,11 @@ module Baseline
     def countable_objects(objects) = objects
     def managed_object?(object, managed) = managed.include?(object["scope"])
     def allow_empty_operations? = false
+    def attributes_for_target(object, current_by_key) = current_by_key[key(object)]&.fetch("attributes", {}) || {}
+    def normalize_operations(operations) = operations
+    def applicable_findings(audit) = audit.findings.select { |item| self.class::IDS.include?(item.id) && item.status != :not_applicable }
+    def plannable_targets?(finding, _evidence) = %i[pass fail].include?(finding.status)
+    def native_target_capacity = nil
 
     # 同一 IP 的不同文本不能用于新增再删除；原生地址归一化未完成前明确受阻。
     def validate_native_address_identities!(current, desired)
@@ -118,7 +124,7 @@ module Baseline
       maxima = options.filter_map { |item| item["maximum_targets"] }.uniq
       orders = options.filter_map { |item| item["order"] }.uniq
       raise Blocked, :policy_conflict if maxima.size > 1 || orders.size > 1
-      maximum = maxima.first
+      maximum = maxima.first || native_target_capacity
       additions = operations.count { |operation| operation.action == :add }
       removals = operations.count { |operation| operation.action == :remove }
       if additions.positive? && maximum.nil? && (current.empty? || projected.size > current.size)
@@ -131,7 +137,7 @@ module Baseline
       raise Blocked, :capacity_exceeded if first > removals
       details = { initial_targets: current.size, projected_targets: projected.size, additions: additions, early_removals: first,
         order: orders.first || "add_before_remove" }
-      details.merge!(maximum_targets: maximum, capacity_source: :policy) if maximum
+      details.merge!(maximum_targets: maximum, capacity_source: maxima.empty? ? :native : :policy) if maximum
       details.merge!(capacity_lower_bound: current.size, capacity_source: :observed_occupancy) if maximum.nil? && additions.positive?
       details[:effective_order] = first.positive? ? "remove_to_fit_then_add" : "add_before_remove"
       ordered = operations.map do |operation|

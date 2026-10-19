@@ -41,12 +41,17 @@ module Baseline
               explicit_native_server_parameters preserved_profile_references syslog_tls_peer_compatibility_verified_for_tls_endpoint_changes]
             requirements += %w[approved_binding_migrations_for_reference_changes complete_shared_consumer_scope_for_migrations] if id == "syslog.destinations"
           end
+        elsif supported && renderer.source_requires_associations?(id)
+          requirements = %w[approved_ntp_associations managed_scopes resolved_ntp_inventory]
         elsif supported && NtpRemediation::IDS.include?(id)
           requirements = [ "approved_ntp_associations", "maximum_targets_for_net_additions", "authentication_dependencies" ]
           requirements += %w[managed_scopes ntp_peer_key_compatibility_verified known_trusted_ntp_key] if id == "ntp.associations"
           if name == "palo_alto"
             requirements = %w[approved_ntp_slot_identities managed_scopes explicit_authentication_for_new_slots
               ntp_peer_key_compatibility_verified_for_authenticated_address_changes]
+          elsif name == "hillstone"
+            requirements = %w[approved_ntp_associations managed_scopes native_global_address_identity native_three_server_capacity
+              ntp_peer_key_compatibility_verified_for_new_or_rerouted_key_references existing_ntp_key_material]
           end
         elsif supported && TacacsRemediation::IDS.include?(id)
           requirements = %w[approved_tacacs_endpoints managed_scopes syntax_profile local_fallback_access_verified

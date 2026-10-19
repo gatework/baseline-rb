@@ -52,6 +52,9 @@ module Baseline
       operations, steps = [], []
       conflicting_access_domains = conflicting_acl_allocations(audit)
       checks = audit.findings.map do |finding|
+        association_source = @renderer.source_requires_associations?(finding.id)
+        known_associations = association_source && finding.reason == :fact_unavailable && !finding.expected.nil? && audit.configuration.fact_known?("ntp.associations")
+        explicit_ntp_attributes = NtpRemediation.explicit_native_attributes?(finding, audit.configuration)
         status = { pass: :not_needed, not_applicable: :not_applicable }[finding.status]
         if status
           check(finding, status, nil)
@@ -74,7 +77,7 @@ module Baseline
             (!@renderer.supports?(finding.id) || finding.details.fetch(:binding_differences, []).any? || finding.reason == :resource_binding_unresolved)
           result = ResourceBindingRemediation.new.call(finding, audit.configuration)
           check(finding, :blocked, result.fetch(:reason), requirements: result.fetch(:requirements), details: result.fetch(:details))
-        elsif !audit.configuration.complete? || finding.status == :unknown && !((AccessRemediation::IDS + SnmpAccessRemediation::IDS).include?(finding.id) && finding.reason == :fact_unavailable && !finding.expected.nil?)
+        elsif !audit.configuration.complete? || finding.status == :unknown && !known_associations && !explicit_ntp_attributes && !((AccessRemediation::IDS + SnmpAccessRemediation::IDS).include?(finding.id) && finding.reason == :fact_unavailable && !finding.expected.nil?)
           reason = audit.configuration.complete? ? finding.reason : audit.configuration.status == :unsupported ? :unsupported_platform : :input_incomplete
           reason = :tacacs_context_unresolved if audit.configuration.complete? && TacacsRemediation::IDS.include?(finding.id) && finding.diagnostics.any? { |issue| issue[:code] == :tacacs_context_unresolved }
           check(finding, :blocked, reason)
@@ -100,7 +103,7 @@ module Baseline
             check(finding, :blocked, :unresolved_prerequisites, requirements: required)
           elsif (AccessRemediation::IDS + SnmpAccessRemediation::IDS).include?(finding.id)
             compile_access(finding, audit, operations, steps)
-          elsif (SyslogRemediation::IDS + NtpRemediation::IDS + TacacsRemediation::IDS).include?(finding.id)
+          elsif association_source || (SyslogRemediation::IDS + NtpRemediation::IDS + TacacsRemediation::IDS).include?(finding.id)
             compile_targets(finding, audit, operations, steps)
           elsif finding.id == "ssh.vty_ssh_only"
             compile_vty(finding, audit, operations, steps)
@@ -177,7 +180,7 @@ module Baseline
     def compile_targets(finding, audit, operations, steps)
       handler = if TacacsRemediation::IDS.include?(finding.id)
         TacacsRemediation
-      elsif NtpRemediation::IDS.include?(finding.id)
+      elsif NtpRemediation::IDS.include?(finding.id) || @renderer.source_requires_associations?(finding.id)
         NtpRemediation
       else
         SyslogRemediation
@@ -186,6 +189,7 @@ module Baseline
       proposed = result.operations
       verification = { verified_ntp_key_ids: result.details.fetch(:verified_ntp_key_ids, []),
         verified_ntp_slots: result.details.fetch(:verified_ntp_slots, []) }
+      verification[:verified_ntp_operation_ids] = result.details[:verified_ntp_operation_ids] if result.details.key?(:verified_ntp_operation_ids)
       syslog_ids = result.details[:verified_syslog_operation_ids]&.to_h { |id| [ id, true ] }
       rendered = proposed.flat_map do |operation|
         context = syslog_ids ? verification.merge(verified_syslog_operation_ids: syslog_ids.key?(operation.id) ? [ operation.id ] : []) : verification

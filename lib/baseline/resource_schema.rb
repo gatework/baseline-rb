@@ -11,7 +11,7 @@ module Baseline
     NTP_FIELDS = %w[address version key_id prefer source minpoll maxpoll burst iburst normal_sync authenticated].freeze
     TACACS_FIELDS = %w[address port source key_present timeout single_connection].freeze
     IDENTITY_FIELDS = %w[address name protocol port types role priority family].freeze
-    SCOPE_FIELDS = %w[vrf profile source group].freeze
+    SCOPE_FIELDS = %w[vrf profile source group vrf_mode].freeze
 
     # 校验完整资源数据，拒绝控制字符及未声明的配置字段。
     def self.validate!(kind:, identity:, scope:, attributes:, lines:, complete:)
@@ -23,14 +23,15 @@ module Baseline
         [ true, false ].include?(complete)
       raise ArgumentError, "Invalid configuration resource" unless valid
       identity_fields, scope_fields, roles = case kind
-      when "syslog.destination" then [ %w[address name protocol port types], %w[vrf profile source], [] ]
-      when "ntp.association" then [ %w[address name role], %w[vrf], %w[server peer] ]
+      when "syslog.destination" then [ %w[address name protocol port types], %w[vrf profile source vrf_mode], [] ]
+      when "ntp.association" then [ %w[address name role], %w[vrf vrf_mode], %w[server peer] ]
       when "tacacs.endpoint" then [ %w[address name role priority family], %w[vrf profile group], %w[authentication authorization accounting all] ]
       end
       valid_identity = (identity.keys - identity_fields).empty? && (scope.keys - scope_fields).empty? &&
         (identity.key?("address") ^ identity.key?("name")) &&
         (!identity.key?("role") || roles.include?(identity["role"])) &&
         (kind != "ntp.association" || identity.key?("name") || identity.key?("role")) &&
+        (!scope.key?("vrf_mode") || scope["vrf_mode"] == "named" && scope["vrf"] == "default") &&
         identity.all? { |key, value| !attributes.key?(key) || (key == "address" ? ServerAddress.normalize(attributes[key]) == ServerAddress.normalize(value) : attributes[key] == value) }
       raise ArgumentError, "Invalid configuration resource identity" unless valid_identity
 
@@ -114,7 +115,8 @@ module Baseline
     # 受管作用域使用精确匹配，不从批准对象推导删除边界。
     def self.validate_scopes!(scopes)
       unless scopes.is_a?(Array) && !scopes.empty? && scopes.uniq.size == scopes.size && scopes.all? do |scope|
-        scope.is_a?(Hash) && (scope.keys - SCOPE_FIELDS).empty? && scope.all? do |key, value|
+        scope.is_a?(Hash) && (scope.keys - SCOPE_FIELDS).empty? &&
+          (!scope.key?("vrf_mode") || scope["vrf"] == "default" && scope["vrf_mode"] == "named") && scope.all? do |key, value|
           %w[group profile].include?(key) ? name?(value) : token?(value)
         end
       end

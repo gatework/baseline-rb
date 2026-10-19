@@ -4,11 +4,13 @@ require_relative "../parser"
 
 require "shellwords"
 require_relative "document"
+require_relative "ntp_configuration"
 
 module Baseline
   module Hillstone
     # StoneOS 管理端点与原生主机允许列表不同于路由器 VTY。
     class Parser < Baseline::Parser
+      include NtpConfiguration
       # 原生管理端点没有 VTY 模型；未建模能力保留未知，不改变规则适用范围。
       UNSUPPORTED_FACTS = {
         "ssh.versions" => :ssh_version_unmodeled,
@@ -78,31 +80,6 @@ module Baseline
         end
       end
 
-      # 提取时间同步服务器及相关认证配置。
-      def parse_ntp
-        entries = matching_blocks(/\Antp server\b/)
-        sources = []
-        servers = entries.filter_map do |entry|
-          parts = command_tokens(entry)
-          unless server_address?(parts[2])
-            record_unknown_fact("ntp", [ entry ])
-            next
-          end
-          options = parse_keyword_options(parts.drop(3), flags: [ "prefer" ], keys: %w[key source vrouter])
-          unless options && (!options["key"] || /\A[1-9]\d*\z/.match?(options["key"]) && options["key"].to_i <= 4_294_967_295)
-            record_unknown_fact("ntp", [ entry ])
-            next
-          end
-          record_ntp_resource(address: parts[2], role: "server", vrf: options["vrouter"], options: options, entry: entry)
-          sources << options["source"]
-          analyze(entry) { ServerAddress.normalize(parts[2]) }
-        end
-        record_fact("ntp.servers", servers.uniq, entries)
-        record_configured_state("ntp.authentication", /\Antp authentication\z/, /\Ano ntp authentication\z/)
-        record_fact("ntp.source", sources.first, entries) if sources.any? && sources.first && sources.uniq.one?
-        record_unknown_fact("ntp", matching_blocks(/\Ano ntp server\b/)) if matching_blocks(/\Ano ntp server\b/).any?
-      end
-
       # 同一目标可供多个日志类别使用，统计时只计一次。
       def parse_syslog
         entries = matching_blocks(/\Alogging syslog\b/)
@@ -115,6 +92,7 @@ module Baseline
           if %w[vrouter source-interface].include?(options.first)
             source = options[1] if options.first == "source-interface"
             scope = options.first == "vrouter" ? { "vrf" => options[1] } : { "source" => options[1] }
+            scope["vrf_mode"] = "named" if options.first == "vrouter" && options[1] == "default"
             options = options.drop(2)
           end
           valid = server_address?(parts[2]) && %w[tcp udp secure-tcp].include?(options[0]) && parse_service_port(options[1])&.positive?

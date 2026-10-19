@@ -184,3 +184,20 @@ end
     end
   end
 end
+
+# 原生三服务器场景同时规划关联和共同来源，重复指标必须复用同一操作集合。
+configuration = "hostname LAB\n" + 3.times.map { |index| "ntp server 192.0.2.#{index + 10} source MGT#{index}\n" }.join
+targets = 3.times.map do |index|
+  { "identity" => { "address" => "192.0.2.#{index + 10}", "role" => "server" }, "scope" => { "vrf" => "default" } }
+end
+policy = Baseline::Policy.new("version" => 1, "checks" => {
+  "ntp.associations" => { "expected" => targets, "managed_scopes" => [ { "vrf" => "default" } ] },
+  "ntp.source" => { "expected" => "MGT3" }
+})
+service = Baseline::Remediation.new(policy: policy)
+measure("StoneOS native NTP common source 3 servers") do
+  plan = service.call(configuration: configuration, platform: :hillstone, complete: true)
+  unless plan.status == :ready && plan.operations.size == 3 && plan.steps.size == 6 && plan.operations.all? { |operation| operation.kind == "ntp.server" }
+    raise "Expected complete native NTP source plan"
+  end
+end

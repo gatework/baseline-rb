@@ -19,9 +19,9 @@ module Baseline
           [ false, :ntp_key_missing ]
         elsif slot[:present].nil? || !slot[:complete]
           [ nil, :ntp_key_unresolved ]
-        elsif slot[:trusted].nil?
+        elsif slot[:trust_required] != false && slot[:trusted].nil?
           [ nil, :ntp_trust_unresolved ]
-        elsif !slot[:trusted]
+        elsif slot[:trust_required] != false && !slot[:trusted]
           [ false, :ntp_key_untrusted ]
         elsif enabled.nil?
           [ nil, :ntp_authentication_state_unknown ]
@@ -30,9 +30,11 @@ module Baseline
         else
           [ true, nil ]
         end
-        { identity: object[:identity], scope: object[:scope], key_id: key_id, key_present: slot&.fetch(:present),
+        binding = { identity: object[:identity], scope: object[:scope], key_id: key_id, key_present: slot&.fetch(:present),
           key_trusted: slot&.fetch(:trusted), algorithm: slot&.fetch(:algorithm, nil), configured_ready: ready, reason: reason,
           lines: (object[:lines] + (slot ? slot[:lines] + slot[:trust_lines] : [])).uniq }
+        binding[:trust_required] = slot[:trust_required] if slot&.key?(:trust_required)
+        binding
       end
     end
   end

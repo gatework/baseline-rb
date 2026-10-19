@@ -39,4 +39,26 @@ RSpec.describe "Hillstone logging target changes" do
     expect(plan.status).to eq(:blocked)
     expect(plan.configuration_commands).to be_empty
   end
+
+  it "keeps a named default router outside implicit default deletion scope" do
+    policy = Baseline::Policy.new("version" => 1, "checks" => { "syslog.destinations" => { "expected" => [], "managed_scopes" => [ { "vrf" => "default" } ] } })
+    result = Baseline::Remediation.new(policy: policy).call(configuration: "hostname LAB\nlogging syslog 192.0.2.20 vrouter default udp 514 type event\n",
+      platform: :hillstone, complete: true)
+    expect(result.status).to eq(:noop)
+    expect(result.operations).to be_empty
+  end
+
+  it "renders the explicit default qualifier when changing an approved named-router logging target" do
+    scope = { "vrf" => "default", "vrf_mode" => "named" }
+    target = { "identity" => { "address" => "192.0.2.40", "protocol" => "udp", "port" => 514, "types" => [ "event" ] }, "scope" => scope }
+    policy = Baseline::Policy.new("version" => 1, "checks" => { "syslog.destinations" => {
+      "expected" => [ target ], "managed_scopes" => [ scope ], "remediation" => { "maximum_targets" => 2 }
+    } })
+    input = "hostname LAB\nlogging syslog 192.0.2.20 vrouter default udp 514 type event\n"
+    engine = Baseline::Remediation.new(policy: policy)
+    result = engine.call(configuration: input, platform: :hillstone, complete: true)
+    expect(result.configuration_commands).to eq([ "configure", "logging syslog 192.0.2.40 vrouter default udp 514 type event",
+      "no logging syslog 192.0.2.20 vrouter default udp 514 type event", "exit" ])
+    expect(engine.call(configuration: input.sub("192.0.2.20", "192.0.2.40"), platform: :hillstone, complete: true).status).to eq(:noop)
+  end
 end

@@ -316,8 +316,8 @@ module Baseline
     end
 
     # 各厂商的时间关联参数归一化到同一资源，不保存任何认证密钥值。
-    def record_ntp_resource(address:, role:, vrf:, options:, entry:, negative: false, complete: true)
-      scope = { "vrf" => vrf || "default" }
+    def record_ntp_resource(address:, role:, vrf:, options:, entry:, negative: false, complete: true, scope: nil)
+      scope ||= { "vrf" => vrf || "default" }
       mapping = { "key" => "key_id", "authkey" => "key_id", "authentication-keyid" => "key_id",
         "priority" => "prefer", "source-interface" => "source", "normal-sync" => "normal_sync" }
       attributes = options.reject { |key, _| %w[vpn-instance use-vrf vrouter].include?(key) }.to_h do |key, value|

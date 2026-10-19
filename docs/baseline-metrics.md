@@ -48,6 +48,20 @@ NTP 与 Syslog 的配置资源保留了用于后续生成的对象参数。NTP �
 
 开发验证：`bundle exec rake`。现有备份只用于本机聚合验证，不能作为批准参数来源，也不能复制进测试或发布包。
 
+## StoneOS NTP 原生身份与材料
+
+[StoneOS 5.5R6 系统管理 CLI 指南](https://kb.hillstonenet.com/en/wp-content/uploads/2018/08/StoneOS_CLI_User_Guide_System_Management_5.5R6.pdf) 给出最多三台服务器、按地址删除，以及 key/source/prefer/vrouter 参数。资源仍以地址、server 职责和当前路由域表示；解析先按全局规范地址归约最终声明和撤销，不把同地址的不同 vrouter 当作两台原生服务器。损坏的最终声明不能回退到旧配置，未知 peer 命令不能证明空库存。完整输入中未声明认证开关时，采用文档规定的关闭缺省值；部分输入不采用此缺省。prefer 未声明时，记录未显式优先的 false，不推断实际选用哪台服务器。
+
+生成要求明确批准的目标和作用域。跨路由域迁移必须同时批准原作用域和新作用域；原生 `ntp.server` 操作将可变 vrf 放入完整前后状态，避免先新增后删除同一全局地址。省略字段保留物理服务器原配置；显式 prefer:false 可取消优先标志。按文档原生三台容量核验每步；未提供重复的整体容量值时，可使用该已知原生上限。调用方提供更小容量仍是约束，更大值不能覆盖原生上限。域名长度及 key ID 分别按文档的 127 字符与 1..65535 校验；IPv6 地址作为地址参数，不臆造其他厂商的 ipv6 关键字。
+
+`ntp.source` 在 StoneOS 是关联字段，不能用虚构的全局命令设置。共同批准值通过明确的 `ntp.associations` 与受管作用域逐台应用；与对象显式 source 或未受管服务器的最终来源冲突时受阻。来源指标参与最终约束及操作风险计算。原来没有显式 source 的服务器仍保留审计 unknown，但完整且已解析的对象可以按明确批准值设置；同样允许在材料和对端前提满足后设置显式 key 引用。此例外只适用于 StoneOS 的 source/key_id，不绕过部分输入、损坏库存、未知绑定或其他字段。
+
+未指定 vrouter 的作用域是 `{vrf: default}`；显式名称也为 default 的路由器使用 `{vrf: default, vrf_mode: named}`，批准对象和 `managed_scopes` 都精确匹配该标记。二者不能共用默认哨兵，不能因更新来源而丢弃显式路由限定词，也不能借默认范围删除另一上下文的服务器。NTP 原生前后状态用 `vrf_explicit` 保留这项区别；带 key 的上下文切换同样要求外部对端核验。同一作用域标记也用于 StoneOS Syslog，正向及删除命令均保留显式限定词。
+
+`ntp.key_slots` 保存最终材料存在、算法、格式及来源行，不保留秘密。StoneOS 该语法没有独立的可信声明，显式记录 `trust_required:false`、`trusted:nil`，不能把它伪装成 Comware/VRP 的 trusted:true。`ntp.authentication_bindings` 的配置就绪状态基于已知材料、关联引用和认证开关；无法识别材料更新时，逐关联就绪也保持未知。最终 md5 材料作为明文凭据元数据参与存储/强度审计；损坏、未知、撤销和接口内声明不能提供材料。新引用、地址更换或带 key 的路由迁移需要 `ntp_peer_key_compatibility_verified:true`；不输出新密钥、占位材料或认证/服务开关。低层呈现调用必须提供规划器已核验的完整操作标识。
+
+[公开示例](../examples/remediation_hillstone_ntp.rb) 与独立状态模型验证离线配置变换、无关原文保留及再次零变更。StoneOS 文档还说明 NTP 服务缺省关闭；服务器对象符合策略不证明服务启用、同步、接口与 vrouter 存在、对端接受或网络可达。审核后执行前仍须核对这些实际条件，既有密钥的就绪也不证明其强度或对端材料相同。
+
 ## PAN-OS NTP 主备槽位
 
 `ntp.associations` 使用命名槽位 `primary-ntp-server` / `secondary-ntp-server`、`scope: {}` 和明确 `managed_scopes: [{}]`。不能从旧地址集合推导应使用哪个槽位。新增须提供地址及 `authenticated: false`；删除按完整槽位树定位；已有对象只修改地址叶子，保留认证子树和另一槽位。未知对象选项不能当作删除整个槽位的完整证据。
