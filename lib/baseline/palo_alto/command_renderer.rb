@@ -16,7 +16,7 @@ module Baseline
 
       # 完整操作绑定已核验的引用及 SSL 前提，独立调用不能默认这些证据成立。
       def render(operation, verified_syslog_operation_ids: [], **context)
-        if operation.kind == "syslog.destination"
+        if %w[syslog.destination syslog.reference].include?(operation.kind)
           unless verified_syslog_operation_ids.is_a?(Array) && verified_syslog_operation_ids.all? { |id| id.is_a?(String) && /\A[0-9a-f]{64}\z/.match?(id) }
             raise ArgumentError, "Invalid verified Syslog operations"
           end
@@ -29,6 +29,7 @@ module Baseline
 
       # 按完整命名身份更新服务器叶子；从不删除 profile、格式或转发匹配项。
       def render_resource(operation)
+        return render_syslog_reference(operation) if operation.kind == "syslog.reference"
         unless operation.kind == "syslog.destination" && operation.identity.keys == [ "name" ] && operation.scope.keys == [ "profile" ]
           raise UnsupportedOperation, "unsupported_panos_syslog_identity"
         end
@@ -62,6 +63,25 @@ module Baseline
             "set #{prefix} #{command} #{value}"
           end
         end
+        raise UnsupportedOperation, "no_supported_commands" if commands.empty?
+        commands.map { |command| CommandStep.new(view: [], command: command, phase: operation.phase, operation_id: operation.id) }
+      end
+
+      # 接收成员逐个增加再逐个移除，绝不删除整个列表或重写过滤式和动作。
+      def render_syslog_reference(operation)
+        identity = operation.identity
+        names = operation.before["profiles"] + operation.after["profiles"]
+        match = identity.fetch("match")
+        forwarding = identity["forwarding_profile"]
+        unless names.all? { |name| /\A[a-zA-Z0-9_][a-zA-Z0-9_ -]*\z/.match?(name) && name.bytesize <= 31 } &&
+            match.bytesize <= 31 && /\A[a-zA-Z0-9][a-zA-Z0-9_. -]*\z/.match?(match) &&
+            (!forwarding || forwarding.bytesize <= 64 && /\A[a-zA-Z0-9_][a-zA-Z0-9_ -]*\z/.match?(forwarding))
+          raise UnsupportedOperation, "unsupported_panos_syslog_name"
+        end
+        path = identity["kind"] == "syslog.device" ? identity["log_type"] : "profiles \"#{identity['forwarding_profile']}\""
+        prefix = "shared log-settings #{path} match-list \"#{identity['match']}\" send-syslog"
+        commands = (operation.after["profiles"] - operation.before["profiles"]).map { |profile| "set #{prefix} \"#{profile}\"" } +
+          (operation.before["profiles"] - operation.after["profiles"]).map { |profile| "delete #{prefix} \"#{profile}\"" }
         raise UnsupportedOperation, "no_supported_commands" if commands.empty?
         commands.map { |command| CommandStep.new(view: [], command: command, phase: operation.phase, operation_id: operation.id) }
       end

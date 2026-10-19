@@ -25,6 +25,33 @@ RSpec.describe "PAN-OS Syslog definition and usage evidence" do
     Baseline::Audit.new(policy: policy).call(configuration: text, platform: :palo_alto, complete: complete)
   end
 
+  it "inventories reference membership separately from server objects and receiver-independent consumers" do
+    text = definition + "set shared log-settings system match-list ALL send-syslog [ OTHER LOGS ]\n" \
+      "set shared log-settings system match-list ALL filter PRIVATE-FILTER\n" \
+      "set shared log-settings profiles FORWARD match-list TRAFFIC log-type traffic\n" \
+      "set shared log-settings profiles FORWARD match-list TRAFFIC filter PRIVATE-ACTION\n" \
+      "set rulebase security rules ALLOW log-setting FORWARD\nset zone INSIDE network log-setting FORWARD\n"
+    evidence = audit(text).configuration
+    expect(evidence.fact_known?("syslog.reference_sets")).to be(true)
+    rows = evidence.fact("syslog.reference_sets")
+    direct = rows.find { |row| row["identity"] == device_binding }
+    expect(direct["profiles"]).to eq(%w[LOGS OTHER])
+    expect(direct["consumers"]).to eq([ device_binding ])
+    forward = rows.find { |row| row["identity"]["kind"] == "syslog.forwarding" }
+    expect(forward["identity"]).to eq(forwarding_binding.slice("kind", "forwarding_profile", "match", "log_type"))
+    expect(forward["profiles"]).to eq([])
+    expect(forward["consumers"]).to contain_exactly(forwarding_binding,
+      { "kind" => "syslog.zone", "forwarding_profile" => "FORWARD", "match" => "TRAFFIC", "log_type" => "traffic", "context" => "local", "zone" => "INSIDE" })
+    expect(rows.to_s).not_to include("PRIVATE-FILTER", "PRIVATE-ACTION")
+    expect(rows).to be_frozen
+  end
+
+  it "keeps partial and unsupported reference-set inventory unknown" do
+    text = definition + "set shared log-settings system match-list ALL send-syslog LOGS\n"
+    expect(audit(text, complete: false).configuration.fact_known?("syslog.reference_sets")).to be(false)
+    expect(audit(text + "set log-settings system match-list ALL send-syslog LOGS\n").configuration.fact_known?("syslog.reference_sets")).to be(false)
+  end
+
   it "keeps definitions without usage explicit and can require a device log reference" do
     expect(audit(definition).findings.first.details[:verification_scope]).to eq(:objects_only)
     result = audit(definition, object([ device_binding ]))

@@ -13,6 +13,38 @@ def measure(label)
   end.sort
   puts "#{label}: #{samples[1].round(6)} seconds"
 end
+
+# 共享日志迁移同时核验每个匹配项的完整消费者，避免基准绕过审批及命令路径。
+[ 10, 100 ].each do |size|
+  configuration = "set deviceconfig system hostname LAB\n" \
+    "set shared log-settings syslog OLD server S server 192.0.2.10\n" \
+    "set shared log-settings syslog NEW server S server 192.0.2.20\n"
+  bindings, migrations = [], []
+  size.times do |index|
+    profile = "FORWARD#{index / 64}"
+    rule = "ALLOW#{index / 64}"
+    configuration += "set rulebase security rules #{rule} log-setting #{profile}\n" if index % 64 == 0
+    reference = { "kind" => "syslog.forwarding", "forwarding_profile" => profile, "match" => "M#{index}", "log_type" => "traffic" }
+    binding = reference.merge("context" => "local", "rulebase" => "security", "rule" => rule)
+    bindings << binding
+    migrations << { "from_profile" => "OLD", "to_profile" => "NEW", "reference" => reference, "consumers" => [ binding ] }
+    configuration += "set shared log-settings profiles #{profile} match-list M#{index} log-type traffic\n" \
+      "set shared log-settings profiles #{profile} match-list M#{index} send-syslog OLD\n"
+  end
+  targets = %w[OLD NEW].map do |profile|
+    { "identity" => { "name" => "S" }, "scope" => { "profile" => profile }, "bindings" => profile == "NEW" ? bindings : [] }
+  end
+  policy = Baseline::Policy.new("version" => 1, "checks" => { "syslog.destinations" => {
+    "expected" => targets, "managed_scopes" => targets.map { |target| target["scope"] }, "remediation" => { "binding_migrations" => migrations }
+  } })
+  service = Baseline::Remediation.new(policy: policy)
+  measure("PAN-OS shared Syslog migration #{size} matches") do
+    plan = service.call(configuration: configuration, platform: :palo_alto, complete: true)
+    unless plan.status == :ready && plan.operations.size == size && plan.operations.all? { |operation| operation.kind == "syslog.reference" } && plan.steps.size == size * 2
+      raise "Expected complete reference migration plan"
+    end
+  end
+end
 [ 1000, 4000 ].each do |size|
   actual = size.times.map { |i| "10.#{i / 256}.#{i % 256}.0/24" }
   approved = actual.reverse

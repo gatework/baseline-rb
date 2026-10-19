@@ -3,6 +3,7 @@
 require_relative "acl"
 require_relative "access_approval"
 require_relative "resource_schema"
+require_relative "syslog_reference_schema"
 
 require "ctx_parser/immutable"
 
@@ -90,7 +91,7 @@ module Baseline
       elsif id == "ntp.associations"
         %w[maximum_targets order ntp_peer_key_compatibility_verified]
       elsif id == "syslog.destinations"
-        %w[maximum_targets order syslog_tls_peer_compatibility_verified]
+        %w[maximum_targets order syslog_tls_peer_compatibility_verified binding_migrations]
       elsif %w[syslog.minimum_servers syslog.servers syslog.destinations ntp.minimum_servers ntp.servers].include?(id)
         %w[maximum_targets order]
       elsif id == "tacacs.endpoints"
@@ -110,6 +111,7 @@ module Baseline
         raise ArgumentError, "Invalid baseline remediation approval"
       end
       AccessApproval.validate!(remediation["access_targets"], domain: id.start_with?("snmp.") ? :snmp : :management) if remediation.key?("access_targets")
+      SyslogReferenceSchema.validate_migrations!(remediation["binding_migrations"]) if remediation.key?("binding_migrations")
       validate_applicability!
       freeze
     end

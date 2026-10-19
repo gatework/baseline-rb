@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "target_remediation"
+require_relative "palo_alto/syslog_binding_remediation"
 
 module Baseline
   # 日志对象共享目标集合规划，但保留自身身份和审批规则。
@@ -11,24 +12,35 @@ module Baseline
     # 命名 profile 的原生命令必须保留配置引用，不能只通过最终地址集合证明安全。
     def call(finding, audit)
       @panos = audit.configuration.platform == "palo_alto"
+      structured = audit.findings.find { |item| item.id == "syslog.destinations" && item.status != :not_applicable }
+      approved = @policy.rules.find { |rule| rule.id == "syslog.destinations" && rule.enabled? } if structured
+      @migrations = approved&.remediation&.fetch("binding_migrations", []) || []
+      raise Blocked, :unsupported_syslog_binding_migration if !@panos && @migrations.any?
       result = super
       return result unless @panos
-      references = verify_panos_profiles!(result, audit)
+      projection = if @migrations.any?
+        PaloAlto::SyslogBindingRemediation.new.call(migrations: @migrations, evidence: audit.configuration,
+          managed_scopes: approved.managed_scopes, targets: structured.expected)
+      end
+      references = verify_panos_profiles!(result, audit, projection)
       tls_operations = result.operations.select do |operation|
         operation.after&.fetch("protocol", nil) == "ssl" && %w[address port protocol].any? { |field| operation.after[field] != operation.before&.[](field) }
       end
-      approved = @policy.rules.find { |rule| rule.id == "syslog.destinations" && rule.enabled? }
       if tls_operations.any? && approved&.remediation&.fetch("syslog_tls_peer_compatibility_verified", false) != true
         raise Blocked.new(:syslog_tls_peer_compatibility_required, requirements: [ "syslog_tls_peer_compatibility_verified" ])
       end
-      Result.new(operations: result.operations, details: CtxParser::Immutable.copy(result.details.merge(
-        verified_syslog_operation_ids: result.operations.map(&:id), preserved_profile_reference_counts: references)))
+      operations = result.operations + (projection&.operations || [])
+      raise Blocked, :resource_unresolved if operations.empty?
+      Result.new(operations: operations.freeze, details: CtxParser::Immutable.copy(result.details.merge(
+        verified_syslog_operation_ids: operations.map(&:id), preserved_profile_reference_counts: references)))
     end
 
     private
 
     # 共享及未挂接的转发引用均保留；创建新对象不等于批准新的日志使用链。
-    def verify_panos_profiles!(result, audit)
+    def allow_empty_operations? = @panos && @migrations.any?
+
+    def verify_panos_profiles!(result, audit, projection)
       evidence = audit.configuration
       unless evidence.fact_known?("syslog.profile_references") && evidence.fact_known?("syslog.declared_profile_references") &&
           evidence.fact("syslog.reference_inventory_complete") == true
@@ -39,8 +51,8 @@ module Baseline
       end
       current = evidence.fact("syslog.destinations")
       targets = audit.findings.find { |item| item.id == "syslog.destinations" }&.expected || []
-      references = evidence.fact("syslog.profile_references")
-      declared = evidence.fact("syslog.declared_profile_references")
+      references = projection&.references || evidence.fact("syslog.profile_references")
+      declared = projection&.declared || evidence.fact("syslog.declared_profile_references")
       targets.each do |target|
         next unless target.key?("bindings")
         difference = ResourceBindings.compare(references.fetch(target["scope"]["profile"], []), target["bindings"])
@@ -52,7 +64,20 @@ module Baseline
       projected = current.reject { |object| removed.key?(key(object)) }
       projected += result.operations.select { |operation| operation.action == :add }.map { |operation| { "identity" => operation.identity, "scope" => operation.scope } }
       remaining = projected.group_by { |object| object["scope"]["profile"] }
+      if projection&.profiles&.any? { |profile| declared.fetch(profile, 0).positive? && !remaining.key?(profile) }
+        raise Blocked.new(:syslog_profile_references_required, requirements: [ "approved_referenced_syslog_server" ])
+      end
       current_profiles = current.group_by { |object| object["scope"]["profile"] }
+      if projection && projection.operations.any?
+        counts = current_profiles.transform_values(&:size)
+        result.operations.select { |operation| operation.phase == :prepare }.each do |operation|
+          profile = operation.scope.fetch("profile")
+          counts[profile] -= 1
+          if counts[profile].zero? && evidence.fact("syslog.declared_profile_references").fetch(profile, 0).positive?
+            raise Blocked.new(:syslog_reference_order_conflict, requirements: [ "capacity_for_reference_migration" ])
+          end
+        end
+      end
       targets_by_key = targets.to_h { |target| [ key(target), target ] }
       result.operations.each do |operation|
         profile = operation.scope.fetch("profile")
@@ -72,7 +97,8 @@ module Baseline
         missing = required.reject { |field| operation.after.key?(field) }
         raise Blocked.new(:missing_syslog_parameters, requirements: missing.map { |field| "syslog.#{field}" }) if missing.any?
       end
-      result.operations.map { |operation| operation.scope.fetch("profile") }.uniq.to_h { |profile| [ profile, declared.fetch(profile, 0) ] }
+      profiles = result.operations.map { |operation| operation.scope.fetch("profile") } + (projection&.profiles || [])
+      profiles.uniq.to_h { |profile| [ profile, declared.fetch(profile, 0) ] }
     end
 
     # 设备总容量批准不能覆盖原生每个 profile 四服务器上限；中间候选树也不能超限。

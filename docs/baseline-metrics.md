@@ -62,7 +62,7 @@ NTP 与 Syslog 的配置资源保留了用于后续生成的对象参数。NTP �
 
 转发 profile 只定义匹配项但未挂接规则时，不计为规则使用链。规则选用的最终 profile 生效，列表 set 引用累加。规则转发绑定的 `disabled/log_start/log_end` 是可选批准谓词；省略不比较，缺少显式事实时要求这些字段的检查返回 unknown。只证明配置引用，不证明规则命中、过滤式覆盖、日志启用默认值或实际投递。完整且已建模的空引用可与 `bindings: []` 匹配；省略 bindings 仍仅核验对象定义。
 
-`syslog.profile_references` 保存非秘密引用，`syslog.reference_inventory_complete` 表示此库存是否完整。未知命令族、损坏列表、未解析转发目标、vsys 本地日志对象、模板/设备组或多行引用均不能证明没有使用关系。引用证据未知不把独立对象定义伪装成引用合规。过滤式、描述和动作载荷不进入公开资源；每个资源保留参与证据的行号。引用修正仍要求明确批准迁移范围、保留过滤条件和已验证的厂商命令，当前不生成原生引用迁移。
+`syslog.profile_references` 保存非秘密引用，`syslog.reference_inventory_complete` 表示此库存是否完整。未知命令族、损坏列表、未解析转发目标、vsys 本地日志对象、模板/设备组或多行引用均不能证明没有使用关系。引用证据未知不把独立对象定义伪装成引用合规。过滤式、描述和动作载荷不进入公开资源；每个资源保留参与证据的行号。`syslog.reference_sets` 另按匹配项保存接收 profile 集合、全部规则/zone 消费者及来源行；即使接收集合为空，也不会丢失消费者。
 
 语法依据：[PAN-OS 11.2 命令层级](https://docs.paloaltonetworks.com/ngfw/pan-os-cli-quick-start/cli-command-hierarchy/pan-os-11-2-configure-cli-command-hierarchy) 和 [官方转发配置示例](https://docs.paloaltonetworks.com/vm-series/deployment/public-cloud/set-up-the-vm-series-firewall-on-oracle-cloud-infrastructure/oracle-cloud-infrastructure-logging)。后者的 Kafka/插件与运行验证不属于本库能力。
 
@@ -70,7 +70,7 @@ Zone 消费者使用 `syslog.zone`，身份为 `kind/forwarding_profile/match/lo
 
 共享服务器命令仅定位 `shared log-settings syslog <profile> server <name>`。更新只设置有变化的 server/transport/port/format/facility 叶子；删除只到 server，不删除整个 profile、格式、过滤式或引用。新增参数必须明确，已有未批准字段保留；端点变化要求已知协议及端口，不能拿未验证的隐式端口完成传输切换。所有命令先核验完整引用库存；普通低层呈现调用须传入规划器已核验的完整操作标识，不可默认跳过前提。
 
-`syslog.declared_profile_references` 统计每个 profile 的配置引用声明（包括未挂接的转发定义），与实际规则/zone 使用边数分开。仍有任何声明引用时，不能清空该 profile 的全部服务器；需要先明确批准并实现引用迁移。首次补全原悬空 profile 时须明确批准与现有使用链匹配的 bindings，不能借创建服务器隐式改写引用。原生绑定迁移仍未实现。
+`syslog.declared_profile_references` 统计每个 profile 的配置引用声明（包括未挂接的转发定义），与实际规则/zone 使用边数分开。按批准迁移投影后仍有任何声明引用时，不能清空该 profile 的全部服务器。首次补全原悬空 profile 时须明确批准与现有使用链匹配的 bindings，不能借创建服务器隐式改写引用。引用变更按下述单独批准执行。
 
 新增 SSL 目标或修改后仍为 SSL 的地址/端口/协议变更要求 `remediation.syslog_tls_peer_compatibility_verified: true`，表示外部已核验对端及证书配置；不从旧备份推断新对端适用性，不导出或创建证书秘密。同一 SSL 端点只更新格式/facility 时保留认证配置。该字段严格为布尔值，只用于对象规则。原生单 profile 最多四个服务器；同时服从明确批准的整体容量，中间候选树超限时先删除批准移除的对象并提高风险等级。命令仅修改候选树，不保存或提交。
 
@@ -232,3 +232,15 @@ Cisco `tacacs.group_references` 按 `named_server` 与 `address` 区分成员；
 Cisco 命名 TACACS 定义按原名合并重新进入，整对象撤销后清除旧地址和材料；每个 IPv4/IPv6 槽位及对象 key 采用最终声明，撤销后重新创建不能继承旧证据。这不证明完整 AAA 链、其他厂商 key 生命周期或实际服务器可用。
 
 Cisco 全局、命名对象和旧式 host 内联 key 共用材料语法校验；孤立编码标识保留未知，不能作为明文秘密。全局 key 的最终撤销生效；不同命名端点即使地址相同，也不能互相借用对象 key 证明材料存在。
+
+## PAN-OS Syslog 接收成员迁移
+
+`syslog.destinations.remediation.binding_migrations` 为数组，每项明确给出 `from_profile`、`to_profile` 和 `reference`。来源为 null 表示新增引用，去向为 null 表示解绑；两者不能同时为空或相同。同一来源只能有一个去向。设备日志 reference 使用上述 `syslog.device` 身份；共享转发 reference 仅包含 `kind: syslog.forwarding`、`forwarding_profile`、`match`、`log_type`，并要求 `consumers` 精确列出该匹配项的全部规则及 zone 绑定。明确的空数组只批准已知未被使用的转发匹配项；省略不等于批准。可选日志标志必须与已知事实匹配，未声明的标志保留原状。
+
+所有迁移来源/去向 profile 必须在 `managed_scopes`；受影响且保留的目标服务器必须显式声明最终 `bindings`。现有匹配项和完整引用库存是前提，不创建过滤式、动作、转发匹配项，也不修改规则或 zone 的 profile 选择。同一匹配项的多项迁移同时计算最终集合，不能靠策略排列次序串行传递批准。原来源已经移除且去向已经存在时可重入。迁移仅用于修正不合规的目标状态，不能在所有检查已通过时单独触发变更。
+
+原子 `syslog.reference` 操作包含经过验证的完整前后成员集合，呈现器只逐个 set 新成员、再逐个 delete 旧成员，保留其他接收者。全局步骤先创建服务器、再修改引用、最后移除服务器；容量要求提前删除仍被引用的最后一台服务器时受阻，需要可容纳迁移的批准容量。仍有声明引用却没有最终服务器的 profile 不能通过规划。每个操作同样受完整操作指纹验证约束，部分输入、未知消费者或不完整批准无命令。
+
+[人工审核示例](../examples/remediation_palo_alto_syslog_migration.rb) 展示设备日志的纯引用迁移。命令依据 [PAN-OS 11.2 配置层级](https://docs.paloaltonetworks.com/ngfw/pan-os-cli-quick-start/cli-command-hierarchy/pan-os-11-2-configure-cli-command-hierarchy) 的 send-syslog 成员列表及 [CLI 修改配置语义](https://docs.paloaltonetworks.com/ngfw/pan-os-cli-quick-start/use-the-cli/modify-the-configuration)；CLI 删除不会自动检查其他引用，因此规划器验证完整依赖。独立状态模型只证明离线配置变换和再次审计闭环，不代表真实设备接受、提交或日志投递成功。
+
+名称按各对象分别校验：[转发 profile](https://docs.paloaltonetworks.com/ngfw/help/11-2/objects/objects-log-forwarding) 最长 64 字符，匹配项最长 31 字符；[设备日志匹配项](https://docs.paloaltonetworks.com/ngfw/help/11-2/device/device-log-settings/select-log-forwarding-destinations) 允许名称内的句点，不能套用服务器 profile 的字符范围。合成基准将超过 64 个匹配项的场景分散到多个转发 profile，不构造超出已记录单 profile 上限的配置。

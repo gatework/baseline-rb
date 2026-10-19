@@ -69,7 +69,7 @@ module Baseline
         next unless managed_object?(object, managed) && !wanted.key?(key(object))
         operations << operation(object, :remove, object.fetch("attributes", {}), nil, risk)
       end
-      raise Blocked, :resource_unresolved if operations.empty?
+      raise Blocked, :resource_unresolved if operations.empty? && !allow_empty_operations?
       operations, details = order_for_capacity(operations, current, projected, applicable)
       ordered = operations.sort_by { |item| { prepare: -1, create: 0, update: 1, remove: 2 }.fetch(item.phase) }.freeze
       Result.new(operations: ordered, details: CtxParser::Immutable.copy(details))
@@ -84,6 +84,7 @@ module Baseline
     def legacy_identity(address) = { "address" => address }
     def countable_objects(objects) = objects
     def managed_object?(object, managed) = managed.include?(object["scope"])
+    def allow_empty_operations? = false
 
     # 同一 IP 的不同文本不能用于新增再删除；原生地址归一化未完成前明确受阻。
     def validate_native_address_identities!(current, desired)

@@ -39,6 +39,7 @@ module Baseline
           if name == "palo_alto"
             requirements = %w[approved_syslog_server_and_profile_names managed_scopes resolved_syslog_reference_inventory
               explicit_native_server_parameters preserved_profile_references syslog_tls_peer_compatibility_verified_for_tls_endpoint_changes]
+            requirements += %w[approved_binding_migrations_for_reference_changes complete_shared_consumer_scope_for_migrations] if id == "syslog.destinations"
           end
         elsif supported && NtpRemediation::IDS.include?(id)
           requirements = [ "approved_ntp_associations", "maximum_targets_for_net_additions", "authentication_dependencies" ]

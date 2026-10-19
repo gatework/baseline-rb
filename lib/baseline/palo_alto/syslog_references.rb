@@ -12,6 +12,7 @@ module Baseline
         @syslog_reference_unresolved = []
         roots.select { |entry| /\Aset (?:template|device-group|panorama)(?:\s|\z)/.match?(entry.text) }.each { |entry| unresolved_syslog_reference(entry) }
         references, forwarding, lines = {}, {}, Hash.new { |hash, key| hash[key] = [] }
+        reference_sets = []
         declared = Hash.new(0)
         rows = statements_with_prefix("shared", "log-settings")
         rows.reject { |row| supported_syslog_reference_path?(row[:tokens]) }.each { |row| unresolved_syslog_reference(row[:entry]) }
@@ -30,8 +31,13 @@ module Baseline
             syslog_reference_values(row[:tokens].drop(path.size + 1), row[:entry])
           end.uniq
           receivers.each { |receiver| declared[receiver] += 1 }
+          identity = { "kind" => profile ? "syslog.forwarding" : "syslog.device", "match" => match, "log_type" => type }
+          identity["forwarding_profile"] = profile if profile
+          reference = { "identity" => identity, "profiles" => receivers.sort, "consumers" => profile ? [] : [ identity ],
+            "lines" => entries.map { |row| row[:entry].line } }
+          reference_sets << reference
           if profile
-            (forwarding[profile] ||= []) << { match: match, log_type: type, receivers: receivers, lines: entries.map { |row| row[:entry].line } }
+            (forwarding[profile] ||= []) << { match: match, log_type: type, receivers: receivers, lines: entries.map { |row| row[:entry].line }, reference: reference }
           else
             receivers.each do |receiver|
               (references[receiver] ||= []) << { "kind" => "syslog.device", "log_type" => type, "match" => match }
@@ -49,8 +55,13 @@ module Baseline
         record_fact("syslog.profile_references", references.transform_values { |values| ResourceBindings.normalize(values.uniq) })
         record_fact("syslog.declared_profile_references", declared)
         record_fact("syslog.reference_inventory_complete", @syslog_references_closed)
+        reference_sets.each do |row|
+          row["consumers"] = ResourceBindings.normalize(row["consumers"].uniq)
+          row["lines"] = row["lines"].uniq.sort
+        end
+        record_fact("syslog.reference_sets", reference_sets)
         unless @syslog_references_closed
-          %w[syslog.profile_references syslog.declared_profile_references].each do |fact|
+          %w[syslog.profile_references syslog.declared_profile_references syslog.reference_sets].each do |fact|
             record_unknown_fact(fact, @syslog_reference_unresolved.uniq, code: :syslog_reference_inventory_unresolved)
           end
         end
@@ -84,6 +95,8 @@ module Baseline
             binding = { "kind" => "syslog.zone", "forwarding_profile" => profile, "match" => match[:match], "log_type" => match[:log_type],
               "context" => row[:context], "zone" => row[:zone] }
             binding["vsys"] = row[:vsys] if row[:context] == "vsys"
+            match[:reference]["consumers"] << binding
+            match[:reference]["lines"] << row[:entry].line
             match[:receivers].each do |receiver|
               (references[receiver] ||= []) << binding
               lines[receiver].concat(match[:lines] + [ row[:entry].line ])
@@ -167,6 +180,8 @@ module Baseline
             binding = { "kind" => "syslog.forwarding", "forwarding_profile" => profile, "match" => match[:match], "log_type" => match[:log_type],
               "context" => context, "rule" => rule, "rulebase" => rulebase }.merge(flags)
             binding["vsys"] = vsys if context == "vsys"
+            match[:reference]["consumers"] << binding
+            match[:reference]["lines"].concat(entries.map { |row| row[:entry].line })
             match[:receivers].each do |receiver|
               (references[receiver] ||= []) << binding
               lines[receiver].concat(match[:lines] + entries.map { |row| row[:entry].line })

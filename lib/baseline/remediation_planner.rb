@@ -67,6 +67,9 @@ module Baseline
         elsif AuthenticationRemediation.applicable?(finding, audit.configuration)
           result = AuthenticationRemediation.new.call(finding, audit.configuration)
           check(finding, :blocked, result.fetch(:reason), requirements: result.fetch(:requirements), details: result.fetch(:details))
+        elsif finding.id == "syslog.destinations" && finding.status == :fail && audit.configuration.complete? &&
+            @policy.rules.find { |rule| rule.id == finding.id }.remediation.fetch("binding_migrations", []).any?
+          compile_targets(finding, audit, operations, steps)
         elsif ResourceBindingRemediation.applicable?(finding, audit.configuration) &&
             (!@renderer.supports?(finding.id) || finding.details.fetch(:binding_differences, []).any? || finding.reason == :resource_binding_unresolved)
           result = ResourceBindingRemediation.new.call(finding, audit.configuration)

@@ -2,6 +2,12 @@
 
 Changes to the public contract are recorded here. Versions follow Semantic Versioning.
 
+## Unreleased
+
+- Plan explicitly approved PAN-OS shared Syslog receiver migrations within existing device-log or forwarding matches, preserving filters, actions, unrelated receivers and rule/zone selection.
+- Require complete shared-consumer approval and projected profile bindings, create destination servers before migration, and block capacity orders that remove a last referenced server too early.
+- Inventory match membership independently of server existence or active consumers, including empty receiver sets and unused forwarding definitions, without exporting filter or action payloads.
+
 ## 0.5.0 (2026-10-19)
 
 - Generate PAN-OS shared Syslog server leaf updates, additions and exact removals while preserving profile formats and configured references; guard dangling activation, the last referenced server, native profile capacity and TLS peer prerequisites.
