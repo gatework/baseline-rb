@@ -2,7 +2,7 @@
 
 Changes to the public contract are recorded here. Versions follow Semantic Versioning.
 
-## Unreleased
+## 0.5.0 (2026-10-19)
 
 - Generate PAN-OS shared Syslog server leaf updates, additions and exact removals while preserving profile formats and configured references; guard dangling activation, the last referenced server, native profile capacity and TLS peer prerequisites.
 - Include zone forwarding consumers in typed Syslog usage evidence, retaining explicit context and final profile selection; preserve unused forwarding definitions when planning endpoint removal.
