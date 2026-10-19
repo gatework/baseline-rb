@@ -210,6 +210,18 @@ H3C 现有方案的缺省路由端点支持物理主槽位替换、逐地址/端
 语法及边界依据：[H3C Comware 7 HWTACACS 命令参考](https://www.h3c.com/en/d_202206/1617723_294551_0.htm) 中的 primary/secondary authentication、authorization、accounting 章节，而非同页的 RADIUS 同名命令。通过独立测试状态模型逐条应用原生命令后重新审计，并检查无关配置及第二次零变更；未连接真实设备。
 
 
+## 方案复查、人工持久化与恢复意图
+
+`RemediationPlan#review` 与 `to_h[:review]` 提供独立的 `validation`、`persistence`、`rollback`。`to_text` 也分别列出提示，不将检查或保存命令追加进 `configuration_commands`。非空方案的检查均为 `not_executed`，保存为 `manual_only`；无变更方案不建议保存或回退。包含受阻指标时保留 contains_unresolved_checks，不能因为存在检查入口而将 partial 变成 ready。
+
+检查入口为 H3C/Huawei 的 display current-configuration、IOS/NX-OS 的 show running-config、StoneOS 的 show configuration，以及 PAN-OS 的 show config diff / show config candidate。这些只是按目标版本人工确认的配置检查入口，不证明业务可用；还需核验时间同步、日志投递、NMS 读/通知/禁止写、管理通道或 AAA 本地后备。完整回显须在受控通道处理，不能复制进普通报告或日志。再次审计必须使用完整且适配器可解析的运行配置与同一批准策略；PAN-OS 原生候选输出不等于 set 输入，更不等于已提交配置。
+
+保存提示仅在独立的 persistence 中提供：H3C/StoneOS 的 save、IOS/NX-OS 的 copy running-config startup-config、PAN-OS 配置视图的 commit，均需人工完成审核、验证及必要交互。Huawei 不由厂商名称猜测是否需要先 commit 再 save，commands 为空并标注 requires_target_version_commit_decision。所有提示都不执行，没有自动确认、保存、提交或重启。
+
+rollback 只提供原操作可表达的非秘密 `inverse_operations`，每项关联 source_operation_id，风险至少 high；意图顺序反向于原操作，但不是重新做过容量与引用验证的阶段排序。所有 configuration_commands 均为空，始终要求新快照、独立批准、依赖/容量和基线重审计。回到旧状态可能重现原偏离，approved_baseline_status 保持 not_verified。无变更为 not_applicable，全部逆意图可表达也仅为 requires_replanning；认证/材料迁移、共享 ACL 删除、未建模恢复或旧值未知则记录 unavailable，整体为 manual_required。不能将这些字段解释为自动回退能力或恢复成功。
+
+依据：[H3C 配置检查及保存](https://www.h3c.com/en/d_201906/1191106_294551_0.htm)、[Cisco IOS 配置管理](https://www.cisco.com/c/en/us/td/docs/routers/ios-xe/system-management/system-management/m_cm-config-files-0.html)、[Cisco NX-OS 配置管理](https://www.cisco.com/c/en/us/td/docs/switches/datacenter/mds9000/sw/6_2/configuration/guides/fundamentals/nx-os/b_Cisco_MDS_9000_Series_NX-OS_Fundamentals_Configuration_Guide/b_Cisco_MDS_9000_Series_NX-OS_Fundamentals_Configuration_Guide_Release_6_chapter_0111.html)、[StoneOS5.5R6 系统管理](https://kb.hillstonenet.com/en/wp-content/uploads/2018/08/StoneOS_CLI_User_Guide_System_Management_5.5R6.pdf)、[PAN-OS11.2 操作命令层级](https://docs.paloaltonetworks.com/ngfw/pan-os-cli-quick-start/cli-command-hierarchy/pan-os-11-2-cli-ops-command-hierarchy)。不同版本需人工核实，离线生成不构成原厂命令在所有固件上的接受证明。
+
 ## SNMP 写权限逐对象审核
 
 `snmp.write_enabled: false` 的人工审核信息保留在 `check.details.permission_grants`。写团体字以配置指纹内序号定位，给出来源行和替换为只读的材料、NMS 同步及原视图/ACL 保留要求，不公开团体字或其摘要。组授权列出已解析的各安全级别定义、读/写/通知视图、IPv4/IPv6 ACL 和已知用户消费者；`revoke_write` 是审核意图，不是已验证厂商命令。未解析权限和孤立用户使用 `verify`，`inventory_complete: false` 与补证要求保留，已知违规不能掩盖其他未知主体。

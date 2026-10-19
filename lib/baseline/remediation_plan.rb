@@ -3,6 +3,7 @@
 require "json"
 require "ctx_parser/immutable"
 require_relative "report"
+require_relative "remediation_review"
 
 module Baseline
   # 审计、变更意图及命令共同组成审核产物，任何受阻项都保留在整体状态中。
@@ -81,7 +82,7 @@ module Baseline
       # 保留机器原因码，同时为审核者解释当前受阻条件。
       def explanation = reason ? RemediationPlan::REASONS.fetch(reason, reason.to_s) : status == :planned ? "已生成待审核变更" : "无需变更"
     end
-    attr_reader :audit, :checks, :operations, :steps
+    attr_reader :audit, :checks, :operations, :steps, :review
 
     # 所有数据都是独立快照；此对象不执行配置命令。
     def initialize(audit:, checks:, operations:, steps:, renderer:)
@@ -90,6 +91,7 @@ module Baseline
       @operations = operations.each_with_index.sort_by { |operation, index| [ order.fetch(operation.phase), index ] }.map(&:first).freeze
       @steps = steps.each_with_index.sort_by { |step, index| [ order.fetch(step.phase), index ] }.map(&:first).freeze
       @commands = renderer.configuration_commands(@steps).freeze
+      @review = RemediationReview.new.call(platform: audit.configuration.platform, operations: @operations, checks: @checks, renderer: renderer)
       freeze
     end
 
@@ -109,7 +111,7 @@ module Baseline
     def to_h
       { status: status, requires_review: requires_review?, configuration_sha256: audit.configuration.sha256,
         policy_sha256: audit.policy_sha256, audit: audit.to_h, checks: checks.map(&:to_h),
-        operations: operations.map(&:to_h), steps: steps.map(&:to_h), configuration_commands: configuration_commands }
+        operations: operations.map(&:to_h), steps: steps.map(&:to_h), configuration_commands: configuration_commands, review: review }
     end
 
     # 参数值由审计结构导出，文字部分仅呈现单行命令及稳定原因码。
@@ -126,6 +128,13 @@ module Baseline
         output << "操作最高风险: #{risk}"
       end
       output.concat([ "配置命令:", *configuration_commands ]) if configuration_commands.any?
+      if configuration_commands.any?
+        output.concat([ "只读复查（尚未执行；完整回显仅在受控通道处理）:", *review[:validation][:commands] ])
+        output << "复查后以完整运行配置及同一策略重新审计；候选配置不等于已生效，仍须验证业务结果"
+        output.concat([ "人工保存/提交提示（完成审核及验证后按目标版本决定）:", *review[:persistence][:commands] ])
+        output << "该版本的候选提交与持久保存流程须单独人工确认" if review[:persistence][:requires_target_version_commit_decision]
+        output << "回退需重新规划: #{review[:rollback][:status]}；逆操作意图不构成可执行回退命令，也不保证仍符合批准基线"
+      end
       output.join("\n")
     end
 

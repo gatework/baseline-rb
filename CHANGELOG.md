@@ -4,6 +4,11 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+## 0.7.0 (2026-10-20)
+
+- Separate unexecuted read-only inspection and manual persistence guidance from correction commands, retaining candidate-versus-running and input-format requirements.
+- Expose typed nonsecret inverse intents with original-operation linkage, fresh-snapshot and baseline revalidation requirements; keep authentication, material and shared-reference recovery explicitly manual.
+
 - Plan explicitly approved SNMP read-only group migrations by creating fresh groups, moving verified Huawei users before retiring old groups, and preserving read/notify views, security, ACLs and material.
 - Require complete principal scope and native transition verification; keep populated Comware groups, writable communities and unmodelled engine/context cases blocked without emitting partial permission changes.
 

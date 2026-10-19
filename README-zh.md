@@ -65,6 +65,8 @@ puts report.to_text
 
 `Remediation.new(policy:).call(configuration:, platform:, complete: false, context: {})` 将同次审计转换为人工审核方案，提供 `audit`、`checks`、`operations`、`steps`、`configuration_commands`、`to_h` 和 `to_text`。状态为 `noop/ready/partial/blocked`；任一受阻指标都保留在方案中。`ready` 表示所选指标有完整的命令方案，不表示已经执行、保存、生效或整机合规。命令不含自动保存或提交。
 
+`plan.review` 将尚未执行的只读检查入口、人工保存提示、业务复核和回退意图与 `configuration_commands` 分开。PAN-OS 候选配置检查不代表已生效，人工提交后还需运行配置复审；原生检查输出也不自动成为完整的 set 格式输入。Huawei 的提交及保存流程须按目标版本决定。已知非秘密逆操作保持类型校验并关联原操作，但不提供可执行回退命令：须先取新快照、重新批准依赖和容量，并复核基线。认证、材料或未建模恢复明确要求人工处理。参见[复查契约](docs/baseline-metrics.md)。
+
 当前支持 H3C/Huawei/IOS/NX-OS/PAN-OS 的 NTP/Syslog 源接口设置、H3C/Huawei/IOS 的 SSHv2 设置，以及各呈现器明确声明的服务关闭命令；服务种类及设备语法限制仍需检查。PAN-OS 使用原生接口名；存在显式服务路由源地址时，接口切换会受阻，需先核对地址依赖。H3C/Huawei/IOS/NX-OS/Hillstone 另支持日志目标增删及属性替换的部分语法。其他对象、ACL、SNMP 与认证链的完整命令生成仍在开发，未实现项会明确返回 `remediation_unmodeled`，不会当作完成。
 
 日志对象生成限制：Huawei 使用 `domain` 和目标之后的 `vpn-instance`；IOS 传输端口修改需已知协议，重复同身份不同传输或名为 default 的 VRF 保持受阻；NX-OS 目前只生成地址、级别、facility 和 use-vrf 子集，port 扩展尚未核验；Hillstone 要求显式协议/端口/类别身份，当前支持 event/config 类别。错误选项会整体阻止该指标操作，不输出“只删除而无法新增”的部分方案。不同厂商/固件的默认值和容量不能互相套用。
