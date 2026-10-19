@@ -4,6 +4,9 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+- Plan explicitly approved SNMP read-only group migrations by creating fresh groups, moving verified Huawei users before retiring old groups, and preserving read/notify views, security, ACLs and material.
+- Require complete principal scope and native transition verification; keep populated Comware groups, writable communities and unmodelled engine/context cases blocked without emitting partial permission changes.
+
 - Plan guarded global NTP authentication transitions on H3C, Huawei and StoneOS using complete consumer inventories, final material references and explicit peer verification.
 - Require explicit temporary association recreation and native syntax profiles when enabling Comware/VRP authentication; preserve existing materials and reject partial transactions.
 - Use Huawei-native preference, VPN and IPv6 association syntax instead of inherited Comware forms; retain documented disabled authentication defaults only for complete snapshots.

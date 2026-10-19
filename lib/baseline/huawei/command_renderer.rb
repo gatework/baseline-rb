@@ -16,6 +16,7 @@ module Baseline
       EXIT_VIEW = "quit"
       RESOURCE_KINDS = %w[syslog.destination ntp.association].freeze
       NTP_STYLE = :vrp
+      SNMP_PERMISSION_PROFILES = [ "vrp_v600" ].freeze
       ACCESS_STYLE = :vrp
       VTY_PROTOCOL_COMMAND = "protocol inbound ssh"
       SSH_DISABLE_COMMAND = "undo stelnet server enable"

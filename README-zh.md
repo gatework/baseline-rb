@@ -85,7 +85,7 @@ IPv4 管理 ACL 可为 H3C `line vty`、Huawei `user-interface vty`、IOS `line 
 
 H3C SNMP 来源修正支持全新的基本 ACL 加 `snmp-agent acl` 全局绑定，保留团体字、用户、组和各主体更严格的 ACL。`snmp.sources` 必须给出批准上限，相关规则的 `remediation.access_targets` 使用 `{endpoint: "snmp.global", acl: "2005"}`；存在未绑定主体时还必须明确 `sources`。备份没有该全局命令证据时，需要 `global_acl_supported: true` 确认固件能力；不会把所有 H3C 固件视为支持。已有全局许可不会扩大，不会仅靠开关关闭 SNMP 来通过子规则。同一设备上的管理/SNMP 目标若争用同一新 ACL，整个相关方案受阻。参见[SNMP 例子](examples/remediation_snmp_access.rb)。
 
-SNMP 审计区分 H3C 全局/组/用户串联 ACL，使用匿名序号标识团体字，IPv6-only ACL 不算 IPv4 限制。完整且明确没有绑定的主体记为 IPv4 来源未限制，复杂或损坏声明仍为未知。H3C 同名 VACM 用户采用最后一次完整定义及凭据记录；Huawei 的分行配置保持增量处理。组视图和安全级别作为非秘密定义保留，但完整 MIB 视图权限与组修改仍待实现。
+SNMP 审计区分 H3C 全局/组/用户串联 ACL，使用匿名序号标识团体字，IPv6-only ACL 不算 IPv4 限制。完整且明确没有绑定的主体记为 IPv4 来源未限制，复杂或损坏声明仍为未知。H3C 同名 VACM 用户采用最后一次完整定义及凭据记录；Huawei 的分行配置保持增量处理。组视图和安全级别作为非秘密定义保留；明确批准的只读组迁移遵循下述完整依赖契约，完整 MIB 视图权限模型仍待实现。
 
 详细厂商语义、历史验证记录和 Motor 专用集成说明保留在[架构参考](docs/architecture-zh.md)。其中宿主集成代码需要 Motor，不属于独立 gem API。适配层位于 [Motor 仓库](https://github.com/gatework/motor/tree/main/backend/lib) 的 `backend/lib/baseline`、`backend/lib/vxlan` 和 `backend/lib/wireless`。
 
@@ -215,7 +215,7 @@ Comware/VRP `aaa.bindings` 描述选中管理域的有序方法、TACACS 职责/
 H3C `tacacs.endpoints` 支持现有缺省路由方案内的非秘密 Comware 7 端点变更。需明确职责/主备目标和 `managed_scopes`，声明 `syntax_profile: comware7`，并在外部核实后设置 `local_fallback_access_verified: true`、`tacacs_key_compatibility_verified: true`。已有职责密钥是前提，净新增需容量证据。主服务器按物理槽位替换；备服务器按地址及端口精确撤销。共享域引用保持原状，方案 VPN、私有密钥、原生身份歧义、绑定迁移及未支持的端口迁移仍受阻。逐步骤检查容量，满 16 台备服务器时可能需要明确批准 `order: remove_before_add`。人工执行审核通过的配置前，仍需确认服务器可用且可安全移除当前认证端点。独立状态模型验证离线命令闭环，不代表真实认证成功。参见[端点修正示例](examples/remediation_tacacs_targets.rb)。
 
 
-`snmp.write_enabled: false` 审核方案在 `details.permission_grants` 列出已知及待核实授权：匿名团体字序号、已解析的组安全级别/视图/ACL、已知用户引用、来源行及材料/NMS 依赖。组修改需保留读视图、通知、安全级别和 ACL；写团体字替换需批准材料。缺少组定义或用户引用时要求补证。此类检查继续受阻，等待厂商权限迁移验证；不生成删组、秘密或占位命令。参见[权限审核示例](examples/remediation_snmp_permissions.rb)。
+`snmp.write_enabled: false` 审核方案在 `details.permission_grants` 列出已知及待核实授权：匿名团体字序号、已解析的组安全级别/视图/ACL、已知用户引用、来源行及材料/NMS 依赖。明确的 `remediation.group_migrations` 可先创建保留安全级别、读/通知视图和 ACL 的全新只读组，再移除旧写组。Huawei `vrp_v600` 需先对完整批准用户集合执行经外部核验的归属迁移；Comware 7 当前仅生成已确认无用户组的替换，有用户时仍需材料处理。写团体字、主体/引擎/上下文证据不完整时整项迁移受阻，不导出部分命令、秘密或占位符。参见[审核示例](examples/remediation_snmp_permissions.rb)、[迁移示例](examples/remediation_snmp_group_migration.rb)及[具体契约](docs/baseline-metrics.md)。
 
 
 Comware/VRP `ntp.key_slots` 保留最终非秘密材料及可信状态，`ntp.authentication_bindings` 关联 server/peer 对象、密钥和认证开关。`configured_ready` 只描述已建模配置前提齐全，不代表对端材料相符或同步成功。替换、撤销及损坏更新不会证明旧材料仍有效；H3C 删除材料同时清除可信状态，尚未确认的 VRP 删除联动保持未知，直到后续明确声明。最终密钥凭据参与存储/强度审核，不保留材料；未知 NTP 凭据不会掩盖其他已确认的不安全凭据。

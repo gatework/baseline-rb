@@ -214,7 +214,19 @@ H3C 现有方案的缺省路由端点支持物理主槽位替换、逐地址/端
 
 `snmp.write_enabled: false` 的人工审核信息保留在 `check.details.permission_grants`。写团体字以配置指纹内序号定位，给出来源行和替换为只读的材料、NMS 同步及原视图/ACL 保留要求，不公开团体字或其摘要。组授权列出已解析的各安全级别定义、读/写/通知视图、IPv4/IPv6 ACL 和已知用户消费者；`revoke_write` 是审核意图，不是已验证厂商命令。未解析权限和孤立用户使用 `verify`，`inventory_complete: false` 与补证要求保留，已知违规不能掩盖其他未知主体。
 
-H3C 文档分别定义组名和安全级别，以及省略读视图时的默认读权限、未配置写视图时无写权限。但这不能单独证明重复执行 group 命令会撤回原写视图，更不能推断删组再建不影响用户。原生权限迁移仍需完整命令/引用验证，目前检查为 blocked，能力查询明确 unsupported，并给出逐对象要求。默认不批准相反的写权限扩张。依据：[H3C SNMP 组命令](https://www.h3c.com/en/Support/Resource_Center/EN/Home/Public/00-Public/Technical_Documents/Reference_Guides/Command_References/H3C_CR-18349/09/202404/2100798_294551_0.htm)。
+H3C 文档分别定义组名和安全级别，以及省略读视图时的默认读权限、未配置写视图时无写权限。但这不能单独证明重复执行 group 命令会撤回原写视图，更不能推断删组再建不影响用户。缺少明确迁移批准时检查继续 blocked，保留逐对象要求；H3C/Huawei 对下述条件迁移报告 conditional。默认不批准相反的写权限扩张。依据：[H3C SNMP 组命令](https://www.h3c.com/en/Support/Resource_Center/EN/Home/Public/00-Public/Technical_Documents/Reference_Guides/Command_References/H3C_CR-18349/09/202404/2100798_294551_0.htm)。
+
+### 只读组迁移
+
+`snmp.write_enabled.remediation.group_migrations` 的每项声明 `from_group`、全新 `to_group` 和完整 `users` 名称数组。必须覆盖全部已配置写组；同名组的全部安全级别一起迁移，保留各自读/通知视图与 ACL，仅新组省略 write-view。源/目标组及用户名限本 profile 的单词元 32 字节形式，目标不能覆盖既有组或用户引用，不能以迁移顺序复用别项组名。批准值不从配置推导；写团体字仍需材料提供，存在时本次组权限事务整体受阻。
+
+`syntax_profile` 与 `snmp_group_migration_verified: true` 必须明确给出，表示外部已核实目标版本命令、NMS/通知影响及批准的权限收紧。`vrp_v600` 的有用户组还必须提供 `snmp_user_group_transition_verified: true`：外部已核实该版本的 group-only 用户归属命令保持原有认证、加密、用户 ACL、引擎及通知关系。该标志不能由静态备份或合成状态模型自动推导。生成顺序是创建全部新只读组、迁移全部用户、最后删除全部旧安全级别；Huawei 文档明确删组可连带删除组内用户，因此不允许提前删除或原地重建。用户名保持不变，不重放材料。`comware7` 当前仅支持已确认无用户的写组；其完整用户定义可能替换材料，有用户时返回 snmp_user_material_provisioning，不套用 Huawei 的归属命令。
+
+完整已知的主体清单、全部非秘密组定义和已启用服务是前提。远端引擎、engineid、上下文、proxy、嵌套主体、损坏用户选项、未知安全字段、孤立用户、重复同安全级别定义或用户批准不完整均受阻。`snmp.permission_scope_complete` 只表示本地配置范围已建模；不证明外部 NMS 依赖。当前 `vrp_v600` 不呈现组 IPv6 ACL 等未验证选项。任何操作无法呈现时整项不导出命令；低层呈现也需要匹配完整操作指纹及 profile。操作不包含秘密、save 或 commit。服务、版本、authPriv、读/通知与来源范围必须保留，不以删除全部 SNMP 或使用空视图来改变 write_enabled 的既有判断含义。
+
+`available_group_slots` 为外部已确认的空闲组定义槽位数（0 至 65535），须计入隐式或动态占用；一个组的不同安全级别分别计数。新组定义全部建立前不删除旧组，空闲数不足时受阻，不通过提前删除恢复容量。静态配置只能提供已配置定义，不能证明设备还有空闲槽位。
+
+依据：[Huawei AR5700/6700/8000 V600R024C10 SNMP 命令及删组影响](https://info.support.huawei.com/enterprise/en/doc/EDOC1100459901/30eb7700/snmp-configuration-commands)、[Huawei 组安全级别及 ACL](https://info.support.huawei.com/hedex/api/pages/EDOC1100149308/AEJ0713J/17/resources/cli/snmp-agent_group.html)。独立状态模型验证逐步顺序、材料原文保留和二次零变更；没有 Huawei 真实备份、设备下发或实际 NMS/通知测试。参见[合成迁移示例](../examples/remediation_snmp_group_migration.rb)。
 
 
 ## NTP 材料、可信声明与关联证据

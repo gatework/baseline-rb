@@ -216,3 +216,25 @@ measure("Comware global NTP authentication 3 associations") do
   plan = service.call(configuration: configuration, platform: :h3c, complete: true)
   raise "Expected complete global authentication transaction" unless plan.status == :ready && plan.operations.size == 7 && plan.steps.size == 7
 end
+
+# 共享用户集合按组索引，完整经历只读目标组、用户归属和旧组撤回的规划与呈现。
+[ 1, 8 ].each do |size|
+  configuration = +"sysname LAB\nsnmp-agent\n"
+  migrations = size.times.map do |index|
+    configuration << "snmp-agent group v3 G#{index} privacy read-view READ write-view WRITE notify-view NOTIFY\n" \
+      "snmp-agent usm-user v3 U#{index} group G#{index}\n" \
+      "snmp-agent usm-user v3 U#{index} authentication-mode sha cipher SYNTHETIC-AUTH\n" \
+      "snmp-agent usm-user v3 U#{index} privacy-mode aes128 cipher SYNTHETIC-PRIV\n"
+    { "from_group" => "G#{index}", "to_group" => "RO#{index}", "users" => [ "U#{index}" ] }
+  end
+  policy = Baseline::Policy.new("version" => 1, "checks" => {
+    "snmp.write_enabled" => { "expected" => false, "remediation" => { "group_migrations" => migrations,
+      "syntax_profile" => "vrp_v600", "available_group_slots" => size,
+      "snmp_group_migration_verified" => true, "snmp_user_group_transition_verified" => true } }
+  })
+  service = Baseline::Remediation.new(policy: policy)
+  measure("VRP read-only SNMP migration #{size} groups") do
+    plan = service.call(configuration: configuration, platform: :huawei, complete: true)
+    raise "Incomplete SNMP permission transaction" unless plan.status == :ready && plan.operations.size == size * 3
+  end
+end

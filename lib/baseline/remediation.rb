@@ -32,6 +32,10 @@ module Baseline
           requirements = [ "existing_v3_access_verified", "snmp_v3_group_reference", "existing_enabled_snmp_v3" ]
         elsif capability[:status] != :unsupported && id == "snmp.write_enabled"
           requirements = SnmpPermissionRemediation::REQUIREMENTS
+          if supported
+            requirements += %w[group_migrations fresh_snmp_group_identities complete_matching_snmp_users snmp_group_migration_verified native_snmp_permission_syntax_profile available_snmp_group_slots]
+            requirements += name == "h3c" ? [ "snmp_user_material_provisioning_for_populated_groups" ] : [ "snmp_user_group_transition_verified_for_populated_groups" ]
+          end
         elsif supported && SnmpAccessRemediation::IDS.include?(id)
           requirements = [ "fresh_acl_identity", "approved_access_limits", "global_acl_support_evidence", "explicit_targets_for_unbound_principals" ]
         elsif supported && AccessRemediation::IDS.include?(id)

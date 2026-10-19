@@ -22,7 +22,7 @@ module Baseline
 
     # 秘密参数只跳过，不进入返回值；组与密钥分行的 VRP 保持增量语义。
     def self.user(settings, group_required:)
-      parts, result = settings.split, {}
+      parts, result = settings.split, { context_complete: true }
       if group_required
         return { complete: false } unless parts.any? && parts.first != "user-role"
         result[:group] = parts.shift
@@ -49,8 +49,10 @@ module Baseline
         when "local"
           next
         when "engineid"
+          result[:context_complete] = false
           return result.merge(complete: false) unless parts.shift
         when "remote"
+          result[:context_complete] = false
           parts.shift if parts.first == "ipv6"
           return result.merge(complete: false) unless parts.shift
           if parts.first == "vpn-instance"

@@ -4,6 +4,7 @@ require_relative "acl"
 require_relative "access_approval"
 require_relative "resource_schema"
 require_relative "syslog_reference_schema"
+require_relative "snmp_group_migration_schema"
 
 require "ctx_parser/immutable"
 
@@ -84,6 +85,8 @@ module Baseline
       @remediation = CtxParser::Immutable.copy(options.fetch("remediation", {}))
       remediation_keys = if id == "snmp.versions"
         %w[existing_v3_access_verified]
+      elsif id == "snmp.write_enabled"
+        %w[group_migrations syntax_profile snmp_group_migration_verified snmp_user_group_transition_verified available_group_slots]
       elsif %w[snmp.acl_bound snmp.acl_restricted snmp.sources].include?(id)
         %w[access_targets global_acl_supported]
       elsif %w[management.acl_bound management.acl_restricted management.sources].include?(id)
@@ -104,16 +107,23 @@ module Baseline
           (!remediation.key?("global_acl_supported") || [ true, false ].include?(remediation["global_acl_supported"])) &&
           (!remediation.key?("existing_v3_access_verified") || [ true, false ].include?(remediation["existing_v3_access_verified"])) &&
           (!remediation.key?("maximum_targets") || remediation["maximum_targets"].is_a?(Integer) && remediation["maximum_targets"].between?(1, 65_535)) &&
+          (!remediation.key?("available_group_slots") || remediation["available_group_slots"].is_a?(Integer) && remediation["available_group_slots"].between?(0, 65_535)) &&
           (!remediation.key?("order") || %w[add_before_remove remove_before_add].include?(remediation["order"]))
         raise ArgumentError, "Invalid baseline remediation options"
       end
+      syntax_profiles = case id
+      when "ntp.authentication" then %w[comware_legacy comware7 vrp_s_series]
+      when "snmp.write_enabled" then SnmpGroupMigrationSchema::PROFILES
+      else [ "comware7" ]
+      end
       unless (!remediation.key?("ntp_peer_key_compatibility_verified") || [ true, false ].include?(remediation["ntp_peer_key_compatibility_verified"])) &&
-          (!remediation.key?("syntax_profile") || (id == "ntp.authentication" ? %w[comware_legacy comware7 vrp_s_series] : [ "comware7" ]).include?(remediation["syntax_profile"])) &&
-          %w[local_fallback_access_verified tacacs_key_compatibility_verified syslog_tls_peer_compatibility_verified ntp_association_recreation_approved].all? { |key| !remediation.key?(key) || [ true, false ].include?(remediation[key]) }
+          (!remediation.key?("syntax_profile") || syntax_profiles.include?(remediation["syntax_profile"])) &&
+          %w[local_fallback_access_verified tacacs_key_compatibility_verified syslog_tls_peer_compatibility_verified ntp_association_recreation_approved snmp_group_migration_verified snmp_user_group_transition_verified].all? { |key| !remediation.key?(key) || [ true, false ].include?(remediation[key]) }
         raise ArgumentError, "Invalid baseline remediation approval"
       end
       AccessApproval.validate!(remediation["access_targets"], domain: id.start_with?("snmp.") ? :snmp : :management) if remediation.key?("access_targets")
       SyslogReferenceSchema.validate_migrations!(remediation["binding_migrations"]) if remediation.key?("binding_migrations")
+      SnmpGroupMigrationSchema.validate_approvals!(remediation["group_migrations"]) if remediation.key?("group_migrations")
       validate_applicability!
       freeze
     end

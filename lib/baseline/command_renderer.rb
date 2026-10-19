@@ -5,6 +5,7 @@ require_relative "resource_schema"
 require_relative "ntp_commands"
 require_relative "access_commands"
 require_relative "tacacs_commands"
+require_relative "snmp_permission_commands"
 
 module Baseline
   # 共享单行参数校验和视图编排；厂商仅声明已支持的精确语法。
@@ -12,6 +13,7 @@ module Baseline
     include NtpCommands
     include AccessCommands
     include TacacsCommands
+    include SnmpPermissionCommands
     class UnsupportedOperation < StandardError; end
     SOURCE_COMMANDS = {}.freeze
     DISABLE_COMMANDS = {}.freeze
@@ -26,6 +28,7 @@ module Baseline
     SNMP_VERSION_REMOVAL = nil
     ACCESS_STYLE = nil
     SNMP_GLOBAL_ACL = nil
+    SNMP_PERMISSION_PROFILES = [].freeze
     TACACS_STYLE = nil
     NTP_AUTHENTICATION_COMMANDS = {}.freeze
     NTP_AUTHENTICATION_BEFORE_ASSOCIATIONS = false
@@ -41,6 +44,7 @@ module Baseline
     # 查询当前呈现器确实可生成的设置类型。
     def supports?(id)
       id == "ntp.authentication" && self.class::NTP_AUTHENTICATION_COMMANDS.any? ||
+        id == "snmp.write_enabled" && self.class::SNMP_PERMISSION_PROFILES.any? ||
         source_requires_associations?(id) || self.class::SOURCE_COMMANDS.key?(id) || id == "services.disabled" && self.class::DISABLE_COMMANDS.any? ||
         id == "ssh.vty_ssh_only" && !self.class::VTY_PROTOCOL_COMMAND.nil? ||
         id == "ssh.enabled" && !self.class::SSH_DISABLE_COMMAND.nil? ||
@@ -55,7 +59,11 @@ module Baseline
     end
 
     # 将完整操作转换为命令；任何一个子命令不受支持则整体拒绝该操作。
-    def render(operation, verified_ntp_key_ids: [], verified_ntp_slots: [], verified_ntp_authentication_operation_ids: [], ntp_syntax_profile: nil)
+    def render(operation, verified_ntp_key_ids: [], verified_ntp_slots: [], verified_ntp_authentication_operation_ids: [], ntp_syntax_profile: nil,
+      verified_snmp_permission_operation_ids: [])
+      if SnmpGroupMigrationSchema::KINDS.include?(operation.kind)
+        return render_snmp_permission(operation, verified_ids: verified_snmp_permission_operation_ids)
+      end
       if operation.kind == "ntp.authentication"
         unless verified_ntp_authentication_operation_ids.is_a?(Array) && verified_ntp_authentication_operation_ids.all? { |id| id.is_a?(String) && /\A[0-9a-f]{64}\z/.match?(id) }
           raise ArgumentError, "Invalid verified NTP authentication operations"

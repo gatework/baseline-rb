@@ -20,6 +20,7 @@ module Baseline
       TACACS_STYLE = :h3c
       ACCESS_STYLE = :h3c
       SNMP_GLOBAL_ACL = "snmp-agent acl"
+      SNMP_PERMISSION_PROFILES = [ "comware7" ].freeze
       VTY_PROTOCOL_COMMAND = "protocol inbound ssh"
       SNMP_VERSION_REMOVAL = "undo snmp-agent sys-info version"
       SSH_DISABLE_COMMAND = "undo ssh server enable"

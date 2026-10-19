@@ -9,6 +9,7 @@ require_relative "vty_remediation"
 require_relative "access_remediation"
 require_relative "snmp_access_remediation"
 require_relative "snmp_permission_remediation"
+require_relative "snmp_group_migration"
 require_relative "credential_remediation"
 require_relative "tacacs_key_remediation"
 require_relative "authentication_remediation"
@@ -71,6 +72,9 @@ module Baseline
           result = CredentialRemediation.new.call(finding, audit.configuration)
           check(finding, :blocked, result.fetch(:reason), requirements: result.fetch(:requirements), details: result.fetch(:details))
         elsif SnmpPermissionRemediation.applicable?(finding, audit.configuration)
+          if @policy.rules.find { |rule| rule.id == finding.id }.remediation.fetch("group_migrations", []).any?
+            next compile_snmp_permission(finding, audit, operations, steps)
+          end
           result = SnmpPermissionRemediation.new.call(finding, audit.configuration)
           check(finding, :blocked, result.fetch(:reason), requirements: result.fetch(:requirements), details: result.fetch(:details))
         elsif TacacsKeyRemediation.applicable?(finding, audit.configuration)
@@ -128,6 +132,23 @@ module Baseline
     end
 
     private
+
+    # 先完成整项权限迁移的原生命令校验，再一次加入方案，失败不泄漏部分操作。
+    def compile_snmp_permission(finding, audit, operations, steps)
+      result = SnmpGroupMigration.new(policy: @policy).call(finding, audit)
+      ids = result.operations.map(&:id)
+      rendered = result.operations.flat_map { |operation| @renderer.render(operation, verified_snmp_permission_operation_ids: ids) }
+      operations.concat(result.operations)
+      steps.concat(rendered)
+      check(finding, :planned, nil, operation_ids: ids, details: result.details)
+    rescue TargetRemediation::Blocked => error
+      review = SnmpPermissionRemediation.new.call(finding, audit.configuration)
+      check(finding, :blocked, error.reason, requirements: error.requirements, details: review[:details])
+    rescue CommandRenderer::UnsupportedOperation
+      check(finding, :blocked, :unsupported_setting)
+    rescue ArgumentError
+      check(finding, :blocked, :invalid_command_parameter)
+    end
 
     # 同一设备上的不同端点不能分别创建同一 ACL，跨领域也不能靠命令顺序合并权限。
     def conflicting_acl_allocations(audit)

@@ -230,11 +230,13 @@ module Baseline
           initial = { name: match[1], auth: false, priv: false, line: entry.line }
           user = snmp_user_definitions_replace? ? users[match[1]] = initial : users[match[1]] ||= initial
           access = SnmpOptions.user(settings, group_required: snmp_user_definitions_replace?)
+          user[:context_complete] = user.fetch(:context_complete, true) && access[:context_complete] == true && access[:complete]
           record_unknown_fact("snmp.acl", [ entry ], code: :unsupported_snmp_access_options) unless access[:complete]
           user[:group] = access[:group] if access[:group]
           modes = { auth: parse_snmp_secret(settings, "authentication-mode", algorithms: %w[md5 sha sha224 sha256 sha384 sha512 sha2-224 sha2-256 sha2-384 sha2-512]),
             priv: parse_snmp_secret(settings, "privacy-mode", algorithms: %w[des des56 3des aes128 aes192 aes256]) }
           modes = { auth: nil, priv: nil } unless access[:complete]
+          user[:context_complete] &&= modes.values.none?(&:nil?)
           enabling_entries << entry if access[:complete] && modes.values.none?(&:nil?)
           if snmp_user_definitions_replace?
             security_records[match[1]] = [ modes, entry, access[:key_format] ]
@@ -250,7 +252,21 @@ module Baseline
         record_unknown_snmp_access(withdrawals, code: :unsupported_snmp_withdrawal) unless withdrawals.empty?
         @fact_builder.record_snmp_access(communities: communities, users: users.values, groups: groups,
           port: listener_port(snmp_port_command, default: 161, scope: "snmp.acl"), **snmp_access_options)
+        record_fact("snmp.permission_scope_complete", snmp_permission_scope_complete?(users.values))
         record_snmp_enabled(enabling_entries)
+      end
+
+      # 未建模的远端引擎、上下文及嵌套主体不能借用本地用户名清单作为迁移范围。
+      def snmp_permission_scope_complete?(users)
+        return false if users.any? { |user| user[:context_complete] != true }
+        pending = roots.map { |entry| [ entry, true ] }
+        until pending.empty?
+          entry, global = pending.pop
+          pending.concat(entry.children.map { |child| [ child, false ] })
+          return false if /\A(?:undo )?snmp-agent (?:remote-engineid|context|proxy)(?:\s|\z)/.match?(entry.text)
+          return false if !global && /\A(?:undo )?snmp-agent (?:group|usm-user)(?:\s|\z)/.match?(entry.text)
+        end
+        true
       end
 
       # 已校验的正向命令才能隐式启用；未知声明不能从默认禁用推导通过。

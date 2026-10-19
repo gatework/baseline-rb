@@ -51,7 +51,7 @@ RSpec.describe "SNMP permission review requirements" do
 
   it "distinguishes manual permission requirements from native command capability" do
     expect(Baseline::Remediation.capabilities(platform: "h3c").fetch("snmp.write_enabled")).to include(
-      status: :unsupported, reason: :snmp_permission_approval_required,
+      status: :conditional, reason: :snmp_permission_approval_required,
       requirements: include("approved_snmp_principal_permissions", "verified_vendor_permission_transition"))
   end
 

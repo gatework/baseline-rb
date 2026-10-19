@@ -37,6 +37,8 @@ module Baseline
         NtpServerOperationSchema.validate!(identity: identity, scope: scope, before: before, after: after, action: action, phase: phase)
       elsif kind == NtpAuthenticationOperationSchema::KIND
         NtpAuthenticationOperationSchema.validate!(identity: identity, scope: scope, before: before, after: after, action: action, phase: phase)
+      elsif SnmpGroupMigrationSchema::KINDS.include?(kind)
+        SnmpGroupMigrationSchema.validate!(kind: kind, identity: identity, scope: scope, before: before, after: after, action: action, phase: phase)
       else
         valid_shape = action == :add && before.nil? && after.is_a?(Hash) && phase == :create ||
           action == :remove && before.is_a?(Hash) && after.nil? && %i[prepare remove].include?(phase) ||

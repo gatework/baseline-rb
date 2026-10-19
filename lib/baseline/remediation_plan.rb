@@ -62,6 +62,8 @@ module Baseline
       acl_reference_evidence_required: "缺少与本次完整配置绑定的新 ACL 标识占用检查",
       snmp_permission_approval_required: "需要逐主体批准写权限撤回，保留读取、通知、安全级别及来源限制并核对 NMS 依赖",
       snmp_permission_evidence_required: "SNMP 主体权限或引用未能完整确定，需要补充证据后再选择迁移方式",
+      snmp_group_identity_in_use: "新只读组名称已被配置或引用占用，不能覆盖或意外激活既有主体",
+      snmp_consumer_scope_mismatch: "批准的用户集合与旧组的完整消费者不一致，不能迁移后删除共享组",
       snmp_global_acl_support_required: "备份中没有全局 SNMP ACL 命令证据；需确认固件支持并声明 global_acl_supported",
       snmp_service_dependency: "未确认 SNMP 服务已启用，来源修正不能隐式启用服务",
       access_vrf_scope_required: "IOS 首次绑定需明确批准 vrf_also，不能从来源网段推导 VRF 可达范围",
