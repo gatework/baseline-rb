@@ -93,6 +93,37 @@ RSpec.describe "PAN-OS NTP slot remediation" do
     expect(result.configuration_commands).to be_empty
   end
 
+  it "preserves a passing authentication policy when removing the last unauthenticated slot" do
+    text = source("primary", "192.0.2.10", "autokey") + source("secondary", "192.0.2.20")
+    engine = service([ slot("primary", "192.0.2.10", authenticated: true) ], checks: { "ntp.authentication" => { "expected" => false } })
+    result = plan(engine, text)
+    expect(result.audit.findings.find { |finding| finding.id == "ntp.authentication" }.status).to eq(:pass)
+    expect(result.checks.find { |check| check.id == "ntp.associations" }.reason).to eq(:policy_conflict)
+    expect(result.operations).to be_empty
+    expect(result.configuration_commands).to be_empty
+  end
+
+  it "rejects removal of the authenticated slot when final authentication is required" do
+    text = source("primary", "192.0.2.10", "autokey") + source("secondary", "192.0.2.20")
+    result = plan(service([ slot("secondary", "192.0.2.20") ], checks: { "ntp.authentication" => { "expected" => true } }), text)
+    expect(result.checks.find { |check| check.id == "ntp.associations" }.reason).to eq(:policy_conflict)
+    expect(result.operations).to be_empty
+    expect(result.configuration_commands).to be_empty
+  end
+
+  [ true, false ].each do |authenticated|
+    it "allows slot removal when final authentication is #{authenticated}" do
+      text = source("primary", "192.0.2.10", "autokey") + source("secondary", "192.0.2.20")
+      target = authenticated ? slot("primary", "192.0.2.10", authenticated: true) : slot("secondary", "192.0.2.20")
+      engine = service([ target ], checks: { "ntp.authentication" => { "expected" => authenticated } })
+      result = plan(engine, text)
+      expect(result.checks.find { |check| check.id == "ntp.associations" }.status).to eq(:planned)
+      expect(result.operations.size).to eq(1)
+      after = PaloAltoNtpState.new(text).apply(result.configuration_commands).configuration
+      expect(plan(engine, after).status).to eq(:noop)
+    end
+  end
+
   it "does not let a direct renderer call bypass peer compatibility verification" do
     operation = Baseline::ConfigurationOperation.new(kind: "ntp.association", identity: { "name" => "primary-ntp-server" }, scope: {},
       action: :replace, phase: :update, risk: "medium", before: { "address" => "192.0.2.10", "authenticated" => true },

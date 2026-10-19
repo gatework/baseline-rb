@@ -12,7 +12,7 @@ module Baseline
     def call(finding, audit)
       result = super
       auth = audit.findings.find { |item| item.id == "ntp.authentication" && item.status != :not_applicable }
-      slots = audit.configuration.platform == "palo_alto" ? verify_panos_slot_dependencies!(result, auth) : []
+      slots = audit.configuration.platform == "palo_alto" ? verify_panos_slot_dependencies!(result, auth, audit.configuration) : []
       required = auth&.expected == true || audit.configuration.fact_known?("ntp.authentication") && audit.configuration.fact("ntp.authentication") == true
       unresolved_switch = audit.configuration.issues.any? { |issue| issue[:fact] == "ntp.authentication" }
       if (required || unresolved_switch) && result.operations.any? { |operation| operation.action == :add && !operation.after.key?("key_id") }
@@ -27,9 +27,19 @@ module Baseline
     private
 
     # PAN-OS 的材料属于主备槽位；地址变化不能自动证明原有密钥适用于新对端。
-    def verify_panos_slot_dependencies!(result, auth)
+    def verify_panos_slot_dependencies!(result, auth, evidence)
       if auth && result.details[:projected_targets].zero?
         raise Blocked, :policy_conflict
+      end
+      if auth && [ true, false ].include?(auth.expected)
+        projected = evidence.fact("ntp.associations").to_h { |object| [ key(object), object.fetch("attributes") ] }
+        result.operations.each do |operation|
+          identity = [ operation.scope, operation.identity ]
+          operation.action == :remove ? projected.delete(identity) : projected[identity] = operation.after
+        end
+        unless projected.any? && projected.values.all? { |attributes| attributes["authenticated"] == true } == auth.expected
+          raise Blocked, :policy_conflict
+        end
       end
       approved = @policy.rules.find { |rule| rule.id == "ntp.associations" && rule.enabled? }
       verified = []
