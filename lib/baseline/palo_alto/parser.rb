@@ -154,7 +154,8 @@ module Baseline
           attributes = { "address" => address }
           attributes["authenticated"] = authenticated unless authenticated.nil?
           resource = ConfigurationResource.new(kind: "ntp.association", identity: { "name" => name }, attributes: attributes,
-            lines: definitions.map { |row| row[:entry].line }, complete: !authenticated.nil?)
+            lines: definitions.map { |row| row[:entry].line },
+            complete: !authenticated.nil? && definitions.all? { |row| %w[ntp-server-address authentication-type].include?(row[:tokens][4]) })
           @fact_builder.record_resource(resource)
           { address: address, authenticated: authenticated }
         end

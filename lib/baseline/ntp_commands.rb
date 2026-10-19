@@ -5,7 +5,7 @@ module Baseline
   module NtpCommands
     private
 
-    def render_ntp(operation, verified_key_ids: [])
+    def render_ntp(operation, verified_key_ids: [], verified_slots: [])
       identity, scope = operation.identity, operation.scope
       unless identity.keys.sort == %w[address role] && scope.keys == [ "vrf" ] && %w[server peer].include?(identity["role"])
         raise CommandRenderer::UnsupportedOperation, "unsupported_ntp_identity"

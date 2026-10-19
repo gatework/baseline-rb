@@ -12,16 +12,44 @@ module Baseline
     def call(finding, audit)
       result = super
       auth = audit.findings.find { |item| item.id == "ntp.authentication" && item.status != :not_applicable }
+      slots = audit.configuration.platform == "palo_alto" ? verify_panos_slot_dependencies!(result, auth) : []
       required = auth&.expected == true || audit.configuration.fact_known?("ntp.authentication") && audit.configuration.fact("ntp.authentication") == true
       unresolved_switch = audit.configuration.issues.any? { |issue| issue[:fact] == "ntp.authentication" }
       if (required || unresolved_switch) && result.operations.any? { |operation| operation.action == :add && !operation.after.key?("key_id") }
         raise Blocked, :ntp_authentication_dependency
       end
       verified = verify_key_dependencies!(result.operations, audit.configuration)
-      Result.new(operations: result.operations, details: CtxParser::Immutable.copy(result.details.merge(verified_ntp_key_ids: verified)))
+      details = result.details.merge(verified_ntp_key_ids: verified)
+      details[:verified_ntp_slots] = slots if audit.configuration.platform == "palo_alto"
+      Result.new(operations: result.operations, details: CtxParser::Immutable.copy(details))
     end
 
     private
+
+    # PAN-OS 的材料属于主备槽位；地址变化不能自动证明原有密钥适用于新对端。
+    def verify_panos_slot_dependencies!(result, auth)
+      if auth && result.details[:projected_targets].zero?
+        raise Blocked, :policy_conflict
+      end
+      approved = @policy.rules.find { |rule| rule.id == "ntp.associations" && rule.enabled? }
+      verified = []
+      result.operations.each do |operation|
+        next unless operation.after
+        if operation.action == :add && operation.after["authenticated"] != false ||
+            operation.action == :replace && operation.after["authenticated"] != operation.before["authenticated"]
+          requirement = operation.after.key?("authenticated") ? "approved_ntp_authentication_material" : "explicit_ntp_authentication_choice"
+          raise Blocked.new(:ntp_authentication_dependency, requirements: [ requirement ])
+        end
+        if operation.action == :replace && operation.before["authenticated"] == true &&
+            operation.after["address"] != operation.before["address"]
+          unless approved&.remediation&.fetch("ntp_peer_key_compatibility_verified", false) == true
+            raise Blocked.new(:ntp_authentication_dependency, requirements: [ "ntp_peer_key_compatibility_verified" ])
+          end
+          verified << operation.identity.fetch("name")
+        end
+      end
+      verified.uniq
+    end
 
     # 新引用必须关联已知可信材料及外部对端证据；保留引用也不能绕过已知损坏的材料。
     def verify_key_dependencies!(operations, evidence)

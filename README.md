@@ -154,6 +154,8 @@ Names identify the object lifecycle and the method's result or side effect. `Fac
 
 Internal pipeline steps use `parse_*`; writers use `record_*`; regex providers use `*_pattern`. A tristate result uses `*_state` rather than a boolean predicate, and parsing/validation helpers name what they parse. Plain established names such as `Policy`, `Rule`, `Acl`, `Credential`, `Evaluator`, `Report`, `to_h`, and `inspect` remain appropriate. Old names and require paths have no aliases. Rule IDs, fact keys, and report JSON retain their business vocabulary.
 
+PAN-OS NTP object planning uses `ntp.associations` with `primary-ntp-server` / `secondary-ntp-server` names and explicit empty managed scope (`managed_scopes: [{}]`). Address updates preserve the slot's authentication subtree; authenticated address changes require `ntp_peer_key_compatibility_verified: true`. New slots require an explicit `authenticated: false`; creation or changes of authentication material remain blocked. Removal deletes only the approved slot and is blocked for unmodelled options or if it would erase evidence required by an enabled authentication rule. See the [offline example](examples/remediation_palo_alto_ntp.rb). Commands do not commit the candidate configuration.
+
 ## Development and tests
 
 Name shared classes by their responsibility and use the namespace for platform context. Preserve filenames and class names that directly match device commands.

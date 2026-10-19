@@ -164,6 +164,8 @@ Hillstone SNMPv3 根据 [StoneOS CLI 手册](https://kb.hillstonenet.com/en/wp-c
 
 内部解析流程用 `parse_*`，事实和诊断写入用 `record_*`，正则提供方法用 `*_pattern`。三态结果用 `*_state`，避免冒充布尔谓词；解析、校验方法说明解析对象。`Policy`、`Rule`、`Acl`、`Credential`、`Evaluator`、`Report`、`to_h`、`inspect` 等已有清晰含义的名称继续使用。旧名称和旧加载路径不保留别名，规则 ID、事实键和报告 JSON 沿用业务术语。
 
+PAN-OS NTP 对象修正使用 `ntp.associations`、`primary-ntp-server` / `secondary-ntp-server` 名称及显式空作用域（`managed_scopes: [{}]`）。地址更新保留槽位认证子树；已认证地址变化须提供 `ntp_peer_key_compatibility_verified: true`。新增槽位须明确 `authenticated: false`；新建或变更认证材料仍列为人工前提。删除仅作用于批准槽位；未知选项或删除后丢失启用认证规则所需证据时受阻。见[离线示例](examples/remediation_palo_alto_ntp.rb)。命令不提交候选配置。
+
 ## 开发与测试
 
 共享类按实际职责命名，平台信息放在命名空间中。直接对应设备命令的解析器保留文件名和类名。

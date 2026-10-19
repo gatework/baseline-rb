@@ -47,10 +47,10 @@ module Baseline
     end
 
     # 将完整操作转换为命令；任何一个子命令不受支持则整体拒绝该操作。
-    def render(operation, verified_ntp_key_ids: [])
+    def render(operation, verified_ntp_key_ids: [], verified_ntp_slots: [])
       return render_tacacs(operation) if TacacsOperationSchema::KINDS.include?(operation.kind)
       return render_access(operation) if AccessOperationSchema::KINDS.include?(operation.kind)
-      return render_ntp(operation, verified_key_ids: verified_ntp_key_ids) if operation.kind == "ntp.association" && self.class::RESOURCE_KINDS.include?(operation.kind)
+      return render_ntp(operation, verified_key_ids: verified_ntp_key_ids, verified_slots: verified_ntp_slots) if operation.kind == "ntp.association" && self.class::RESOURCE_KINDS.include?(operation.kind)
       return render_resource(operation) unless operation.kind == "setting"
       id = operation.identity.fetch("rule")
       if id == "ssh.vty_ssh_only" && self.class::VTY_PROTOCOL_COMMAND && operation.after == true

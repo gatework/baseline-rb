@@ -2,6 +2,11 @@
 
 Changes to the public contract are recorded here. Versions follow Semantic Versioning.
 
+## Unreleased
+
+- Generate PAN-OS NTP primary/secondary slot additions, removals and address leaf updates with explicit scope and authentication choices; preserve other slots and existing authentication material.
+- Require external peer compatibility evidence before retaining authenticated material for a changed address, reject unmodelled slot options, and retain authentication-rule evidence when planning removals. New or changed authentication material remains a manual prerequisite.
+
 ## 0.4.0 (2026-10-19)
 
 - Keep Cisco TACACS key evidence per endpoint identity, preventing another named object at the same canonical address from supplying missing material.

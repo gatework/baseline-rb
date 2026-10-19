@@ -48,6 +48,14 @@ NTP 与 Syslog 的配置资源保留了用于后续生成的对象参数。NTP �
 
 开发验证：`bundle exec rake`。现有备份只用于本机聚合验证，不能作为批准参数来源，也不能复制进测试或发布包。
 
+## PAN-OS NTP 主备槽位
+
+`ntp.associations` 使用命名槽位 `primary-ntp-server` / `secondary-ntp-server`、`scope: {}` 和明确 `managed_scopes: [{}]`。不能从旧地址集合推导应使用哪个槽位。新增须提供地址及 `authenticated: false`；删除按完整槽位树定位；已有对象只修改地址叶子，保留认证子树和另一槽位。未知对象选项不能当作删除整个槽位的完整证据。
+
+已认证槽位更换地址时须经 `ntp_peer_key_compatibility_verified: true` 记录外部核验，呈现器同时要求规划器传递已验证槽位名称。此标记不证明同步、密码强度或运行可达性。新增认证或变更认证方式/材料保持受阻；普通输出不包含已有材料。删除全部槽位不能使仍启用的认证规则丢失证据。
+
+语法依据：[PAN-OS 11.2 配置命令层级](https://docs.paloaltonetworks.com/ngfw/pan-os-cli-quick-start/cli-command-hierarchy/pan-os-11-2-configure-cli-command-hierarchy) 与 [修改配置](https://docs.paloaltonetworks.com/ngfw/pan-os-cli-quick-start/use-the-cli/modify-the-configuration)。适用本机完整 set 导出，不涵盖 XML、Panorama 模板继承或实际设备提交验证。独立测试状态模型按路径应用命令并重新审计，覆盖保留未修改原文、认证依赖及再次零变更。
+
 ## H3C VTY 继承证据
 
 Comware 的范围级 `authentication-mode` 和 `protocol inbound` 相互绑定：任一范围级非默认设置都会使两项采用范围值；不能分别从 class 补齐另一项并判通过。范围级两项均为默认或未配置时，才保留 class 设置。未显式出现的范围默认值在当前审计中保留未知，避免跨版本推定。损坏的范围撤销命令不能被 class 覆盖掩盖。

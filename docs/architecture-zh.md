@@ -2,7 +2,15 @@
 > 当前独立 gem 的安装、依赖、开发与发布入口以 [README-zh.md](../README-zh.md) 为准。
 > 涉及 `Motor::*`、`Sync`、`Baseline::Check`、数据库、Rails、Rake 运维任务及私有实机证据的内容均属于 Motor 宿主集成，不随 gem 提供；历史验证记录不代表当前用户设备已经验证。
 
-# 配置基线检查
+# 当前独立模块的离线检查与修正
+
+`Audit` 保留 Parser → FactBuilder → Evidence → Evaluator → Report 主链。Parser 同时记录带完整身份、作用域、非秘密属性和来源行的 `ConfigurationResource`；旧地址集合与结构化对象规则分别表达地址和对象合规。
+
+`Remediation` 以同一输入快照和策略调用 Audit，再由领域规划器协调目标集合、引用、认证及容量约束，厂商 `CommandRenderer` 将类型化 `ConfigurationOperation` 呈现为 `CommandStep`。`RemediationPlan` 保留每项启用指标的结果、受阻原因、配置及策略指纹；未知或部分输入不能生成相关操作。命令全部供人工审核，不连接设备、不保存或提交配置，也不在普通输出中导出秘密。
+
+PAN-OS NTP 使用固定主备槽位身份；地址叶子更新保留认证子树，更换认证对端要求外部兼容性证据，呈现器只接受规划器核验后的槽位名单。未知选项阻止整个槽位删除。当前条件能力、未支持项及验证边界以 [指标文档](baseline-metrics.md) 和 `Remediation.capabilities` 为准。
+
+# 历史 Motor 宿主设计
 
 对**已经取得的运行配置文本**进行结构化解析和基线判定。参考 Netstack 的事实、策略、规则和报告划分，在 Motor 中复用 `CtxParser` 的配置树、解析上下文、来源捕获和结果接口。模块不创建设备连接、不执行命令、不触发备份任务，也不生成修复配置。
 
