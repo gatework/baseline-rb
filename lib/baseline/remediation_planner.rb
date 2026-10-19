@@ -181,9 +181,12 @@ module Baseline
       end
       result = handler.new(policy: @policy).call(finding, audit)
       proposed = result.operations
+      verification = { verified_ntp_key_ids: result.details.fetch(:verified_ntp_key_ids, []),
+        verified_ntp_slots: result.details.fetch(:verified_ntp_slots, []) }
+      syslog_ids = result.details[:verified_syslog_operation_ids]&.to_h { |id| [ id, true ] }
       rendered = proposed.flat_map do |operation|
-        @renderer.render(operation, verified_ntp_key_ids: result.details.fetch(:verified_ntp_key_ids, []),
-          verified_ntp_slots: result.details.fetch(:verified_ntp_slots, []))
+        context = syslog_ids ? verification.merge(verified_syslog_operation_ids: syslog_ids.key?(operation.id) ? [ operation.id ] : []) : verification
+        @renderer.render(operation, **context)
       end
       operations.concat(proposed)
       steps.concat(rendered)

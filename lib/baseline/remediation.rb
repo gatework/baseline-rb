@@ -36,6 +36,10 @@ module Baseline
         elsif supported && SyslogRemediation::IDS.include?(id)
           requirements = [ "approved_syslog_targets", "maximum_targets_for_additions" ]
           requirements += [ "managed_scopes" ] if id == "syslog.destinations"
+          if name == "palo_alto"
+            requirements = %w[approved_syslog_server_and_profile_names managed_scopes resolved_syslog_reference_inventory
+              explicit_native_server_parameters preserved_profile_references syslog_tls_peer_compatibility_verified_for_tls_endpoint_changes]
+          end
         elsif supported && NtpRemediation::IDS.include?(id)
           requirements = [ "approved_ntp_associations", "maximum_targets_for_net_additions", "authentication_dependencies" ]
           requirements += %w[managed_scopes ntp_peer_key_compatibility_verified known_trusted_ntp_key] if id == "ntp.associations"

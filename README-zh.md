@@ -166,7 +166,9 @@ Hillstone SNMPv3 根据 [StoneOS CLI 手册](https://kb.hillstonenet.com/en/wp-c
 
 PAN-OS NTP 对象修正使用 `ntp.associations`、`primary-ntp-server` / `secondary-ntp-server` 名称及显式空作用域（`managed_scopes: [{}]`）。地址更新保留槽位认证子树；已认证地址变化须提供 `ntp_peer_key_compatibility_verified: true`。新增槽位须明确 `authenticated: false`；新建或变更认证材料仍列为人工前提。删除仅作用于批准槽位；未知选项或删除后丢失启用认证规则所需证据时受阻。见[离线示例](examples/remediation_palo_alto_ntp.rb)。命令不提交候选配置。
 
-PAN-OS `syslog.destinations` 还可明确要求 `syslog.device`、`syslog.forwarding` 绑定，区分服务器定义、设备日志直接引用，以及共享转发 profile 到本机或指定 vsys 安全规则的引用链。profile、匹配项和规则名保持大小写；明确要求的 `disabled`、`log_start`、`log_end` 必须有显式证据。过滤式及动作内容不导出，也不作为投递成功证明。未知引用、模板及不完整输入保持未知；引用迁移列出人工前提，暂不生成迁移命令。见[配置引用示例](examples/palo_alto_syslog_bindings.rb)。
+PAN-OS `syslog.destinations` 还可明确要求 `syslog.device`、`syslog.forwarding`、`syslog.zone` 绑定，区分服务器定义、设备日志直接引用，以及共享转发 profile 到本机或指定 vsys 安全规则的引用链。profile、匹配项和规则名保持大小写；明确要求的 `disabled`、`log_start`、`log_end` 必须有显式证据。过滤式及动作内容不导出，也不作为投递成功证明。未知引用、模板及不完整输入保持未知；引用迁移列出人工前提，暂不生成迁移命令。见[配置引用示例](examples/palo_alto_syslog_bindings.rb)。
+
+PAN-OS 共享 Syslog 服务器现支持按 `syslog.destinations` 命名批准增删对象及修改变化叶子。新增须明确地址、协议、端口、格式和 facility。profile 自定义格式及转发配置保留；任何已被引用 profile 的最后一个服务器不能删除，包括未挂接的转发定义引用。激活原悬空 profile 须明确批准匹配的 bindings。SSL 端点变化需经外部证书/对端检查后提供 `syslog_tls_peer_compatibility_verified: true`。候选命令同时满足每个 profile 四服务器原生上限和批准的整体容量。见[人工审核示例](examples/remediation_palo_alto_syslog.rb)，不生成 commit/save 命令。
 
 ## 开发与测试
 

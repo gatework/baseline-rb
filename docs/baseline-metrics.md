@@ -60,11 +60,21 @@ NTP 与 Syslog 的配置资源保留了用于后续生成的对象参数。NTP �
 
 服务器资源可声明 `bindings` 精确集合：`syslog.device` 身份为 `kind/log_type/match`；`syslog.forwarding` 身份为 `kind/forwarding_profile/match/log_type/context/rulebase/rule`。设备日志类型覆盖已建模的 system、config、userid、iptag、globalprotect、hipmatch、correlation；规则转发日志类型覆盖 traffic、threat、wildfire、url、data、tunnel、auth、decryption。名称按原文匹配；当前 CLI 上下文使用 `context: local`，显式虚拟系统使用 `context: vsys` 并额外要求 `vsys` 身份。两者不能通过同名哨兵合并；security/default-security-rules 也分别保留。
 
-转发 profile 只定义匹配项但未挂接规则时，不计为规则使用链。规则选用的最终 profile 生效，列表 set 引用累加。`disabled/log_start/log_end` 是可选批准谓词；省略不比较，缺少显式事实时要求这些字段的检查返回 unknown。只证明配置引用，不证明规则命中、过滤式覆盖、日志启用默认值或实际投递。完整且已建模的空引用可与 `bindings: []` 匹配；省略 bindings 仍仅核验对象定义。
+转发 profile 只定义匹配项但未挂接规则时，不计为规则使用链。规则选用的最终 profile 生效，列表 set 引用累加。规则转发绑定的 `disabled/log_start/log_end` 是可选批准谓词；省略不比较，缺少显式事实时要求这些字段的检查返回 unknown。只证明配置引用，不证明规则命中、过滤式覆盖、日志启用默认值或实际投递。完整且已建模的空引用可与 `bindings: []` 匹配；省略 bindings 仍仅核验对象定义。
 
 `syslog.profile_references` 保存非秘密引用，`syslog.reference_inventory_complete` 表示此库存是否完整。未知命令族、损坏列表、未解析转发目标、vsys 本地日志对象、模板/设备组或多行引用均不能证明没有使用关系。引用证据未知不把独立对象定义伪装成引用合规。过滤式、描述和动作载荷不进入公开资源；每个资源保留参与证据的行号。引用修正仍要求明确批准迁移范围、保留过滤条件和已验证的厂商命令，当前不生成原生引用迁移。
 
 语法依据：[PAN-OS 11.2 命令层级](https://docs.paloaltonetworks.com/ngfw/pan-os-cli-quick-start/cli-command-hierarchy/pan-os-11-2-configure-cli-command-hierarchy) 和 [官方转发配置示例](https://docs.paloaltonetworks.com/vm-series/deployment/public-cloud/set-up-the-vm-series-firewall-on-oracle-cloud-infrastructure/oracle-cloud-infrastructure-logging)。后者的 Kafka/插件与运行验证不属于本库能力。
+
+Zone 消费者使用 `syslog.zone`，身份为 `kind/forwarding_profile/match/log_type/context/zone`；显式 `context: vsys` 同样额外要求 `vsys`。按 `zone ... network log-setting` 的最终选择解析，不能因为没有规则消费者就证明未被使用。其他未建模消费者、本机 vsys 日志对象及本地 log-settings 命令保留未知。
+
+共享服务器命令仅定位 `shared log-settings syslog <profile> server <name>`。更新只设置有变化的 server/transport/port/format/facility 叶子；删除只到 server，不删除整个 profile、格式、过滤式或引用。新增参数必须明确，已有未批准字段保留；端点变化要求已知协议及端口，不能拿未验证的隐式端口完成传输切换。所有命令先核验完整引用库存；普通低层呈现调用须传入规划器已核验的完整操作标识，不可默认跳过前提。
+
+`syslog.declared_profile_references` 统计每个 profile 的配置引用声明（包括未挂接的转发定义），与实际规则/zone 使用边数分开。仍有任何声明引用时，不能清空该 profile 的全部服务器；需要先明确批准并实现引用迁移。首次补全原悬空 profile 时须明确批准与现有使用链匹配的 bindings，不能借创建服务器隐式改写引用。原生绑定迁移仍未实现。
+
+新增 SSL 目标或修改后仍为 SSL 的地址/端口/协议变更要求 `remediation.syslog_tls_peer_compatibility_verified: true`，表示外部已核验对端及证书配置；不从旧备份推断新对端适用性，不导出或创建证书秘密。同一 SSL 端点只更新格式/facility 时保留认证配置。该字段严格为布尔值，只用于对象规则。原生单 profile 最多四个服务器；同时服从明确批准的整体容量，中间候选树超限时先删除批准移除的对象并提高风险等级。命令仅修改候选树，不保存或提交。
+
+原生字段、四服务器上限与 SSL 依赖依据：[PAN-OS Syslog 配置](https://docs.paloaltonetworks.com/ngfw/administration/monitoring/use-syslog-for-monitoring/configure-syslog-monitoring)；profile/server 命令名称采用 [11.2 字段文档](https://docs.paloaltonetworks.com/ngfw/help/11-2/device/device-server-profiles-syslog) 的31字符及字母、数字、空格、连字符、下划线范围，并保持库已有首字符约束。审计名称仍沿用公共资源边界，超出已验证原生命名语法时不生成。zone 命令见 [11.2 新增命令](https://docs.paloaltonetworks.com/ngfw/pan-os-cli-quick-start/cli-changes/new-set-commands-11-2)。本库没有实机配置、证书握手或日志到达验证。
 
 ## H3C VTY 继承证据
 

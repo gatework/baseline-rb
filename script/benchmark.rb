@@ -124,3 +124,31 @@ end
     raise "Missing configured output chain" unless report.compliant? && report.configuration.resources.first.bindings.one?
   end
 end
+
+# 跨 profile 的原生容量协调与操作核验使用索引，不反复扫描全部对象。
+[ 10, 100 ].each do |size|
+  targets, scopes, declarations = [], [], []
+  size.times do |index|
+    profile = "PROFILE#{index}"
+    scopes << { "profile" => profile }
+    (1..4).each do |server|
+      prefix = "set shared log-settings syslog #{profile} server S#{server}"
+      declarations << "#{prefix} server 192.0.2.#{server}\n#{prefix} transport UDP\n#{prefix} port 514\n#{prefix} format BSD\n#{prefix} facility LOG_USER\n"
+    end
+    (2..5).each do |server|
+      targets << { "identity" => { "name" => "S#{server}" }, "scope" => { "profile" => profile },
+        "attributes" => { "address" => "192.0.2.#{server}", "protocol" => "udp", "port" => 514, "format" => "BSD", "facility" => "LOG_USER" } }
+    end
+  end
+  configuration = "set deviceconfig system hostname LAB\n#{declarations.join}"
+  policy = Baseline::Policy.new("version" => 1, "checks" => { "syslog.destinations" => {
+    "expected" => targets, "managed_scopes" => scopes, "remediation" => { "maximum_targets" => size * 5 }
+  } })
+  service = Baseline::Remediation.new(policy: policy)
+  measure("PAN-OS native Syslog capacity #{size} profiles") do
+    plan = service.call(configuration: configuration, platform: :palo_alto, complete: true)
+    unless plan.status == :ready && plan.operations.size == size * 2 && plan.operations.count { |operation| operation.phase == :prepare } == size
+      raise "Native profile capacity was not preserved"
+    end
+  end
+end

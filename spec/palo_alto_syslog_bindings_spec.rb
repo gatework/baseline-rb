@@ -91,7 +91,7 @@ RSpec.describe "PAN-OS Syslog definition and usage evidence" do
     end
     expect { audit(definition, object([ device_binding, device_binding ])) }.to raise_error(ArgumentError)
     expect(Baseline::Audit.capabilities(platform: :palo_alto)["syslog.destinations"][:bindings]).to include(
-      status: :conditional, kinds: %w[syslog.device syslog.forwarding])
+      status: :conditional, kinds: %w[syslog.device syslog.forwarding syslog.zone])
   end
 
   it "does not prove absent references after a malformed or unmodelled reference family" do
@@ -142,5 +142,19 @@ RSpec.describe "PAN-OS Syslog definition and usage evidence" do
       "set rulebase security rules ALLOW log-setting FORWARD\nset vsys local rulebase security rules ALLOW log-setting FORWARD\n"
     bindings = audit(text).configuration.resources.first.bindings
     expect(bindings.size).to eq(2)
+  end
+
+  it "includes zone consumers and their final forwarding profile without requiring a policy rule" do
+    text = definition + "set shared log-settings profiles FORWARD match-list TRAFFIC log-type traffic\n" \
+      "set shared log-settings profiles FORWARD match-list TRAFFIC send-syslog LOGS\n" \
+      "set zone INSIDE network log-setting FORWARD\n"
+    expected = { "kind" => "syslog.zone", "forwarding_profile" => "FORWARD", "match" => "TRAFFIC", "log_type" => "traffic",
+      "context" => "local", "zone" => "INSIDE" }
+    expect(audit(text, object([])).findings.first.status).to eq(:fail)
+    expect(audit(text, object([ expected ]))).to be_compliant
+    explicit = text.sub("set zone INSIDE", "set vsys BLUE zone INSIDE")
+    expect(audit(explicit, object([ expected.merge("context" => "vsys", "vsys" => "BLUE") ]))).to be_compliant
+    malformed = text + "set zone INSIDE network log-setting FORWARD extra\n"
+    expect(audit(malformed, object([])).findings.first.status).to eq(:unknown)
   end
 end

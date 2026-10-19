@@ -4,6 +4,9 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+- Generate PAN-OS shared Syslog server leaf updates, additions and exact removals while preserving profile formats and configured references; guard dangling activation, the last referenced server, native profile capacity and TLS peer prerequisites.
+- Include zone forwarding consumers in typed Syslog usage evidence, retaining explicit context and final profile selection; preserve unused forwarding definitions when planning endpoint removal.
+
 - Audit typed PAN-OS Syslog device-log and forwarding-profile/security-rule bindings, preserving virtual-system, rulebase and exact name identity plus explicitly required logging flags. Keep missing, unused and unresolved references distinct without exporting filters or action payloads.
 - Expose concrete manual prerequisites for Syslog binding changes; keep unsupported references and multiline values unknown. Restrict rule token indexing to relevant logging fields rather than unrelated policy statements.
 

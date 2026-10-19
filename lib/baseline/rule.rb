@@ -89,6 +89,8 @@ module Baseline
         %w[access_targets]
       elsif id == "ntp.associations"
         %w[maximum_targets order ntp_peer_key_compatibility_verified]
+      elsif id == "syslog.destinations"
+        %w[maximum_targets order syslog_tls_peer_compatibility_verified]
       elsif %w[syslog.minimum_servers syslog.servers syslog.destinations ntp.minimum_servers ntp.servers].include?(id)
         %w[maximum_targets order]
       elsif id == "tacacs.endpoints"
@@ -104,7 +106,7 @@ module Baseline
       end
       unless (!remediation.key?("ntp_peer_key_compatibility_verified") || [ true, false ].include?(remediation["ntp_peer_key_compatibility_verified"])) &&
           (!remediation.key?("syntax_profile") || remediation["syntax_profile"] == "comware7") &&
-          %w[local_fallback_access_verified tacacs_key_compatibility_verified].all? { |key| !remediation.key?(key) || [ true, false ].include?(remediation[key]) }
+          %w[local_fallback_access_verified tacacs_key_compatibility_verified syslog_tls_peer_compatibility_verified].all? { |key| !remediation.key?(key) || [ true, false ].include?(remediation[key]) }
         raise ArgumentError, "Invalid baseline remediation approval"
       end
       AccessApproval.validate!(remediation["access_targets"], domain: id.start_with?("snmp.") ? :snmp : :management) if remediation.key?("access_targets")

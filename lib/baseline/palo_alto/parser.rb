@@ -12,7 +12,7 @@ module Baseline
     # 将 PAN-OS set 语法归纳为与配置块平台一致的事实。
     class Parser < Baseline::Parser
       include SyslogReferences
-      BINDING_KINDS = { "syslog.destination" => %w[syslog.device syslog.forwarding].freeze }.freeze
+      BINDING_KINDS = { "syslog.destination" => %w[syslog.device syslog.forwarding syslog.zone].freeze }.freeze
       # 原生管理端点没有 VTY 模型；未建模能力保留未知，不改变规则适用范围。
       UNSUPPORTED_FACTS = {
         "ssh.versions" => :ssh_version_unmodeled,
@@ -24,8 +24,8 @@ module Baseline
       PARTIAL_FACTS = { "services" => :service_states_partially_modeled }.freeze
 
       MANAGEMENT_SERVICES = %w[ssh telnet http https].freeze
-      RELEVANT = /\Aset (?:deviceconfig system |network (?:profiles interface-management-profile |interface )|shared (?:server-profile tacplus |authentication-profile |authentication-sequence |log-settings )|mgt-config users )/
-      SYSLOG_REFERENCES = /\Aset (?:rulebase|vsys)\b.*\b(?:log-settings|log-setting|log-start|log-end|disabled)\b/
+      RELEVANT = /\Aset (?:deviceconfig system |network (?:profiles interface-management-profile |interface )|shared (?:server-profile tacplus |authentication-profile |authentication-sequence |log-settings )|mgt-config users |log-settings )/
+      SYSLOG_REFERENCES = /\Aset (?:rulebase|vsys|zone|profiles)\b.*\b(?:log-settings|log-setting|log-start|log-end|disabled)\b/
 
       private
 

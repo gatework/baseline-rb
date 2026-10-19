@@ -12,11 +12,15 @@ module Baseline
       case binding["kind"]
       when "syslog.device" then %w[kind log_type match]
       when "syslog.forwarding" then %w[kind forwarding_profile match log_type context] + (binding["context"] == "vsys" ? [ "vsys" ] : []) + %w[rulebase rule]
+      when "syslog.zone" then %w[kind forwarding_profile match log_type context] + (binding["context"] == "vsys" ? [ "vsys" ] : []) + [ "zone" ]
       else IDENTITY
       end
     end
 
-    def self.predicate_fields(binding) = binding["kind"] == "aaa.domain" ? [ "selected" ] : %w[disabled log_start log_end]
+    def self.predicate_fields(binding)
+      return [ "selected" ] if binding["kind"] == "aaa.domain"
+      binding["kind"] == "syslog.forwarding" ? %w[disabled log_start log_end] : []
+    end
 
     # 认证域及日志输出链分别校验，禁止跨资源种类借用引用身份。
     def self.validate!(kind, bindings)
@@ -35,6 +39,10 @@ module Baseline
         elsif binding["kind"] == "syslog.forwarding"
           SYSLOG_FORWARD_TYPES.include?(binding["log_type"]) && %w[security default-security-rules].include?(binding["rulebase"]) &&
             %w[local vsys].include?(binding["context"]) && %w[forwarding_profile match rule].all? { |field| ResourceSchema.name?(binding[field]) } &&
+            (binding["context"] != "vsys" || ResourceSchema.name?(binding["vsys"]))
+        elsif binding["kind"] == "syslog.zone"
+          SYSLOG_FORWARD_TYPES.include?(binding["log_type"]) && %w[local vsys].include?(binding["context"]) &&
+            %w[forwarding_profile match zone].all? { |field| ResourceSchema.name?(binding[field]) } &&
             (binding["context"] != "vsys" || ResourceSchema.name?(binding["vsys"]))
         else false
         end

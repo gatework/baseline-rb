@@ -12,6 +12,7 @@ module Baseline
         @syslog_reference_unresolved = []
         roots.select { |entry| /\Aset (?:template|device-group|panorama)(?:\s|\z)/.match?(entry.text) }.each { |entry| unresolved_syslog_reference(entry) }
         references, forwarding, lines = {}, {}, Hash.new { |hash, key| hash[key] = [] }
+        declared = Hash.new(0)
         rows = statements_with_prefix("shared", "log-settings")
         rows.reject { |row| supported_syslog_reference_path?(row[:tokens]) }.each { |row| unresolved_syslog_reference(row[:entry]) }
         matches = rows.select { |row| row[:tokens][3] == "match-list" || row[:tokens][2] == "profiles" && row[:tokens][4] == "match-list" }
@@ -28,6 +29,7 @@ module Baseline
           receivers = entries.select { |row| row[:tokens][path.size] == "send-syslog" }.flat_map do |row|
             syslog_reference_values(row[:tokens].drop(path.size + 1), row[:entry])
           end.uniq
+          receivers.each { |receiver| declared[receiver] += 1 }
           if profile
             (forwarding[profile] ||= []) << { match: match, log_type: type, receivers: receivers, lines: entries.map { |row| row[:entry].line } }
           else
@@ -40,15 +42,53 @@ module Baseline
         # 空的转发 profile 仍是已知定义；未挂接的 profile 不成为已使用链。
         rows.select { |row| row[:tokens][2] == "profiles" && ResourceSchema.name?(row[:tokens][3]) }.each { |row| forwarding[row[:tokens][3]] ||= [] }
         record_syslog_rule_consumers(forwarding, references, lines)
+        record_syslog_zone_consumers(forwarding, references, lines)
         statements_with_prefix("vsys").select { |row| row[:tokens][2] == "log-settings" }.each { |row| unresolved_syslog_reference(row[:entry]) }
+        statements_with_prefix("log-settings").each { |row| unresolved_syslog_reference(row[:entry]) }
+        statements_with_prefix("profiles").select { |row| row[:tokens].drop(3).include?("log-setting") }.each { |row| unresolved_syslog_reference(row[:entry]) }
         record_fact("syslog.profile_references", references.transform_values { |values| ResourceBindings.normalize(values.uniq) })
+        record_fact("syslog.declared_profile_references", declared)
         record_fact("syslog.reference_inventory_complete", @syslog_references_closed)
-        record_unknown_fact("syslog.profile_references", @syslog_reference_unresolved.uniq, code: :syslog_reference_inventory_unresolved) unless @syslog_references_closed
+        unless @syslog_references_closed
+          %w[syslog.profile_references syslog.declared_profile_references].each do |fact|
+            record_unknown_fact(fact, @syslog_reference_unresolved.uniq, code: :syslog_reference_inventory_unresolved)
+          end
+        end
         @fact_builder.resources_for("syslog.destination").each do |resource|
           profile = resource[:scope]["profile"]
           bindings = @syslog_references_closed ? references.fetch(profile, []).uniq : nil
           @fact_builder.record_resource_bindings(kind: "syslog.destination", identity: resource[:identity], scope: resource[:scope],
             bindings: bindings, lines: resource[:lines] + lines[profile])
+        end
+      end
+
+      # zone 的日志消费者独立于规则；只采用最后一次 profile 选择，不推定日志事件存在。
+      def record_syslog_zone_consumers(forwarding, references, lines)
+        consumers = (statements_with_prefix("zone") + statements_with_prefix("vsys")).filter_map do |row|
+          tokens = row[:tokens]
+          context, vsys, path = tokens.first == "vsys" ? [ "vsys", tokens[1], tokens.drop(2) ] : [ "local", nil, tokens ]
+          next unless path.first == "zone"
+          unless path[2..3] == %w[network log-setting]
+            unresolved_syslog_reference(row[:entry]) if path[2] == "log-setting"
+            next
+          end
+          { context: context, vsys: vsys, zone: path[1], values: path.drop(4), entry: row[:entry] }
+        end.group_by { |row| row.values_at(:context, :vsys, :zone) }.values.map(&:last)
+        consumers.each do |row|
+          profile = row[:values].first
+          unless row[:values].one? && ResourceSchema.name?(row[:zone]) && (row[:context] == "local" || ResourceSchema.name?(row[:vsys])) && forwarding.key?(profile)
+            unresolved_syslog_reference(row[:entry])
+            next
+          end
+          forwarding.fetch(profile).each do |match|
+            binding = { "kind" => "syslog.zone", "forwarding_profile" => profile, "match" => match[:match], "log_type" => match[:log_type],
+              "context" => row[:context], "zone" => row[:zone] }
+            binding["vsys"] = row[:vsys] if row[:context] == "vsys"
+            match[:receivers].each do |receiver|
+              (references[receiver] ||= []) << binding
+              lines[receiver].concat(match[:lines] + [ row[:entry].line ])
+            end
+          end
         end
       end
 
