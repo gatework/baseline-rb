@@ -6,6 +6,7 @@ require_relative "resource_schema"
 require_relative "syslog_reference_schema"
 require_relative "snmp_group_migration_schema"
 require_relative "aaa_chain_schema"
+require_relative "vty_authentication_schema"
 
 require "ctx_parser/immutable"
 
@@ -100,6 +101,8 @@ module Baseline
         %w[maximum_targets order syslog_tls_peer_compatibility_verified binding_migrations]
       elsif %w[syslog.minimum_servers syslog.servers syslog.destinations ntp.minimum_servers ntp.servers].include?(id)
         %w[maximum_targets order]
+      elsif id == "ssh.vty_aaa"
+        AaaChainSchema::APPROVALS + %w[vty_ranges temporary_vty_protocol_rebind_approved]
       elsif AaaChainSchema::IDS.key?(id)
         AaaChainSchema::APPROVALS
       elsif id == "tacacs.endpoints"
@@ -121,13 +124,16 @@ module Baseline
       end
       unless (!remediation.key?("ntp_peer_key_compatibility_verified") || [ true, false ].include?(remediation["ntp_peer_key_compatibility_verified"])) &&
           (!remediation.key?("syntax_profile") || syntax_profiles.include?(remediation["syntax_profile"])) &&
-          %w[local_fallback_access_verified management_consumers_verified tacacs_peer_compatibility_verified tacacs_key_compatibility_verified syslog_tls_peer_compatibility_verified ntp_association_recreation_approved snmp_group_migration_verified snmp_user_group_transition_verified].all? { |key| !remediation.key?(key) || [ true, false ].include?(remediation[key]) }
+          %w[local_fallback_access_verified temporary_vty_protocol_rebind_approved management_consumers_verified tacacs_peer_compatibility_verified tacacs_key_compatibility_verified syslog_tls_peer_compatibility_verified ntp_association_recreation_approved snmp_group_migration_verified snmp_user_group_transition_verified].all? { |key| !remediation.key?(key) || [ true, false ].include?(remediation[key]) }
         raise ArgumentError, "Invalid baseline remediation approval"
       end
       AccessApproval.validate!(remediation["access_targets"], domain: id.start_with?("snmp.") ? :snmp : :management) if remediation.key?("access_targets")
       SyslogReferenceSchema.validate_migrations!(remediation["binding_migrations"]) if remediation.key?("binding_migrations")
       SnmpGroupMigrationSchema.validate_approvals!(remediation["group_migrations"]) if remediation.key?("group_migrations")
-      AaaChainSchema.validate_approval!(remediation) if AaaChainSchema::IDS.key?(id)
+      AaaChainSchema.validate_approval!(remediation) if AaaChainSchema::IDS.key?(id) || id == "ssh.vty_aaa"
+      if remediation.key?("vty_ranges") && !VtyAuthenticationSchema.ranges?(remediation["vty_ranges"])
+        raise ArgumentError, "Invalid approved VTY scope"
+      end
       validate_applicability!
       freeze
     end

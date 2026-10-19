@@ -169,7 +169,7 @@ Comware/VRP 的 `aaa.bindings` 为选中的默认管理域保留三类职责的�
 
 TACACS 标量使用检查从同一绑定证据归纳，来源包括域选择、方法、方案、实际服务器和 VTY 行。端点未完整解析时不确认其引用可用。`aaa.bindings` 保留选中管理域视角；`aaa.domain_bindings` 扩展记录已建模的全部显式域，未选中域的共享引用也不会丢弃。`aaa.domain_bindings_complete` 按职责标记完整输入下的库存确定性；显式用户的实际登录路径、其他服务提供者和其他厂商的绑定仍需分别建模，不据此自动更新/删除共享认证对象。
 
-`tacacs.login/authorization/accounting` 和 `ssh.vty_aaa` 的审核结果可列出具体绑定、缺少的域/方法/端点/VTY 证据、当前候选服务器组以及批准链、材料和本地恢复前提。候选组不等于批准目标；普通 AAA VTY 检查不强制使用 TACACS，也可批准本地 AAA 方案。未给出完整批准时仍 blocked；Comware 7 三项 TACACS login 链能力为 conditional，具体批准和保留边界见后文。VTY 模式及其他厂商原生链仍 unsupported；人工要求不表示已有自动执行或通用 `bindings` 策略写入支持。参见[认证链审核示例](../examples/remediation_authentication.rb)。
+`tacacs.login/authorization/accounting` 和 `ssh.vty_aaa` 的审核结果可列出具体绑定、缺少的域/方法/端点/VTY 证据、当前候选服务器组以及批准链、材料和本地恢复前提。候选组不等于批准目标；普通 AAA VTY 检查不强制使用 TACACS，也可批准本地 AAA 方案。未给出完整批准时仍 blocked；Comware 7 三项 TACACS login 链能力为 conditional，具体批准和保留边界见后文。Comware 7 VTY 模式可在完整范围与现有链批准下修正；其他厂商原生链仍 unsupported；人工要求不表示已有自动执行或通用 `bindings` 策略写入支持。参见[认证链审核示例](../examples/remediation_authentication.rb)。
 
 依据：[H3C 登录方法、默认继承及有序后备](https://www.h3c.com/en/Support/Resource_Center/EN/Home/Public/00-Public/Technical_Documents/Reference_Guides/Command_References/H3C_CR-35328/13/202609/2929796_294551_0.htm)、[H3C 默认域选择与撤销](https://www.h3c.com/en/d_202301/1749967_294551_0.htm)、[Huawei AAA 模式和管理域选择](https://support.huawei.com/enterprise/en/doc/EDOC1100412529/c0449dc0/aaa-configuration-commands)。当前语法范围和未建模默认值仍须按设备版本核实，不代表所有固件验证通过。
 
@@ -305,6 +305,16 @@ Cisco 全局、命名对象和旧式 host 内联 key 共用材料语法校验；
 
 仅修改完整快照中已选中且已解析的现有域。三个职责分别核验目标组、默认路由域端点与既有职责密钥；未知旧链、非 scheme 的登录 VTY、未核验后备访问均受阻。外部核验应覆盖该域实际管理消费者及后备账户在各职责的有效性，配置声明不证明对端可达或真实登录成功。操作只覆盖对应的 authentication/authorization/accounting login 行，保留 default、LAN/portal、其他域、组、端点、密钥、VTY 协议和 ACL，不生成 domain default enable，不创建对象，不保存配置。
 
-同批 TACACS 数量/地址/端点指标必须已经满足，端点变化需先独立完成并重新采集；不能用旧端点材料为未来端点背书。若策略显式声明端点 bindings，最终链投影也须保持该批准关系。原生呈现需要完整操作指纹证明，不能将已验证的认证操作用于另一个职责；恢复依然需要新快照和单独认证恢复规划。VTY 模式切换及其他平台原生链修改继续明确受阻，不借用 Comware 语法。
+同批已给出批准值的 TACACS 数量/地址/端点指标必须已经满足，端点变化需先独立完成并重新采集；缺少批准值的指标仍受阻，但不能冒充将发生的端点变化来阻止独立认证修正。不能用旧端点材料为未来端点背书。若策略显式声明端点 bindings，最终链投影也须保持该批准关系。原生呈现需要完整操作指纹证明，不能将已验证的认证操作用于另一个职责；恢复依然需要新快照和单独认证恢复规划。其他平台原生链修改继续明确受阻，不借用 Comware 语法。Comware 7 VTY 模式的专门批准及过渡要求见下节。
 
 语法依据：[H3C Comware 7 AAA 命令参考](https://www.h3c.com/en/d_202304/1822317_294551_0.htm) 的 authentication login、authorization login、accounting login。独立测试状态模型逐条应用生成命令后重新审计，确认三个职责及组合方案收敛、无关配置保留、第二次无变更；未连接真实设备，也不声称适用于所有固件。
+
+## Comware 7 VTY 账户模式与协议联动
+
+`ssh.vty_aaa` 为 true 时可在 remediation 中声明现有 `management_domain`、与现有链严格相同的 `methods`、`syntax_profile: comware7`、完整且互不交叠的 `vty_ranges`，并明确 `local_fallback_access_verified: true`、`management_consumers_verified: true`。本地链或 TACACS 优先加本地后备均可；TACACS 还核验既有认证职责端点、密钥和对端批准。不从可用服务器组选择目标，不同时重写域方法链，不创建用户或材料。
+
+仅支持已知有效认证模式和单一 all/ssh/telnet 协议的 line vty 范围。只修改需要修正的范围，以 authentication-mode scheme 后接显式 protocol inbound 保留原有效协议；同一策略要求 SSH-only 时统一收紧到 ssh，需已知 SSH 启用且不能批准关闭 SSH。TACACS 登录预期值按最终 VTY 模式投影，避免原本由 password 模式遮蔽的远程链被意外启用；仅由模式造成的 TACACS 登录偏离关联同一批操作，不额外改域。显式端点绑定、域、其他范围、ACL、class、口令和非登录配置保留。
+
+Comware 的模式/协议在范围级共同决定是否继承 class。`local_protocols` 与有效协议分开记录并进入操作指纹。若模式改变会使非 all 的继承协议在后续显式命令之前暂时回落到设备默认值，必须另外声明 `temporary_vty_protocol_rebind_approved: true`，核实目标版本过渡行为和受控管理通道；否则整项受阻。该批准不能解释为无中断或无短暂协议范围变化。所有产物仍需人工审核，恢复需新快照和单独认证恢复规划。
+
+依据：[H3C 登录管理命令](https://www.h3c.com/en/d_202206/1617620_294551_0.htm) 的 authentication-mode、protocol inbound 及其 class 关联规则。独立状态模型验证最终配置、联动指标、无关配置保留及第二次零变更，不替代真实固件接受及登录验证。Huawei/IOS/NX-OS 的原生 VTY 账户模式仍未由此实现。

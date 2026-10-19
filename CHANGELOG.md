@@ -4,6 +4,9 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+- Plan approved Comware 7 VTY account-mode corrections while preserving effective protocols and existing management methods, jointly checking SSH-only and TACACS-login outcomes.
+- Bind native proofs to range-level protocol evidence and require explicit approval for temporary class-protocol rebinding; reject incomplete scope and coupled render failures atomically.
+
 - Plan explicitly approved Comware 7 selected-domain login authentication, authorization and accounting chains with verified role endpoints, existing key references and local recovery; preserve other domains and non-login methods.
 - Keep endpoint lifecycle changes, unresolved consumers and VTY authentication-mode changes as explicit prerequisites, and recheck final endpoint-binding approvals before emitting authentication commands.
 

@@ -24,7 +24,9 @@ module Baseline
       CtxParser::Immutable.copy(Audit.capabilities(platform: name).to_h do |id, capability|
         supported = capability[:status] != :unsupported && renderer.supports?(id)
         requirements = RemediationPlanner::REQUIREMENTS.fetch(id, [ "supported_rule_handler" ])
-        if supported && AaaChainSchema::IDS.key?(id)
+        if supported && id == "ssh.vty_aaa"
+          requirements = AaaChainSchema::APPROVALS + %w[vty_ranges complete_matching_vty_scope existing_approved_management_method_chain known_vty_authentication_and_protocols temporary_vty_protocol_rebind_approved_for_inherited_protocol_changes]
+        elsif supported && AaaChainSchema::IDS.key?(id)
           requirements = AaaChainSchema::APPROVALS + %w[resolved_selected_management_domain stable_approved_tacacs_endpoints existing_scheme_role_key]
         elsif supported && id == "ntp.authentication"
           requirements = %w[known_ntp_authentication_state resolved_ntp_authentication_consumers ntp_peer_key_compatibility_verified

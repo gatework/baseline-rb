@@ -14,6 +14,7 @@ require_relative "credential_remediation"
 require_relative "tacacs_key_remediation"
 require_relative "authentication_remediation"
 require_relative "aaa_chain_remediation"
+require_relative "vty_authentication_remediation"
 require_relative "resource_binding_remediation"
 require_relative "tacacs_remediation"
 
@@ -58,9 +59,17 @@ module Baseline
         operations.concat(ntp_authentication.operations)
         steps.concat(ntp_authentication.steps)
       end
+      vty_authentication = VtyAuthenticationRemediation.new(policy: @policy, renderer: @renderer).call(audit)
+      if vty_authentication
+        operations.concat(vty_authentication.operations)
+        steps.concat(vty_authentication.steps)
+      end
       conflicting_access_domains = conflicting_acl_allocations(audit)
       checks = audit.findings.map do |finding|
         if (planned = ntp_authentication&.checks&.[](finding.id))
+          next check(finding, planned.fetch(:status), planned[:reason], **planned.except(:status, :reason))
+        end
+        if (planned = vty_authentication&.checks&.[](finding.id))
           next check(finding, planned.fetch(:status), planned[:reason], **planned.except(:status, :reason))
         end
         association_source = @renderer.source_requires_associations?(finding.id)

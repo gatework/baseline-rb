@@ -120,6 +120,14 @@ RSpec.describe "Approved Comware management method chains" do
     expect(service.call(configuration: apply(source, result.configuration_commands), platform: :h3c, complete: true).status).to eq(:noop)
   end
 
+  it "does not invent endpoint changes from missing approval values when correcting a role chain" do
+    result = plan(extra: { "tacacs.servers" => { "expected" => nil } })
+    expect(result.status).to eq(:partial)
+    expect(result.checks.first.status).to eq(:planned)
+    expect(result.operations.size).to eq(1)
+    expect(result.checks.last.status).to eq(:blocked)
+  end
+
   it "rejects injected identities, unknown fields, repeated methods and chains without local recovery" do
     [ approval.merge("management_domain" => "ADMIN\nquit"), approval.merge("extra" => true),
       approval.merge("methods" => [ { "kind" => "none" } ]), approval.merge("methods" => [ { "kind" => "tacacs", "group" => "OPS" } ]),

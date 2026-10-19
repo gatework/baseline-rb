@@ -76,6 +76,8 @@ module Baseline
           acl_entries = entries.reject { |entry| /\A(?:undo )?acl\s+ipv6\b|\A(?:undo )?acl\s+(?:name\s+)?\S+\s+outbound(?:\s|\z)/.match?(entry.text) }
           { name: section.text, protocols: effective_configured_value(/\Aprotocol inbound\s+((?:all|ssh|stelnet|telnet)(?:\s+(?:ssh|stelnet|telnet))*)\z/, entries: login_entries,
               family: /\A(?:undo )?protocol inbound\b/, fact: "ssh.vty_ssh_only", reset: /\Aundo protocol inbound(?:\s+\S+)*\z/)&.split,
+            local_protocols: effective_configured_value(/\Aprotocol inbound\s+((?:all|ssh|stelnet|telnet)(?:\s+(?:ssh|stelnet|telnet))*)\z/, entries: section.children,
+              family: /\A(?:undo )?protocol inbound\b/, fact: "ssh.vty_ssh_only", reset: /\Aundo protocol inbound(?:\s+\S+)*\z/)&.split,
             authentication: effective_configured_value(/\Aauthentication-mode\s+(scheme|aaa|password|none)\z/, entries: login_entries,
               family: /\A(?:undo )?authentication-mode\b/, fact: "ssh.vty_aaa", reset: /\Aundo authentication-mode(?: \S+)?\z/),
             local_authentication: effective_configured_value(/\Aauthentication-mode\s+(scheme|aaa|password|none)\z/, entries: section.children,

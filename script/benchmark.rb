@@ -238,3 +238,19 @@ end
     raise "Incomplete SNMP permission transaction" unless plan.status == :ready && plan.operations.size == size * 3
   end
 end
+
+# 完整管理域与逐范围证明共走公开入口，确认配对呈现不会遗漏待修正范围。
+[ 1, 8, 32 ].each do |size|
+  names = size.times.map { |index| "line vty #{index}" }
+  source = "sysname LAB\ndomain ADMIN\n authentication login local\n#\ndomain default enable ADMIN\n" +
+    names.map { |name| "#{name}\n authentication-mode password\n protocol inbound all\n#\n" }.join
+  policy = Baseline::Policy.new("version" => 1, "checks" => { "ssh.vty_aaa" => { "expected" => true, "remediation" => {
+    "management_domain" => "ADMIN", "methods" => [ { "kind" => "local" } ], "syntax_profile" => "comware7", "vty_ranges" => names,
+    "local_fallback_access_verified" => true, "management_consumers_verified" => true
+  } } })
+  service = Baseline::Remediation.new(policy: policy)
+  measure("Comware VTY authentication #{size} ranges") do
+    plan = service.call(configuration: source, platform: :h3c, complete: true)
+    raise "Expected full VTY account-mode plan" unless plan.status == :ready && plan.operations.size == size && plan.steps.size == size * 2
+  end
+end
