@@ -58,7 +58,7 @@ NTP 与 Syslog 的配置资源保留了用于后续生成的对象参数。NTP �
 
 未指定 vrouter 的作用域是 `{vrf: default}`；显式名称也为 default 的路由器使用 `{vrf: default, vrf_mode: named}`，批准对象和 `managed_scopes` 都精确匹配该标记。二者不能共用默认哨兵，不能因更新来源而丢弃显式路由限定词，也不能借默认范围删除另一上下文的服务器。NTP 原生前后状态用 `vrf_explicit` 保留这项区别；带 key 的上下文切换同样要求外部对端核验。同一作用域标记也用于 StoneOS Syslog，正向及删除命令均保留显式限定词。
 
-`ntp.key_slots` 保存最终材料存在、算法、格式及来源行，不保留秘密。StoneOS 该语法没有独立的可信声明，显式记录 `trust_required:false`、`trusted:nil`，不能把它伪装成 Comware/VRP 的 trusted:true。`ntp.authentication_bindings` 的配置就绪状态基于已知材料、关联引用和认证开关；无法识别材料更新时，逐关联就绪也保持未知。最终 md5 材料作为明文凭据元数据参与存储/强度审计；损坏、未知、撤销和接口内声明不能提供材料。新引用、地址更换或带 key 的路由迁移需要 `ntp_peer_key_compatibility_verified:true`；不输出新密钥、占位材料或认证/服务开关。低层呈现调用必须提供规划器已核验的完整操作标识。
+`ntp.key_slots` 保存最终材料存在、算法、格式及来源行，不保留秘密。StoneOS 该语法没有独立的可信声明，显式记录 `trust_required:false`、`trusted:nil`，不能把它伪装成 Comware/VRP 的 trusted:true。`ntp.authentication_bindings` 的配置就绪状态基于已知材料、关联引用和认证开关；无法识别材料更新时，逐关联就绪也保持未知。最终 md5 材料作为明文凭据元数据参与存储/强度审计；损坏、未知、撤销和接口内声明不能提供材料。新引用、地址更换或带 key 的路由迁移需要 `ntp_peer_key_compatibility_verified:true`；不输出新密钥、占位材料或服务开关。全局认证按单独契约核验全部关联后切换。低层呈现调用必须提供规划器已核验的完整操作标识。
 
 [公开示例](../examples/remediation_hillstone_ntp.rb) 与独立状态模型验证离线配置变换、无关原文保留及再次零变更。StoneOS 文档还说明 NTP 服务缺省关闭；服务器对象符合策略不证明服务启用、同步、接口与 vrouter 存在、对端接受或网络可达。审核后执行前仍须核对这些实际条件，既有密钥的就绪也不证明其强度或对端材料相同。
 
@@ -219,11 +219,27 @@ H3C 文档分别定义组名和安全级别，以及省略读视图时的默认�
 
 ## NTP 材料、可信声明与关联证据
 
-`ntp.authentication` 继续保持已发布的显式开关契约，不能把开关通过当作完整认证或同步成功。Comware/VRP `ntp.key_slots` 独立记录 key ID、算法、存储格式、材料存在性、完整性、可信状态及来源行；`ntp.authentication_bindings` 对每个 server/peer 给出引用、配置就绪性和具体缺证原因。材料替换及删除先归约，旧材料不进入凭据记录。损坏的最终声明产生未知材料；未知凭据使用 `present: nil`，不覆盖其他已确认的明文/旧格式违规。密文不用于推断强度或对端一致性。局部输入不能证明完整清单或认证就绪。
+`ntp.authentication` 检查配置开关，不能把开关通过当作完整认证或同步成功。Comware/VRP/StoneOS 在完整输入且没有开关声明时采用文档中的关闭缺省值；部分输入及损坏的最终声明保持未知。Comware/VRP `ntp.key_slots` 独立记录 key ID、算法、存储格式、材料存在性、完整性、可信状态及来源行；`ntp.authentication_bindings` 对每个 server/peer 给出引用、配置就绪性和具体缺证原因。材料替换及删除先归约，旧材料不进入凭据记录。损坏的最终声明产生未知材料；未知凭据使用 `present: nil`，不覆盖其他已确认的明文/旧格式违规。密文不用于推断强度或对端一致性。局部输入不能证明完整清单或认证就绪。
 
 H3C profile 支持 md5 与文档中的 hmac-sha-1/256/384/512 拼写及显式 cipher/simple；VRP profile 独立支持 md5、hmac-sha256、aes-128-cmac、aes-256-cmac 和 cipher/未限定格式的明文。算法列表表示可识别语法，并非安全推荐。密钥 ACL 及未确认语法保持未知。H3C 删除密钥自动撤销可信状态；未确认的 VRP 删除联动保持未知，需要后续显式可靠声明。未知的最后认证开关语句不会回落到旧启用值。
 
-新的批准关联可引用已有、完整、可信材料，并要求 `ntp_peer_key_compatibility_verified: true` 外部核验 ID、算法及材料。规划器传给呈现器的 `verified_ntp_key_ids` 是本次方案内的非秘密依赖证据；独立呈现不自行假定可信材料存在。不生成材料命令，不改变认证开关或可信声明。独立测试模型应用原生命令后核对对象审计、配置就绪图、无关文本及第二次零变更；这些不是设备/NTP 对端测试。
+新的批准关联可引用已有、完整、可信材料，并要求 `ntp_peer_key_compatibility_verified: true` 外部核验 ID、算法及材料。规划器传给呈现器的 `verified_ntp_key_ids` 是本次方案内的非秘密依赖证据；独立呈现不自行假定可信材料存在。不生成材料命令或可信声明；全局开关按下述独立契约规划。独立测试模型应用原生命令后核对对象审计、配置就绪图、无关文本及第二次零变更；这些不是设备/NTP 对端测试。
+
+### 全局认证切换
+
+H3C/Huawei/StoneOS 的 `ntp.authentication.remediation.ntp_peer_key_compatibility_verified: true` 明确表示外部已核验本次批准的全局认证状态、全部配置及潜在运行时对端的兼容性；开启和关闭都需要，空静态清单也不能代替批准。完整输入、已知当前开关和完整消费者清单是前提。存在广播、组播、参考时钟、未建模模式或接口内 NTP 配置时受阻，不把静态 server/peer 清单当成全部消费者。`ntp.authentication_consumers_complete` 仅表示已配置模式已建模，不证明运行时没有被动或动态对端。
+
+开启前检查最终全部关联，包括端点管理范围外保留的关联：每项必须引用已知完整材料，Comware/VRP 还需显式可信。已有 StoneOS 材料没有独立可信命令，不虚构该条件。新材料、材料变更和新可信声明仍为人工前提；不生成秘密值或秘密占位符。已批准的关联变更与全局开关在同一事务内规划及呈现，任何依赖或命令失败都不导出该事务的部分命令；相关检查记录完整事务操作 ID。
+
+H3C/Huawei/StoneOS 的完整原生关联库存允许显式批准 source 或 key_id 赋值，即使原配置没有明确字段而审计保持 resource_attribute_unresolved；不把隐式值改写为已知事实。材料、作用域及外部兼容条件仍须满足，其他未知字段或不完整库存不能通过此路径生成。
+
+Comware/VRP 启用遵守先认证后基本关联的顺序。已有静态关联必须全部暂时撤下，开启认证后重建最终完整集合，包括未改变参数的关联。必须明确提供 `ntp_association_recreation_approved: true` 批准短暂失去全部静态时间来源及重建；这不是授予新材料或越界改变端点参数的批准。方案记录 `temporary_association_withdrawal`，风险至少为 high。有关联时还必须选择 `syntax_profile`：H3C `comware_legacy` 使用前置 VPN 与 source-interface，`comware7` 使用后置 VPN 与 source；Huawei `vrp_s_series` 使用后置 VPN、preference 与 unicast-server/peer 后的 ipv6。profile 是调用方对目标版本语法的确认，不从厂商品牌推断；其他版本及不同关键词继续需要独立 profile。无关联时无需重建批准。
+
+StoneOS 在批准的关联增删完成后以 `activate` 阶段启用认证。所有平台关闭认证均在关联变更前以 `prepare` 阶段执行，保留材料；不隐式开启 NTP 服务。全局认证操作具有完整指纹验证及厂商阶段校验。命令只供人工审核，没有连接设备、save 或 commit。参见[合成示例](../examples/remediation_ntp_authentication_switch.rb)。
+
+语法依据：[H3C 旧版命令](https://www.h3c.com/cn/d_202401/2040058_30005_0.htm)、[Comware 7 认证及关联](https://www.h3c.com/en/Support/Resource_Center/EN/Home/Public/00-Public/Technical_Documents/Reference_Guides/Command_References/H3C_CG-32576/17/202604/2827747_294551_0.htm)、[Huawei 认证顺序](https://info.support.huawei.com/hedex/api/pages/EDOC1100277644/AEM10221/03/resources/software/nev8r10_vrpv8r16/user/galaxy/vrp_ntp_cfg_0025.html)、[Huawei S7700 关联语法](https://support.huawei.cn/enterprise/en/doc/EDOC1100459494/cdeee8e2/configuring-ntp-operating-modes)。Huawei NTP 解析和呈现不再接受 H3C priority、前置 VPN 或 ipv6 unicast-server 作为 VRP 语法；未确认的 DNS 与 IPv6 version 选项保持未知/受阻。此项仅有官方语法与合成验证，没有 Huawei 真实备份或设备验证。
+
+Huawei S 系列认证缺省关闭的依据为原厂 V200R023C00 Command Reference 第 3.13.10 节（第 1398 页），可查[原厂手册镜像](https://johnny-unitaz.info/mans/Huawei/Commands/S300%2C%20S500%2C%20S2700%2C%20S5700%2C%20and%20S6700%20V200R023C00%20Command%20Reference/01-03%20Device%20Management%20Commands.pdf)。
 
 依据：[H3C 密钥及可靠声明](https://www.h3c.com/en/Support/Resource_Center/EN/Home/Public/00-Public/Technical_Documents/Reference_Guides/Command_References/H3C_CR-28394/15/202508/2623951_294551_0.htm)、[H3C 可靠声明与密钥删除联动](https://www.h3c.com/en/d_202112/1504433_294551_0.htm)、[Huawei NTP 认证配置及算法](https://info.support.huawei.com/hedex/api/pages/EDOC1100277644/AEM10221/03/resources/software/nev8r10_vrpv8r16/user/galaxy/vrp_ntp_cfg_0025.html)。其他产品/版本需对应 profile 证据，不能从语法相近推断已覆盖。
 

@@ -27,6 +27,10 @@ module Baseline
     ACCESS_STYLE = nil
     SNMP_GLOBAL_ACL = nil
     TACACS_STYLE = nil
+    NTP_AUTHENTICATION_COMMANDS = {}.freeze
+    NTP_AUTHENTICATION_BEFORE_ASSOCIATIONS = false
+
+    def authentication_precedes_associations? = self.class::NTP_AUTHENTICATION_BEFORE_ASSOCIATIONS
 
     # 原生命令依赖的独立事实由规划器核验，而非在命令里假定成立。
     def prerequisites(id) = self.class::PREREQUISITES.fetch(id, {})
@@ -36,7 +40,8 @@ module Baseline
 
     # 查询当前呈现器确实可生成的设置类型。
     def supports?(id)
-      source_requires_associations?(id) || self.class::SOURCE_COMMANDS.key?(id) || id == "services.disabled" && self.class::DISABLE_COMMANDS.any? ||
+      id == "ntp.authentication" && self.class::NTP_AUTHENTICATION_COMMANDS.any? ||
+        source_requires_associations?(id) || self.class::SOURCE_COMMANDS.key?(id) || id == "services.disabled" && self.class::DISABLE_COMMANDS.any? ||
         id == "ssh.vty_ssh_only" && !self.class::VTY_PROTOCOL_COMMAND.nil? ||
         id == "ssh.enabled" && !self.class::SSH_DISABLE_COMMAND.nil? ||
         %w[snmp.acl_bound snmp.acl_restricted snmp.sources].include?(id) && !self.class::SNMP_GLOBAL_ACL.nil? ||
@@ -50,10 +55,24 @@ module Baseline
     end
 
     # 将完整操作转换为命令；任何一个子命令不受支持则整体拒绝该操作。
-    def render(operation, verified_ntp_key_ids: [], verified_ntp_slots: [])
+    def render(operation, verified_ntp_key_ids: [], verified_ntp_slots: [], verified_ntp_authentication_operation_ids: [], ntp_syntax_profile: nil)
+      if operation.kind == "ntp.authentication"
+        unless verified_ntp_authentication_operation_ids.is_a?(Array) && verified_ntp_authentication_operation_ids.all? { |id| id.is_a?(String) && /\A[0-9a-f]{64}\z/.match?(id) }
+          raise ArgumentError, "Invalid verified NTP authentication operations"
+        end
+        command = self.class::NTP_AUTHENTICATION_COMMANDS[operation.after]
+        raise UnsupportedOperation, "ntp_authentication_preconditions_unverified" unless command && verified_ntp_authentication_operation_ids.include?(operation.id)
+        phase = operation.after && !authentication_precedes_associations? ? :activate : :prepare
+        raise UnsupportedOperation, "invalid_ntp_authentication_order" unless operation.phase == phase
+        return [ CommandStep.new(view: [], command: command, phase: operation.phase, operation_id: operation.id) ]
+      end
       return render_tacacs(operation) if TacacsOperationSchema::KINDS.include?(operation.kind)
       return render_access(operation) if AccessOperationSchema::KINDS.include?(operation.kind)
-      return render_ntp(operation, verified_key_ids: verified_ntp_key_ids, verified_slots: verified_ntp_slots) if operation.kind == "ntp.association" && self.class::RESOURCE_KINDS.include?(operation.kind)
+      if operation.kind == "ntp.association" && self.class::RESOURCE_KINDS.include?(operation.kind)
+        context = { verified_key_ids: verified_ntp_key_ids, verified_slots: verified_ntp_slots }
+        context[:syntax_profile] = ntp_syntax_profile if ntp_syntax_profile
+        return render_ntp(operation, **context)
+      end
       return render_resource(operation) unless operation.kind == "setting"
       id = operation.identity.fetch("rule")
       if id == "ssh.vty_ssh_only" && self.class::VTY_PROTOCOL_COMMAND && operation.after == true

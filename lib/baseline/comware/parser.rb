@@ -9,6 +9,7 @@ module Baseline
   module Comware
     # 复用 Comware 与 VRP 结构，由厂商子类选择账号、SSH 和 TACACS 语法。
     class Parser < Baseline::Parser
+      NTP_AUTHENTICATION_STYLE = :comware
       include Authentication
       include NtpAuthentication
       BINDING_KINDS = { "tacacs.endpoint" => [ "aaa.domain" ].freeze }.freeze
@@ -113,9 +114,10 @@ module Baseline
         configured_server_addresses(role == "server" ? "ntp.servers" : "ntp.associations", pattern, entries, negate: "undo") do |text, match, negative, entry|
           options = parse_server_options(match.post_match, flags: [ "priority" ],
             integers: { "version" => 1..4, "authentication-keyid" => 1..4_294_967_295, "authkey" => 1..4_294_967_295 },
-            names: [ "vpn-instance" ], interfaces: [ "source-interface" ])
+            names: [ "vpn-instance" ], interfaces: %w[source-interface source])
           vpn = text[/\Antp-service (?:ipv6 )?unicast-#{role}\s+vpn-instance\s+(\S+)/, 1]
-          if options && !(vpn && options.key?("vpn-instance")) && !(options.key?("authkey") && options.key?("authentication-keyid"))
+          if options && !(vpn && options.key?("vpn-instance")) && !(options.key?("authkey") && options.key?("authentication-keyid")) &&
+              !(options.key?("source") && options.key?("source-interface"))
             unambiguous = (vpn || options["vpn-instance"]) != "default"
             record_unknown_fact("ntp.associations", [ entry ], code: :ambiguous_routing_scope) unless unambiguous
             record_ntp_resource(address: match[1], role: role, vrf: vpn || options["vpn-instance"], options: options, entry: entry, negative: negative, complete: unambiguous)

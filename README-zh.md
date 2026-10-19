@@ -69,7 +69,7 @@ puts report.to_text
 
 日志对象生成限制：Huawei 使用 `domain` 和目标之后的 `vpn-instance`；IOS 传输端口修改需已知协议，重复同身份不同传输或名为 default 的 VRF 保持受阻；NX-OS 目前只生成地址、级别、facility 和 use-vrf 子集，port 扩展尚未核验；Hillstone 要求显式协议/端口/类别身份，当前支持 event/config 类别。错误选项会整体阻止该指标操作，不输出“只删除而无法新增”的部分方案。不同厂商/固件的默认值和容量不能互相套用。
 
-H3C/Huawei/IOS/NX-OS 的 NTP 目标支持 server/peer 对象增删及已建模选项替换；旧 `ntp.servers` 只管理 server，保留 peer。`ntp.associations` 配合 `managed_scopes` 可显式管理关联类型、VRF 和选项。与日志对象相同，数量和地址检查共同约束最终集合，净新增需已确认容量。既有 key 引用可以保留，但新 key 编号不能代替认证材料证据；全局认证已启用或策略要求认证时，缺少 key 引用的新关联不会生成。认证材料建立、可信 key 配置以及认证开关完整依赖尚在开发，不会仅打开开关后声称问题已修复。未知的隐式 prefer/burst 等状态不会被当成关闭。
+H3C/Huawei/IOS/NX-OS 的 NTP 目标支持 server/peer 对象增删及已建模选项替换；旧 `ntp.servers` 只管理 server，保留 peer。`ntp.associations` 配合 `managed_scopes` 可显式管理关联类型、VRF 和选项。数量和地址检查共同约束最终集合，净新增需已确认容量。既有 key 引用可以保留，但新 key 编号不能代替材料证据。H3C/Huawei/StoneOS 支持在完整消费者证据及外部对端核验后规划全局认证切换；Comware/VRP 启用还需明确批准关联的临时撤下重建，并选择兼容的原生语法 profile。新材料、可信声明仍为人工前提。未知的隐式 prefer/burst 等状态不会被当成关闭。参见[人工审核示例](examples/remediation_ntp_authentication_switch.rb)与[认证契约](docs/baseline-metrics.md)。
 
 管理访问生成：H3C/Huawei/IOS 可按已解析且不交叠的 VTY 范围收紧入站协议到 SSH，前提是已知 SSH 启用；H3C/Huawei 还要求每个待修改范围明确配置兼容认证（scheme/aaa），仅有继承证据时受阻，避免范围级协议命令改变有效认证方式。只修改需要收紧的范围，保留登录方式及 ACL。协议限制与“关闭 SSH”批准值冲突时阻止生成。H3C/Huawei/NX-OS 可生成显式批准的 SSH 关闭命令，按高风险操作呈现；不会删除或生成密钥。启用 SSH、选择新的本地或远程认证链仍需密钥及端点/认证链证据，当前保持受阻，不能把任意 `authentication-mode` 替换当作完整认证修复。
 
@@ -166,7 +166,7 @@ Hillstone SNMPv3 根据 [StoneOS CLI 手册](https://kb.hillstonenet.com/en/wp-c
 
 PAN-OS NTP 对象修正使用 `ntp.associations`、`primary-ntp-server` / `secondary-ntp-server` 名称及显式空作用域（`managed_scopes: [{}]`）。地址更新保留槽位认证子树；已认证地址变化须提供 `ntp_peer_key_compatibility_verified: true`。新增槽位须明确 `authenticated: false`；新建或变更认证材料仍列为人工前提。删除仅作用于批准槽位；未知选项或删除后丢失启用认证规则所需证据时受阻。见[离线示例](examples/remediation_palo_alto_ntp.rb)。命令不提交候选配置。
 
-StoneOS NTP 支持批准服务器清单、逐服务器来源/prefer 更新及路由域迁移。须声明 `ntp.associations` 和受管路由作用域；共同的 `ntp.source` 值通过这些批准对象设置，不能扩大作用域。原生操作按全局服务器地址定位，保留省略字段，并遵守文档规定的三服务器上限。既有 key 引用要求材料已知；新引用或路由迁移还须外部核验对端兼容性。不生成密钥、服务开关或认证开关命令。参见[人工审核示例](examples/remediation_hillstone_ntp.rb)与[StoneOS 契约](docs/baseline-metrics.md)。
+StoneOS NTP 支持批准服务器清单、逐服务器来源/prefer 更新及路由域迁移。须声明 `ntp.associations` 和受管路由作用域；共同的 `ntp.source` 值通过这些批准对象设置，不能扩大作用域。原生操作按全局服务器地址定位，保留省略字段，并遵守文档规定的三服务器上限。既有 key 引用要求材料已知；新引用或路由迁移还须外部核验对端兼容性。不生成密钥或服务开关；全局认证切换遵循单独的完整依赖契约。参见[人工审核示例](examples/remediation_hillstone_ntp.rb)与[StoneOS 契约](docs/baseline-metrics.md)。
 
 PAN-OS `syslog.destinations` 还可明确要求 `syslog.device`、`syslog.forwarding`、`syslog.zone` 绑定，区分服务器定义、设备日志直接引用，以及共享转发 profile 到本机或指定 vsys 安全规则的引用链。profile、匹配项和规则名保持大小写；明确要求的 `disabled`、`log_start`、`log_end` 必须有显式证据。过滤式及动作内容不导出，也不作为投递成功证明。未知引用、模板及不完整输入保持未知。见[配置引用示例](examples/palo_alto_syslog_bindings.rb)。
 

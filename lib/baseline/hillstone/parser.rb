@@ -11,6 +11,7 @@ module Baseline
     # StoneOS 管理端点与原生主机允许列表不同于路由器 VTY。
     class Parser < Baseline::Parser
       include NtpConfiguration
+      NTP_AUTHENTICATION_STYLE = :stoneos
       # 原生管理端点没有 VTY 模型；未建模能力保留未知，不改变规则适用范围。
       UNSUPPORTED_FACTS = {
         "ssh.versions" => :ssh_version_unmodeled,

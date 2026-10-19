@@ -6,7 +6,7 @@ RSpec.describe "NTP association resources" do
   {
     "h3c" => [ "sysname LAB", "ntp-service unicast-server 192.0.2.10 vpn-instance OPS version 4 authentication-keyid 7 priority source-interface LoopBack 0",
       { "version" => 4, "key_id" => 7, "prefer" => true, "source" => "LoopBack0" } ],
-    "huawei" => [ "sysname LAB", "ntp-service unicast-server 192.0.2.10 vpn-instance OPS version 4 authentication-keyid 7 priority source-interface LoopBack 0",
+    "huawei" => [ "sysname LAB", "ntp-service unicast-server 192.0.2.10 vpn-instance OPS version 4 authentication-keyid 7 preference source-interface LoopBack 0",
       { "version" => 4, "key_id" => 7, "prefer" => true, "source" => "LoopBack0" } ],
     "cisco_ios" => [ "hostname LAB", "ntp server vrf OPS 192.0.2.10 version 4 key 7 prefer source Loopback0",
       { "version" => 4, "key_id" => 7, "prefer" => true, "source" => "Loopback0" } ],

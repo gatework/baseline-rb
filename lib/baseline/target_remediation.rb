@@ -5,7 +5,12 @@ require_relative "configuration_operation"
 module Baseline
   # 地址、数量和对象规则共同规划目标集合，领域子类保留各自身份与协议含义。
   class TargetRemediation
-    Result = Data.define(:operations, :details)
+    Result = Data.define(:operations, :details, :projected) do
+      # 投影仅在领域规划器之间传递，不复制进每个检查的公开 details。
+      def initialize(operations:, details:, projected: nil)
+        super(operations: operations, details: details, projected: CtxParser::Immutable.copy(projected))
+      end
+    end
     class Blocked < StandardError
       attr_reader :reason, :requirements
       # 受阻原因使用稳定代码，不携带配置文本。
@@ -73,7 +78,7 @@ module Baseline
       raise Blocked, :resource_unresolved if operations.empty? && !allow_empty_operations?
       operations, details = order_for_capacity(operations, current, projected, applicable)
       ordered = operations.sort_by { |item| { prepare: -1, create: 0, update: 1, remove: 2 }.fetch(item.phase) }.freeze
-      Result.new(operations: ordered, details: CtxParser::Immutable.copy(details))
+      Result.new(operations: ordered, details: CtxParser::Immutable.copy(details), projected: projected)
     end
 
     private

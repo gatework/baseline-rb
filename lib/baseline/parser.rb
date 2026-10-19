@@ -5,6 +5,7 @@ require "ctx_parser/input"
 require_relative "document"
 require_relative "fact_builder"
 require_relative "credential"
+require_relative "ntp_authentication_inventory"
 
 module Baseline
   # 共享输入与提取边界；CtxParser 跟踪来源，FactBuilder 归纳领域证据。
@@ -22,6 +23,7 @@ module Baseline
     UNSUPPORTED_FACTS = {}.freeze
     PARTIAL_FACTS = {}.freeze
     BINDING_KINDS = {}.freeze
+    NTP_AUTHENTICATION_STYLE = nil
 
     SERVICE_PORTS = { "ssh" => 22, "telnet" => 23, "snmp" => 161, "snmptrap" => 162 }.freeze
     SNMP_OPTIONS = %w[auth priv authentication-mode privacy-mode acl access use-ipv4acl group local engineid engineID
@@ -66,6 +68,11 @@ module Baseline
     # 以相同顺序编排各厂商的原子领域能力，语法提取由适配器实现。
     def parse_services
       parse_ntp
+      if (style = self.class::NTP_AUTHENTICATION_STYLE)
+        unresolved = NtpAuthenticationInventory.unresolved(roots, style: style)
+        record_fact("ntp.authentication_consumers_complete", unresolved.empty?)
+        record_unknown_fact("ntp.authentication_consumers", unresolved, code: :ntp_authentication_consumers_unresolved) unless unresolved.empty?
+      end
       parse_syslog
       parse_snmp
     end
@@ -319,7 +326,7 @@ module Baseline
     def record_ntp_resource(address:, role:, vrf:, options:, entry:, negative: false, complete: true, scope: nil)
       scope ||= { "vrf" => vrf || "default" }
       mapping = { "key" => "key_id", "authkey" => "key_id", "authentication-keyid" => "key_id",
-        "priority" => "prefer", "source-interface" => "source", "normal-sync" => "normal_sync" }
+        "priority" => "prefer", "preference" => "prefer", "source-interface" => "source", "normal-sync" => "normal_sync" }
       attributes = options.reject { |key, _| %w[vpn-instance use-vrf vrouter].include?(key) }.to_h do |key, value|
         [ mapping.fetch(key, key), key == "key" && value.is_a?(String) ? value.to_i : value ]
       end

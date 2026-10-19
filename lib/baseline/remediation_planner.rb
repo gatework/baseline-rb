@@ -4,6 +4,7 @@ require_relative "configuration_operation"
 require_relative "remediation_plan"
 require_relative "syslog_remediation"
 require_relative "ntp_remediation"
+require_relative "ntp_authentication_remediation"
 require_relative "vty_remediation"
 require_relative "access_remediation"
 require_relative "snmp_access_remediation"
@@ -50,8 +51,16 @@ module Baseline
     def call(audit)
       raise ArgumentError, "Remediation policy does not match audit" unless audit.policy_sha256 == @policy.sha256
       operations, steps = [], []
+      ntp_authentication = NtpAuthenticationRemediation.new(policy: @policy, renderer: @renderer).call(audit)
+      if ntp_authentication
+        operations.concat(ntp_authentication.operations)
+        steps.concat(ntp_authentication.steps)
+      end
       conflicting_access_domains = conflicting_acl_allocations(audit)
       checks = audit.findings.map do |finding|
+        if (planned = ntp_authentication&.checks&.[](finding.id))
+          next check(finding, planned.fetch(:status), planned[:reason], **planned.except(:status, :reason))
+        end
         association_source = @renderer.source_requires_associations?(finding.id)
         known_associations = association_source && finding.reason == :fact_unavailable && !finding.expected.nil? && audit.configuration.fact_known?("ntp.associations")
         explicit_ntp_attributes = NtpRemediation.explicit_native_attributes?(finding, audit.configuration)

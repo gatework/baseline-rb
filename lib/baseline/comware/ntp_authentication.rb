@@ -12,7 +12,10 @@ module Baseline
       def ntp_authentication_switch
         entries = matching_blocks(/\A(?:undo )?ntp-service authentication(?:\s|\z)/)
         entry = entries.last
-        return unless entry
+        unless entry
+          record_fact("ntp.authentication", false, []) if @fact_builder.complete?
+          return @fact_builder.complete? ? false : nil
+        end
         enabled = case entry.text
         when "ntp-service authentication enable" then true
         when "undo ntp-service authentication enable" then false

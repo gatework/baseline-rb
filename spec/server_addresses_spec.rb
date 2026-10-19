@@ -48,12 +48,13 @@ RSpec.describe "Baseline server address evidence" do
       expect(report.configuration.fact("tacacs.servers")).to eq([])
     end
 
-    it "accepts DNS and IPv6 NTP endpoints without confusing options on #{platform}" do
+    it "accepts supported address families without confusing NTP options on #{platform}" do
       policy = Baseline::Policy.new("version" => 1, "checks" => { "ntp.minimum_servers" => { "expected" => 2 } })
       source = "#{syntax[:hostname]}\n#{syntax[:ntp]} time.example.test\n#{syntax[:ntp]} 2001:db8::10\n"
+      source = "sysname LAB\nntp-service unicast-server 192.0.2.10\nntp-service unicast-server ipv6 2001:db8::10\n" if platform == "huawei"
       report = Baseline::Audit.new(policy: policy).call(configuration: source, platform: platform, complete: true)
       expect(report).to be_compliant
-      expect(report.configuration.fact("ntp.servers")).to eq(%w[time.example.test 2001:db8::10])
+      expect(report.configuration.fact("ntp.servers")).to eq(platform == "huawei" ? %w[192.0.2.10 2001:db8::10] : %w[time.example.test 2001:db8::10])
     end
   end
 

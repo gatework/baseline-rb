@@ -7,6 +7,7 @@ require_relative "rule"
 require_relative "access_operation_schema"
 require_relative "tacacs_operation_schema"
 require_relative "ntp_server_operation_schema"
+require_relative "ntp_authentication_operation_schema"
 
 module Baseline
   # 离线变更意图与厂商命令分离；标识只由不可变领域数据计算。
@@ -34,6 +35,8 @@ module Baseline
         before, after = [ before, after ].map { |fields| fields.merge("profiles" => fields.fetch("profiles").sort) }
       elsif kind == NtpServerOperationSchema::KIND
         NtpServerOperationSchema.validate!(identity: identity, scope: scope, before: before, after: after, action: action, phase: phase)
+      elsif kind == NtpAuthenticationOperationSchema::KIND
+        NtpAuthenticationOperationSchema.validate!(identity: identity, scope: scope, before: before, after: after, action: action, phase: phase)
       else
         valid_shape = action == :add && before.nil? && after.is_a?(Hash) && phase == :create ||
           action == :remove && before.is_a?(Hash) && after.nil? && %i[prepare remove].include?(phase) ||

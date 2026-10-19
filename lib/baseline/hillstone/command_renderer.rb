@@ -9,6 +9,7 @@ module Baseline
       RESOURCE_KINDS = %w[syslog.destination ntp.association].freeze
       ENTER = "configure"
       LEAVE = "exit"
+      NTP_AUTHENTICATION_COMMANDS = { true => "ntp authentication", false => "no ntp authentication" }.freeze
 
       def source_requires_associations?(id) = id == "ntp.source"
 

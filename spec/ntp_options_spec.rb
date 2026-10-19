@@ -24,6 +24,8 @@ RSpec.describe "Baseline NTP declaration options" do
     it "keeps another #{platform} VRF active when one server is removed" do
       if platform.start_with?("cisco")
         command = "ntp server vrf A 192.0.2.10\nntp server vrf B 192.0.2.10\nno ntp server vrf A 192.0.2.10"
+      elsif platform == "huawei"
+        command = "ntp-service unicast-server 192.0.2.10 vpn-instance A\nntp-service unicast-server 192.0.2.10 vpn-instance B\nundo ntp-service unicast-server 192.0.2.10 vpn-instance A"
       else
         command = "ntp-service unicast-server vpn-instance A 192.0.2.10\nntp-service unicast-server vpn-instance B 192.0.2.10\nundo ntp-service unicast-server vpn-instance A 192.0.2.10"
       end
@@ -53,21 +55,28 @@ RSpec.describe "Baseline NTP declaration options" do
   end
 
   %w[h3c huawei].each do |platform|
-    it "recognizes the #{platform} IPv6 NTP command family and rejects inline family keywords" do
-      report = audit(platform, "ntp-service ipv6 unicast-server 2001:db8::10 version 4")
+    it "recognizes the #{platform} native IPv6 NTP command family" do
+      prefix = platform == "huawei" ? "ntp-service unicast-server ipv6" : "ntp-service ipv6 unicast-server"
+      other = platform == "huawei" ? "ntp-service ipv6 unicast-server" : "ntp-service unicast-server ipv6"
+      report = audit(platform, "#{prefix} 2001:db8::10")
       expect(report.findings.first.status).to eq(:pass)
       expect(report.configuration.fact("ntp.servers")).to eq([ "2001:db8::10" ])
-      [ "ntp-service ipv6 unicast-server", "ntp-service ipv6 unicast-server 2001:db8::10 trailing-junk",
-        "ntp-service unicast-server ip time.example.test", "ntp-service unicast-server ipv6 2001:db8::10" ].each do |command|
+      [ prefix, "#{prefix} 2001:db8::10 trailing-junk", "ntp-service unicast-server ip time.example.test", "#{other} 2001:db8::10" ].each do |command|
         expect(audit(platform, command).findings.first.status).to eq(:unknown), command
       end
-      removed = audit(platform, "ntp-service ipv6 unicast-server 2001:db8::10\nundo ntp-service ipv6 unicast-server 2001:db8::10")
+      removed = audit(platform, "#{prefix} 2001:db8::10\nundo #{prefix} 2001:db8::10")
       expect(removed.findings.first.status).to eq(:fail)
     end
 
     it "accepts #{platform} NTP VPN and interface options without treating keywords as servers" do
-      [ "ntp-service unicast-server vpn-instance MGMT time.example.test authentication-keyid 10 priority source-interface vlan-interface 1 version 3",
-        "ntp-service unicast-server 2001:db8::10 authkey 10 source-interface Vlanif1 version 4" ].each do |command|
+      commands = if platform == "huawei"
+        [ "ntp-service unicast-server 192.0.2.10 vpn-instance MGMT authentication-keyid 10 preference source-interface vlanif 1 version 3",
+          "ntp-service unicast-server ipv6 2001:db8::10 authentication-keyid 10 source-interface Vlanif1" ]
+      else
+        [ "ntp-service unicast-server vpn-instance MGMT time.example.test authentication-keyid 10 priority source-interface vlan-interface 1 version 3",
+          "ntp-service unicast-server 2001:db8::10 authkey 10 source-interface Vlanif1 version 4" ]
+      end
+      commands.each do |command|
         expect(audit(platform, command).findings.first.status).to eq(:pass), command
       end
       [ "vpn-instance", "vpn-instance MGMT", "ipv6", "ip" ].each do |prefix|

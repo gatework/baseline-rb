@@ -6,6 +6,8 @@ module Baseline
   module H3c
     # Comware 的全局源接口、协议版本和服务开关语法。
     class CommandRenderer < Baseline::CommandRenderer
+      NTP_AUTHENTICATION_COMMANDS = { true => "ntp-service authentication enable", false => "undo ntp-service authentication enable" }.freeze
+      NTP_AUTHENTICATION_BEFORE_ASSOCIATIONS = true
       SOURCE_COMMANDS = { "syslog.source" => "info-center loghost source", "ntp.source" => "ntp-service source" }.freeze
       DISABLE_COMMANDS = { "telnet" => "undo telnet server enable", "http" => "undo ip http enable",
         "https" => "undo ip https enable", "ftp" => "undo ftp server enable", "tftp" => "undo tftp server enable" }.freeze

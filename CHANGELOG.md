@@ -4,6 +4,10 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+- Plan guarded global NTP authentication transitions on H3C, Huawei and StoneOS using complete consumer inventories, final material references and explicit peer verification.
+- Require explicit temporary association recreation and native syntax profiles when enabling Comware/VRP authentication; preserve existing materials and reject partial transactions.
+- Use Huawei-native preference, VPN and IPv6 association syntax instead of inherited Comware forms; retain documented disabled authentication defaults only for complete snapshots.
+
 ## 0.6.0 (2026-10-19)
 
 - Generate guarded StoneOS NTP server additions, removals, field updates, routing moves and per-server source changes with explicit associations/scopes and the native three-server capacity limit.

@@ -6,25 +6,25 @@ require "ipaddr"
 class ComwareNtpState
   TARGET = /\A(?:undo )?ntp-service (?:ipv6 )?unicast-(server|peer) (?:vpn-instance (\S+) )?(\S+)(?:\s|\z)/
 
-  def initialize(text, capacity: 4)
-    @lines, @capacity = text.lines, capacity
+  def initialize(text, capacity: 4, platform: "h3c")
+    @lines, @capacity, @platform = text.lines, capacity, platform
   end
 
   # 仅在全局视图修改完整身份，所有密钥、可信声明及其他配置保持原文。
   def apply(commands)
     commands.each do |command|
       next if %w[system-view return].include?(command)
-      target = TARGET.match(command)
+      target = target_match(command)
       raise "Unsupported NTP test command" unless target
       indexes = @lines.each_index.select do |index|
         # 合成配置使用顶层零缩进，不能误改接口内命令。
-        old = TARGET.match(@lines[index])
+        old = target_match(@lines[index])
         old && native_identity(old) == native_identity(target)
       end
       insertion = indexes.first || @lines.index { |line| line.strip == "return" } || @lines.size
       indexes.reverse_each { |index| @lines.delete_at(index) }
       @lines.insert(insertion, "#{command}\n") unless command.start_with?("undo ")
-      raise "NTP test capacity exceeded" if @lines.count { |line| TARGET.match?(line) } > @capacity
+      raise "NTP test capacity exceeded" if @lines.count { |line| target_match(line) } > @capacity
     end
     self
   end
@@ -32,6 +32,15 @@ class ComwareNtpState
   def configuration = @lines.join
 
   private
+
+  def target_match(command)
+    unless @platform == "huawei"
+      match = TARGET.match(command)
+      return match && [ nil, match[1], match[2] || command[/\bvpn-instance (\S+)/, 1], match[3] ]
+    end
+    match = /\A(?:undo )?ntp-service unicast-(server|peer) (?:ipv6 )?(\S+)(.*)/.match(command)
+    match && [ nil, match[1], match[3][/\bvpn-instance (\S+)/, 1], match[2] ]
+  end
 
   # IP 的文本别名由原生端点识别为同一身份，不能模拟成两条独立路径。
   def native_identity(match)

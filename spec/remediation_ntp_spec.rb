@@ -38,11 +38,11 @@ RSpec.describe "NTP association remediation" do
     expect(engine.call(configuration: "sysname LAB\n#{after}\n", platform: "h3c", complete: true).status).to eq(:noop)
   end
 
-  it "does not enable authentication without verified key material and trusted key references" do
+  it "does not enable authentication for empty inventory without external peer verification" do
     policy = Baseline::Policy.new("version" => 1, "checks" => { "ntp.authentication" => { "expected" => true } })
     plan = Baseline::Remediation.new(policy: policy).call(configuration: "sysname LAB\nundo ntp-service authentication enable\n", platform: "h3c", complete: true)
     expect(plan.status).to eq(:blocked)
-    expect(plan.checks.first.requirements).to include("ntp_key_reference_evidence")
+    expect(plan.checks.first.requirements).to include("ntp_peer_key_compatibility_verified")
     expect(plan.configuration_commands).to be_empty
   end
 

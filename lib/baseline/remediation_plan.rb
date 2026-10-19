@@ -45,7 +45,11 @@ module Baseline
       unsupported_tacacs_options: "TACACS 目标包含当前未支持的选项，不能忽略后生成命令",
       unsupported_tacacs_port_transition: "同一备服务器地址的端口迁移尚未获得完整原生身份验证",
       tacacs_transition_would_disconnect: "命令过渡步骤会移除已引用职责的最后一个端点，需要安全迁移顺序",
-      ntp_authentication_dependency: "时间认证已启用或被基线要求，新增关联需已核验的认证材料与可信引用",
+      ntp_authentication_dependency: "时间认证切换或关联变更需要完整密钥引用、已核验材料及外部对端兼容证据",
+      ntp_authentication_state_required: "认证开关的当前状态尚未确定，不能假定启用或关闭",
+      ntp_authentication_consumers_required: "存在未建模的 NTP 消费者或关联证据不完整，不能修改全局认证开关",
+      ntp_authentication_recreation_required: "启用认证前需暂时撤下全部既有关联，必须明确批准短暂中断及重建",
+      ntp_authentication_syntax_required: "需要明确选择与本设备兼容的 NTP 关联命令 profile，不能由厂商名称猜测版本",
       vty_scope_unresolved: "VTY 范围不完整、交叠或协议证据未解决，不能逐范围修改",
       vty_authentication_dependency: "待修改范围缺少明确的兼容账户认证；不能假定认证继承不受协议命令影响",
       approved_access_limits_required: "需要本领域的批准来源上限，不能从设备当前配置推导",
@@ -79,7 +83,7 @@ module Baseline
 
     # 所有数据都是独立快照；此对象不执行配置命令。
     def initialize(audit:, checks:, operations:, steps:, renderer:)
-      order = { prepare: -1, create: 0, update: 1, remove: 2, verify: 3 }
+      order = { prepare: -1, create: 0, update: 1, remove: 2, activate: 3, verify: 4 }
       @audit, @checks = audit, checks.dup.freeze
       @operations = operations.each_with_index.sort_by { |operation, index| [ order.fetch(operation.phase), index ] }.map(&:first).freeze
       @steps = steps.each_with_index.sort_by { |step, index| [ order.fetch(step.phase), index ] }.map(&:first).freeze

@@ -18,7 +18,7 @@ RSpec.describe "Native address identity during target transitions" do
   it "produces no NTP add/remove pair for equivalent native IPv6 endpoints" do
     sources = {
       "h3c" => "sysname LAB\nntp-service ipv6 unicast-server 2001:db8::10\n",
-      "huawei" => "sysname LAB\nntp-service ipv6 unicast-server 2001:db8::10\n",
+      "huawei" => "sysname LAB\nntp-service unicast-server ipv6 2001:db8::10\n",
       "cisco_ios" => "hostname LAB\nntp server ipv6 2001:db8::10\n",
       "cisco_nxos" => "hostname LAB\nntp server 2001:db8::10\n"
     }

@@ -10,16 +10,23 @@ module Baseline
     IDS = %w[ntp.minimum_servers ntp.servers ntp.associations].freeze
     KIND = "ntp.association"
 
-    # 完整 StoneOS 库存可显式设置源接口或 key 引用；不把原来的隐式值伪装成已知偏离。
+    # 完整原生库存可显式设置源接口或 key 引用；不把原来的隐式值伪装成已知偏离。
     def self.explicit_native_attributes?(finding, evidence)
       finding.id == "ntp.associations" && finding.status == :unknown && finding.reason == :resource_attribute_unresolved &&
-        evidence.platform == "hillstone" && evidence.complete? && evidence.fact_known?("ntp.associations") &&
+        %w[h3c huawei hillstone].include?(evidence.platform) && evidence.complete? && evidence.fact_known?("ntp.associations") &&
         finding.expected.is_a?(Array) && finding.details.fetch(:unresolved, []).any? &&
         finding.details[:unresolved].all? { |row| row[:fields].all? { |field| %w[source key_id].include?(field) } }
     end
 
     # 全局或批准的认证要求不能因新增无密钥关联而被绕过。
-    def call(finding, audit)
+    def call(finding, audit, authentication_transition: nil)
+      @authentication_finding = audit.findings.find { |item| item.id == "ntp.authentication" && item.status != :not_applicable }
+      @authentication_transition = authentication_transition
+      if authentication_transition && !(authentication_transition.is_a?(ConfigurationOperation) && authentication_transition.kind == "ntp.authentication" &&
+          audit.configuration.fact_known?("ntp.authentication") && authentication_transition.before == audit.configuration.fact("ntp.authentication") &&
+          @authentication_finding&.status == :fail && authentication_transition.after == @authentication_finding.expected)
+        raise ArgumentError, "Invalid NTP authentication transition context"
+      end
       @stoneos = audit.configuration.platform == "hillstone"
       @stoneos_objects = @stoneos ? audit.configuration.fact("ntp.associations").to_a.to_h { |object| [ object["identity"], object ] } : {}
       structured = audit.findings.find { |item| item.id == "ntp.associations" && item.status != :not_applicable }
@@ -28,11 +35,12 @@ module Baseline
       if @stoneos && @stoneos_source&.expected && (!structured&.expected || !@stoneos_scopes)
         raise Blocked.new(:approved_targets_required, requirements: %w[approved_ntp_associations managed_scopes])
       end
-      result = super
-      auth = audit.findings.find { |item| item.id == "ntp.authentication" && item.status != :not_applicable }
+      result = super(finding, audit)
+      auth = @authentication_finding
       slots = audit.configuration.platform == "palo_alto" ? verify_panos_slot_dependencies!(result, auth, audit.configuration) : []
-      required = auth&.expected == true || audit.configuration.fact_known?("ntp.authentication") && audit.configuration.fact("ntp.authentication") == true
-      unresolved_switch = audit.configuration.issues.any? { |issue| issue[:fact] == "ntp.authentication" }
+      effective_authentication = authentication_transition ? authentication_transition.after : audit.configuration.fact("ntp.authentication")
+      required = auth&.expected == true || audit.configuration.fact_known?("ntp.authentication") && effective_authentication == true
+      unresolved_switch = !authentication_transition && audit.configuration.issues.any? { |issue| issue[:fact] == "ntp.authentication" }
       if (required || unresolved_switch) && result.operations.any? { |operation| operation.action == :add && !operation.after.key?("key_id") }
         raise Blocked, :ntp_authentication_dependency
       end
@@ -40,12 +48,24 @@ module Baseline
       details = result.details.merge(verified_ntp_key_ids: verified)
       details[:verified_ntp_slots] = slots if audit.configuration.platform == "palo_alto"
       details[:verified_ntp_operation_ids] = result.operations.map(&:id) if @stoneos
-      Result.new(operations: result.operations, details: CtxParser::Immutable.copy(details))
+      Result.new(operations: result.operations, details: CtxParser::Immutable.copy(details), projected: result.projected)
     end
 
     private
 
     def plannable_targets?(finding, evidence) = super || self.class.explicit_native_attributes?(finding, evidence)
+
+    def applicable_findings(audit)
+      findings = super
+      @authentication_transition ? findings + [ @authentication_finding ] : findings
+    end
+
+    def peer_compatibility_verified?
+      association = @policy.rules.find { |rule| rule.id == "ntp.associations" && rule.enabled? }
+      global = @policy.rules.find { |rule| rule.id == "ntp.authentication" && rule.enabled? }
+      association&.remediation&.fetch("ntp_peer_key_compatibility_verified", false) == true ||
+        @authentication_transition&.after == true && global&.remediation&.fetch("ntp_peer_key_compatibility_verified", false) == true
+    end
 
     # PAN-OS 的材料属于主备槽位；地址变化不能自动证明原有密钥适用于新对端。
     def verify_panos_slot_dependencies!(result, auth, evidence)
@@ -90,7 +110,7 @@ module Baseline
           operation.kind == "ntp.server" && (operation.before&.fetch("vrf", nil) != operation.after["vrf"] ||
             operation.before&.fetch("vrf_explicit", false) != operation.after.fetch("vrf_explicit", operation.after["vrf"] != "default"))
       end
-      if changed.any? && @policy.rules.find { |rule| rule.id == "ntp.associations" && rule.enabled? }&.remediation&.fetch("ntp_peer_key_compatibility_verified", false) != true
+      if changed.any? && !peer_compatibility_verified?
         raise Blocked.new(:ntp_authentication_dependency, requirements: [ "ntp_peer_key_compatibility_verified" ])
       end
       slots = evidence.fact("ntp.key_slots")

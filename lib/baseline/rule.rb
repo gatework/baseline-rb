@@ -88,6 +88,8 @@ module Baseline
         %w[access_targets global_acl_supported]
       elsif %w[management.acl_bound management.acl_restricted management.sources].include?(id)
         %w[access_targets]
+      elsif id == "ntp.authentication"
+        %w[ntp_peer_key_compatibility_verified ntp_association_recreation_approved syntax_profile]
       elsif id == "ntp.associations"
         %w[maximum_targets order ntp_peer_key_compatibility_verified]
       elsif id == "syslog.destinations"
@@ -106,8 +108,8 @@ module Baseline
         raise ArgumentError, "Invalid baseline remediation options"
       end
       unless (!remediation.key?("ntp_peer_key_compatibility_verified") || [ true, false ].include?(remediation["ntp_peer_key_compatibility_verified"])) &&
-          (!remediation.key?("syntax_profile") || remediation["syntax_profile"] == "comware7") &&
-          %w[local_fallback_access_verified tacacs_key_compatibility_verified syslog_tls_peer_compatibility_verified].all? { |key| !remediation.key?(key) || [ true, false ].include?(remediation[key]) }
+          (!remediation.key?("syntax_profile") || (id == "ntp.authentication" ? %w[comware_legacy comware7 vrp_s_series] : [ "comware7" ]).include?(remediation["syntax_profile"])) &&
+          %w[local_fallback_access_verified tacacs_key_compatibility_verified syslog_tls_peer_compatibility_verified ntp_association_recreation_approved].all? { |key| !remediation.key?(key) || [ true, false ].include?(remediation[key]) }
         raise ArgumentError, "Invalid baseline remediation approval"
       end
       AccessApproval.validate!(remediation["access_targets"], domain: id.start_with?("snmp.") ? :snmp : :management) if remediation.key?("access_targets")

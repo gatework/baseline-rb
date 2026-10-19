@@ -8,6 +8,31 @@ module Baseline
     class Parser < Comware::Parser
       private
 
+      # VRP 的 IPv6 和 VPN 位于目标之后，优选标志为 preference，不能复用 Comware 命令位置。
+      def parse_ntp_associations(role)
+        entries = matching_blocks(/\A(?:undo )?ntp-service (?:ipv6 )?unicast-#{role}(?:\s|\z)/)
+        pattern = /\Antp-service unicast-#{role}\s+(?:ipv6\s+)?((?!(?:vpn-instance|ip|ipv6)(?:\s|\z))\S+)/
+        configured_server_addresses(role == "server" ? "ntp.servers" : "ntp.associations", pattern, entries, negate: "undo") do |text, match, negative, entry|
+          ipv6 = text.start_with?("ntp-service unicast-#{role} ipv6 ")
+          address = begin
+            IPAddr.new(match[1])
+          rescue IPAddr::Error
+            nil
+          end
+          next unless address && address.ipv6? == ipv6
+          integers = { "authentication-keyid" => 1..4_294_967_295 }
+          integers["version"] = 1..4 unless ipv6
+          options = parse_server_options(match.post_match, flags: [ "preference" ], integers: integers,
+            names: [ "vpn-instance" ], interfaces: [ "source-interface" ])
+          next unless options
+          unambiguous = options["vpn-instance"] != "default"
+          record_unknown_fact("ntp.associations", [ entry ], code: :ambiguous_routing_scope) unless unambiguous
+          record_ntp_resource(address: match[1], role: role, vrf: options["vpn-instance"], options: options,
+            entry: entry, negative: negative, complete: unambiguous)
+          [ match[1], options["vpn-instance"] ]
+        end
+      end
+
       # VRP 使用无连字符的 SHA256 名称，并允许未限定格式的明文材料。
       def ntp_key_algorithms = %w[md5 hmac-sha256 aes-128-cmac aes-256-cmac]
       def ntp_key_secret(value)

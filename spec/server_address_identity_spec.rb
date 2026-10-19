@@ -66,7 +66,7 @@ RSpec.describe "Canonical server address identity" do
   it "does not count IP spelling variants as distinct servers across parser families" do
     {
       "h3c" => "sysname LAB\nntp-service ipv6 unicast-server",
-      "huawei" => "sysname LAB\nntp-service ipv6 unicast-server",
+      "huawei" => "sysname LAB\nntp-service unicast-server ipv6",
       "cisco_ios" => "hostname LAB\nntp server ipv6",
       "cisco_nxos" => "hostname LAB\nntp server",
       "hillstone" => "hostname LAB\nntp server"

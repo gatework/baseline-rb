@@ -201,3 +201,18 @@ measure("StoneOS native NTP common source 3 servers") do
     raise "Expected complete native NTP source plan"
   end
 end
+
+# 全局认证包含完整消费者扫描、材料依赖及先撤下再重建的事务；不省略规划和呈现。
+configuration = +"sysname LAB\nntp-service authentication-keyid 7 authentication-mode hmac-sha-256 cipher SYNTHETIC-ONLY\n" \
+  "ntp-service reliable authentication-keyid 7\n"
+3.times { |index| configuration << "ntp-service unicast-server 192.0.2.#{index + 10} authentication-keyid 7\n" }
+policy = Baseline::Policy.new("version" => 1, "checks" => {
+  "ntp.authentication" => { "expected" => true, "remediation" => {
+    "ntp_peer_key_compatibility_verified" => true, "ntp_association_recreation_approved" => true, "syntax_profile" => "comware7"
+  } }
+})
+service = Baseline::Remediation.new(policy: policy)
+measure("Comware global NTP authentication 3 associations") do
+  plan = service.call(configuration: configuration, platform: :h3c, complete: true)
+  raise "Expected complete global authentication transaction" unless plan.status == :ready && plan.operations.size == 7 && plan.steps.size == 7
+end
