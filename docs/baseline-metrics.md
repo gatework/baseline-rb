@@ -169,7 +169,7 @@ Comware/VRP 的 `aaa.bindings` 为选中的默认管理域保留三类职责的�
 
 TACACS 标量使用检查从同一绑定证据归纳，来源包括域选择、方法、方案、实际服务器和 VTY 行。端点未完整解析时不确认其引用可用。`aaa.bindings` 保留选中管理域视角；`aaa.domain_bindings` 扩展记录已建模的全部显式域，未选中域的共享引用也不会丢弃。`aaa.domain_bindings_complete` 按职责标记完整输入下的库存确定性；显式用户的实际登录路径、其他服务提供者和其他厂商的绑定仍需分别建模，不据此自动更新/删除共享认证对象。
 
-`tacacs.login/authorization/accounting` 和 `ssh.vty_aaa` 的审核结果可列出具体绑定、缺少的域/方法/端点/VTY 证据、当前候选服务器组以及批准链、材料和本地恢复前提。候选组不等于批准目标；普通 AAA VTY 检查不强制使用 TACACS，也可批准本地 AAA 方案。当前检查仍 blocked，能力查询仍将认证链命令生成标为 unsupported；这些人工要求不表示已有自动切换或完整 `bindings` 策略写入支持。参见[认证链审核示例](../examples/remediation_authentication.rb)。
+`tacacs.login/authorization/accounting` 和 `ssh.vty_aaa` 的审核结果可列出具体绑定、缺少的域/方法/端点/VTY 证据、当前候选服务器组以及批准链、材料和本地恢复前提。候选组不等于批准目标；普通 AAA VTY 检查不强制使用 TACACS，也可批准本地 AAA 方案。未给出完整批准时仍 blocked；Comware 7 三项 TACACS login 链能力为 conditional，具体批准和保留边界见后文。VTY 模式及其他厂商原生链仍 unsupported；人工要求不表示已有自动执行或通用 `bindings` 策略写入支持。参见[认证链审核示例](../examples/remediation_authentication.rb)。
 
 依据：[H3C 登录方法、默认继承及有序后备](https://www.h3c.com/en/Support/Resource_Center/EN/Home/Public/00-Public/Technical_Documents/Reference_Guides/Command_References/H3C_CR-35328/13/202609/2929796_294551_0.htm)、[H3C 默认域选择与撤销](https://www.h3c.com/en/d_202301/1749967_294551_0.htm)、[Huawei AAA 模式和管理域选择](https://support.huawei.com/enterprise/en/doc/EDOC1100412529/c0449dc0/aaa-configuration-commands)。当前语法范围和未建模默认值仍须按设备版本核实，不代表所有固件验证通过。
 
@@ -298,3 +298,13 @@ Cisco 全局、命名对象和旧式 host 内联 key 共用材料语法校验；
 [人工审核示例](../examples/remediation_palo_alto_syslog_migration.rb) 展示设备日志的纯引用迁移。命令依据 [PAN-OS 11.2 配置层级](https://docs.paloaltonetworks.com/ngfw/pan-os-cli-quick-start/cli-command-hierarchy/pan-os-11-2-configure-cli-command-hierarchy) 的 send-syslog 成员列表及 [CLI 修改配置语义](https://docs.paloaltonetworks.com/ngfw/pan-os-cli-quick-start/use-the-cli/modify-the-configuration)；CLI 删除不会自动检查其他引用，因此规划器验证完整依赖。独立状态模型只证明离线配置变换和再次审计闭环，不代表真实设备接受、提交或日志投递成功。
 
 名称按各对象分别校验：[转发 profile](https://docs.paloaltonetworks.com/ngfw/help/11-2/objects/objects-log-forwarding) 最长 64 字符，匹配项最长 31 字符；[设备日志匹配项](https://docs.paloaltonetworks.com/ngfw/help/11-2/device/device-log-settings/select-log-forwarding-destinations) 允许名称内的句点，不能套用服务器 profile 的字符范围。合成基准将超过 64 个匹配项的场景分散到多个转发 profile，不构造超出已记录单 profile 上限的配置。
+
+## Comware 7 管理域 login 方法链修正
+
+`tacacs.login`、`tacacs.authorization`、`tacacs.accounting` 的 `remediation` 可声明 `management_domain`、`methods`、`syntax_profile: comware7`、`local_fallback_access_verified: true`、`management_consumers_verified: true`。启用 TACACS 优先时还需 `tacacs_peer_compatibility_verified: true`，且 methods 为 `[{kind: tacacs, group: OPS}, {kind: local}]`；批准布尔值为 false 时仅支持明确的 `[{kind: local}]` 替代，不由 false 推导 none 或其他远程供应者。方法顺序是批准内容，不接受重复方法、未知键、秘密或任意命令。标量已满足时保留现状，不把修正前提当成强制迁移指令。
+
+仅修改完整快照中已选中且已解析的现有域。三个职责分别核验目标组、默认路由域端点与既有职责密钥；未知旧链、非 scheme 的登录 VTY、未核验后备访问均受阻。外部核验应覆盖该域实际管理消费者及后备账户在各职责的有效性，配置声明不证明对端可达或真实登录成功。操作只覆盖对应的 authentication/authorization/accounting login 行，保留 default、LAN/portal、其他域、组、端点、密钥、VTY 协议和 ACL，不生成 domain default enable，不创建对象，不保存配置。
+
+同批 TACACS 数量/地址/端点指标必须已经满足，端点变化需先独立完成并重新采集；不能用旧端点材料为未来端点背书。若策略显式声明端点 bindings，最终链投影也须保持该批准关系。原生呈现需要完整操作指纹证明，不能将已验证的认证操作用于另一个职责；恢复依然需要新快照和单独认证恢复规划。VTY 模式切换及其他平台原生链修改继续明确受阻，不借用 Comware 语法。
+
+语法依据：[H3C Comware 7 AAA 命令参考](https://www.h3c.com/en/d_202304/1822317_294551_0.htm) 的 authentication login、authorization login、accounting login。独立测试状态模型逐条应用生成命令后重新审计，确认三个职责及组合方案收敛、无关配置保留、第二次无变更；未连接真实设备，也不声称适用于所有固件。

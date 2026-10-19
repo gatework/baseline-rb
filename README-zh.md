@@ -73,7 +73,7 @@ puts report.to_text
 
 H3C/Huawei/IOS/NX-OS 的 NTP 目标支持 server/peer 对象增删及已建模选项替换；旧 `ntp.servers` 只管理 server，保留 peer。`ntp.associations` 配合 `managed_scopes` 可显式管理关联类型、VRF 和选项。数量和地址检查共同约束最终集合，净新增需已确认容量。既有 key 引用可以保留，但新 key 编号不能代替材料证据。H3C/Huawei/StoneOS 支持在完整消费者证据及外部对端核验后规划全局认证切换；Comware/VRP 启用还需明确批准关联的临时撤下重建，并选择兼容的原生语法 profile。新材料、可信声明仍为人工前提。未知的隐式 prefer/burst 等状态不会被当成关闭。参见[人工审核示例](examples/remediation_ntp_authentication_switch.rb)与[认证契约](docs/baseline-metrics.md)。
 
-管理访问生成：H3C/Huawei/IOS 可按已解析且不交叠的 VTY 范围收紧入站协议到 SSH，前提是已知 SSH 启用；H3C/Huawei 还要求每个待修改范围明确配置兼容认证（scheme/aaa），仅有继承证据时受阻，避免范围级协议命令改变有效认证方式。只修改需要收紧的范围，保留登录方式及 ACL。协议限制与“关闭 SSH”批准值冲突时阻止生成。H3C/Huawei/NX-OS 可生成显式批准的 SSH 关闭命令，按高风险操作呈现；不会删除或生成密钥。启用 SSH、选择新的本地或远程认证链仍需密钥及端点/认证链证据，当前保持受阻，不能把任意 `authentication-mode` 替换当作完整认证修复。
+管理访问生成：H3C/Huawei/IOS 可按已解析且不交叠的 VTY 范围收紧入站协议到 SSH，前提是已知 SSH 启用；H3C/Huawei 还要求每个待修改范围明确配置兼容认证（scheme/aaa），仅有继承证据时受阻，避免范围级协议命令改变有效认证方式。只修改需要收紧的范围，保留登录方式及 ACL。协议限制与“关闭 SSH”批准值冲突时阻止生成。H3C/Huawei/NX-OS 可生成显式批准的 SSH 关闭命令，按高风险操作呈现；不会删除或生成密钥。启用 SSH 及修改 VTY 认证模式仍保持受阻，不能把任意 `authentication-mode` 替换当作完整认证修复。现有 Comware 7 管理域的 login 方法链可在明确的端点、材料、消费者与后备批准下修正，见认证链契约。
 
 H3C 日志目标规划会同时检查数量、地址和对象规则，拒绝冲突批准值，并保留未受管属性及其他作用域。地址清单仅在对象均为公共路由域时生成简单增删；其他作用域需使用对象规则及 `managed_scopes`。增加净目标数需要规则内 `remediation: {maximum_targets: 4}` 等已核实的设备容量参数，不能照搬示例中的容量。纯替换没有容量参数时，只使用当前对象占用量作为容量下限，必要时先删除错误目标再新增，不将该下限称为设备上限。显式 `order: remove_before_add` 可优先撤销未批准目标；规划依据和提前删除步骤会保留在方案中。容量满时的提前删除与同对象替换可能短暂中断日志输出，需人工审核。
 
@@ -209,7 +209,7 @@ MIT，见 [LICENSE](LICENSE)。
 
 Comware/VRP TACACS 密钥按替换、撤销及方案重新进入后的最终状态归纳。`check.details[:key_slots]` 分别列出 H3C 认证/授权/计费及 Huawei 共享材料，关联已知端点并提示对端、AAA 引用和恢复前提。损坏状态需补证，检查仍受阻，不生成秘密命令。当前模型描述方案密钥，不代表已支持端点私有密钥继承。参见[TACACS 材料示例](examples/remediation_tacacs.rb)。
 
-Comware/VRP `aaa.bindings` 描述选中管理域的有序方法、TACACS 职责/组/端点引用、来源行及登录 VTY；本地后备与 `none` 分开记录，均不代表恢复访问已经可用。TACACS 使用检查复用这些证据，拒绝旧值和损坏引用。人工方案列出具体链路证据与批准前提，不自动挑选候选组或生成认证切换命令。`aaa.bindings` 保留选中域视角，`aaa.domain_bindings` 扩展覆盖已建模显式域的共享 TACACS 引用；实际用户路径、其他服务提供者及其他厂商绑定仍待分别补齐。参见[AAA 审核示例](examples/remediation_authentication.rb)。
+Comware/VRP `aaa.bindings` 描述选中管理域的有序方法、TACACS 职责/组/端点引用、来源行及登录 VTY；本地后备与 `none` 分开记录，均不代表恢复访问已经可用。TACACS 使用检查复用这些证据，拒绝旧值和损坏引用。人工方案列出具体链路证据与批准前提，不自动挑选候选组；明确批准的 Comware 7 管理域 login 方法链可在完整核验后生成修正命令。`aaa.bindings` 保留选中域视角，`aaa.domain_bindings` 扩展覆盖已建模显式域的共享 TACACS 引用；实际用户路径、其他服务提供者及其他厂商绑定仍待分别补齐。参见[AAA 审核示例](examples/remediation_authentication.rb)。
 
 `tacacs.endpoints` 可声明 `bindings: [{kind: "aaa.domain", domain: "ADMIN", role: "authentication", position: "primary", selected: true}]`，在支持的 Comware/VRP 范围内核验完整域引用集合，包含未选中域的共享使用。position 是方法链优先级，与服务器主备不同。省略 bindings 只查定义；`[]` 需已知未绑定证据。局部/未建模引用保持未知，能力项区分对象与绑定支持。当前方案展示共享引用要求，不生成绑定切换命令。参见[绑定策略示例](examples/resource_bindings.rb)。
 
@@ -226,3 +226,5 @@ Comware/VRP `ntp.key_slots` 保留最终非秘密材料及可信状态，`ntp.au
 
 
 资源、解析后的批准值、旧地址集合、撤销、引用元数据及类型化操作指纹共用服务器地址身份。IPv6 写法变体和 ASCII DNS 大小写变体不再被计为独立目标，也不生成新增后删除同一端点的命令对；结构化重复身份在规划前被拒绝。命名对象标识、职责、接口及作用域保留各自语义；相对/绝对 DNS 名称保持区别。不执行 DNS 查询，也不把 IPv4 映射 IPv6 合并为 IPv4。显式 NTP 认证状态未解析时，不新增无密钥目标。参见[地址身份示例](examples/address_identity.rb)。
+
+Comware 7 的 `tacacs.login`、`tacacs.authorization`、`tacacs.accounting` 可在明确批准后修改选中现有域的 login 方法链，支持 TACACS 优先加本地后备，或批准的本地替代。需逐职责端点及既有密钥、外部对端/管理消费者/本地恢复核验；不选择候选组，不改其他域和非登录方法，端点生命周期变化及 VTY 认证方式修改仍需先处理。详见[认证链契约](docs/baseline-metrics.md)。

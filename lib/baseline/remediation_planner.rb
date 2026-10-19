@@ -13,6 +13,7 @@ require_relative "snmp_group_migration"
 require_relative "credential_remediation"
 require_relative "tacacs_key_remediation"
 require_relative "authentication_remediation"
+require_relative "aaa_chain_remediation"
 require_relative "resource_binding_remediation"
 require_relative "tacacs_remediation"
 
@@ -81,6 +82,9 @@ module Baseline
           result = TacacsKeyRemediation.new.call(finding, audit.configuration)
           check(finding, :blocked, result.fetch(:reason), requirements: result.fetch(:requirements), details: result.fetch(:details))
         elsif AuthenticationRemediation.applicable?(finding, audit.configuration)
+          if AaaChainSchema::IDS.key?(finding.id) && @policy.rules.find { |rule| rule.id == finding.id }.remediation.any?
+            next compile_aaa_chain(finding, audit, operations, steps)
+          end
           result = AuthenticationRemediation.new.call(finding, audit.configuration)
           check(finding, :blocked, result.fetch(:reason), requirements: result.fetch(:requirements), details: result.fetch(:details))
         elsif finding.id == "syslog.destinations" && finding.status == :fail && audit.configuration.complete? &&
@@ -132,6 +136,21 @@ module Baseline
     end
 
     private
+
+    # 认证链在完整核验后才公开单个原生修改，原操作指纹不能为不同目标背书。
+    def compile_aaa_chain(finding, audit, operations, steps)
+      operation = AaaChainRemediation.new(policy: @policy).call(finding, audit)
+      rendered = @renderer.render(operation, verified_aaa_operation_ids: [ operation.id ])
+      operations << operation
+      steps.concat(rendered)
+      check(finding, :planned, nil, operation_ids: [ operation.id ], details: { verification_scope: :configured_inventory_and_external_management_approval })
+    rescue TargetRemediation::Blocked => error
+      check(finding, :blocked, error.reason, requirements: error.requirements)
+    rescue CommandRenderer::UnsupportedOperation
+      check(finding, :blocked, :unsupported_setting)
+    rescue ArgumentError
+      check(finding, :blocked, :invalid_command_parameter)
+    end
 
     # 先完成整项权限迁移的原生命令校验，再一次加入方案，失败不泄漏部分操作。
     def compile_snmp_permission(finding, audit, operations, steps)

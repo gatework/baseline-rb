@@ -46,9 +46,9 @@ RSpec.describe "Management AAA reference requirements" do
     expect(plan(source, complete: false).checks.first.details).to eq({})
   end
 
-  it "exposes manual chain requirements without claiming native command support" do
+  it "exposes conditional chain support with explicit native approval requirements" do
     capability = Baseline::Remediation.capabilities(platform: "h3c").fetch("tacacs.login")
-    expect(capability).to include(status: :unsupported, reason: :authentication_chain_approval_required,
-      requirements: include("approved_management_domain", "approved_ordered_method_chain"))
+    expect(capability).to include(status: :conditional, reason: :authentication_chain_approval_required,
+      requirements: include("management_domain", "methods", "management_consumers_verified"))
   end
 end

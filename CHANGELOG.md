@@ -4,6 +4,9 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+- Plan explicitly approved Comware 7 selected-domain login authentication, authorization and accounting chains with verified role endpoints, existing key references and local recovery; preserve other domains and non-login methods.
+- Keep endpoint lifecycle changes, unresolved consumers and VTY authentication-mode changes as explicit prerequisites, and recheck final endpoint-binding approvals before emitting authentication commands.
+
 ## 0.7.0 (2026-10-20)
 
 - Separate unexecuted read-only inspection and manual persistence guidance from correction commands, retaining candidate-versus-running and input-format requirements.

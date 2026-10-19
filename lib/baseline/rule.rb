@@ -5,6 +5,7 @@ require_relative "access_approval"
 require_relative "resource_schema"
 require_relative "syslog_reference_schema"
 require_relative "snmp_group_migration_schema"
+require_relative "aaa_chain_schema"
 
 require "ctx_parser/immutable"
 
@@ -99,6 +100,8 @@ module Baseline
         %w[maximum_targets order syslog_tls_peer_compatibility_verified binding_migrations]
       elsif %w[syslog.minimum_servers syslog.servers syslog.destinations ntp.minimum_servers ntp.servers].include?(id)
         %w[maximum_targets order]
+      elsif AaaChainSchema::IDS.key?(id)
+        AaaChainSchema::APPROVALS
       elsif id == "tacacs.endpoints"
         %w[maximum_targets order syntax_profile local_fallback_access_verified tacacs_key_compatibility_verified]
       else []
@@ -118,12 +121,13 @@ module Baseline
       end
       unless (!remediation.key?("ntp_peer_key_compatibility_verified") || [ true, false ].include?(remediation["ntp_peer_key_compatibility_verified"])) &&
           (!remediation.key?("syntax_profile") || syntax_profiles.include?(remediation["syntax_profile"])) &&
-          %w[local_fallback_access_verified tacacs_key_compatibility_verified syslog_tls_peer_compatibility_verified ntp_association_recreation_approved snmp_group_migration_verified snmp_user_group_transition_verified].all? { |key| !remediation.key?(key) || [ true, false ].include?(remediation[key]) }
+          %w[local_fallback_access_verified management_consumers_verified tacacs_peer_compatibility_verified tacacs_key_compatibility_verified syslog_tls_peer_compatibility_verified ntp_association_recreation_approved snmp_group_migration_verified snmp_user_group_transition_verified].all? { |key| !remediation.key?(key) || [ true, false ].include?(remediation[key]) }
         raise ArgumentError, "Invalid baseline remediation approval"
       end
       AccessApproval.validate!(remediation["access_targets"], domain: id.start_with?("snmp.") ? :snmp : :management) if remediation.key?("access_targets")
       SyslogReferenceSchema.validate_migrations!(remediation["binding_migrations"]) if remediation.key?("binding_migrations")
       SnmpGroupMigrationSchema.validate_approvals!(remediation["group_migrations"]) if remediation.key?("group_migrations")
+      AaaChainSchema.validate_approval!(remediation) if AaaChainSchema::IDS.key?(id)
       validate_applicability!
       freeze
     end

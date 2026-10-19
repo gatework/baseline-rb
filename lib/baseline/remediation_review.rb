@@ -52,7 +52,7 @@ module Baseline
         id = operation.identity["rule"]
         return [ nil, :native_restore_not_modelled ] unless %w[ntp.source syslog.source].include?(id) && renderer.class::SOURCE_COMMANDS.key?(id)
         return [ nil, :old_state_unavailable ] unless ResourceSchema.interface_name(operation.before)
-      elsif operation.kind == "ntp.authentication" || operation.kind.start_with?("tacacs.", "snmp.group", "snmp.user_group")
+      elsif operation.kind == "ntp.authentication" || operation.kind.start_with?("aaa.", "tacacs.", "snmp.group", "snmp.user_group")
         return [ nil, :authentication_or_material_reassessment_required ]
       elsif operation.kind == "access.acl"
         return [ nil, :shared_acl_reference_reassessment_required ]

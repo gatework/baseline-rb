@@ -24,7 +24,9 @@ module Baseline
       CtxParser::Immutable.copy(Audit.capabilities(platform: name).to_h do |id, capability|
         supported = capability[:status] != :unsupported && renderer.supports?(id)
         requirements = RemediationPlanner::REQUIREMENTS.fetch(id, [ "supported_rule_handler" ])
-        if supported && id == "ntp.authentication"
+        if supported && AaaChainSchema::IDS.key?(id)
+          requirements = AaaChainSchema::APPROVALS + %w[resolved_selected_management_domain stable_approved_tacacs_endpoints existing_scheme_role_key]
+        elsif supported && id == "ntp.authentication"
           requirements = %w[known_ntp_authentication_state resolved_ntp_authentication_consumers ntp_peer_key_compatibility_verified
             complete_final_ntp_key_references existing_ntp_key_material]
           requirements += %w[known_trusted_ntp_keys native_ntp_syntax_profile ntp_association_recreation_approved_for_existing_associations] if renderer.authentication_precedes_associations?

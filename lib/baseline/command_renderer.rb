@@ -43,7 +43,8 @@ module Baseline
 
     # 查询当前呈现器确实可生成的设置类型。
     def supports?(id)
-      id == "ntp.authentication" && self.class::NTP_AUTHENTICATION_COMMANDS.any? ||
+      AaaChainSchema::IDS.key?(id) && self.class::TACACS_STYLE == :h3c ||
+        id == "ntp.authentication" && self.class::NTP_AUTHENTICATION_COMMANDS.any? ||
         id == "snmp.write_enabled" && self.class::SNMP_PERMISSION_PROFILES.any? ||
         source_requires_associations?(id) || self.class::SOURCE_COMMANDS.key?(id) || id == "services.disabled" && self.class::DISABLE_COMMANDS.any? ||
         id == "ssh.vty_ssh_only" && !self.class::VTY_PROTOCOL_COMMAND.nil? ||
@@ -60,7 +61,15 @@ module Baseline
 
     # 将完整操作转换为命令；任何一个子命令不受支持则整体拒绝该操作。
     def render(operation, verified_ntp_key_ids: [], verified_ntp_slots: [], verified_ntp_authentication_operation_ids: [], ntp_syntax_profile: nil,
-      verified_snmp_permission_operation_ids: [])
+      verified_snmp_permission_operation_ids: [], verified_aaa_operation_ids: [])
+      if operation.kind == AaaChainSchema::KIND
+        unless self.class::TACACS_STYLE == :h3c && verified_aaa_operation_ids.is_a?(Array) && verified_aaa_operation_ids.all? { |id| id.is_a?(String) && /\A[0-9a-f]{64}\z/.match?(id) } && verified_aaa_operation_ids.include?(operation.id)
+          raise UnsupportedOperation, "management_method_preconditions_unverified"
+        end
+        AaaChainSchema.validate!(identity: operation.identity, scope: operation.scope, before: operation.before, after: operation.after, action: operation.action, phase: operation.phase)
+        methods = operation.after["methods"].map { |method| method["kind"] == "local" ? "local" : "hwtacacs-scheme #{method.fetch('group')}" }
+        return [ CommandStep.new(view: [ "domain #{operation.scope.fetch('domain')}" ], command: "#{operation.identity.fetch('role')} login #{methods.join(' ')}", phase: operation.phase, operation_id: operation.id) ]
+      end
       if SnmpGroupMigrationSchema::KINDS.include?(operation.kind)
         return render_snmp_permission(operation, verified_ids: verified_snmp_permission_operation_ids)
       end
