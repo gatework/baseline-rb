@@ -30,7 +30,7 @@ module Baseline
           if object.key?("bindings")
             if observed.key?("bindings")
               difference = ResourceBindings.compare(observed["bindings"], object["bindings"])
-              unresolved << { identity: object["identity"], scope: object["scope"], fields: [ "bindings.selected" ] } if difference[:unresolved].any?
+              unresolved << { identity: object["identity"], scope: object["scope"], fields: [ kind == "tacacs.endpoint" ? "bindings.selected" : "bindings.flags" ] } if difference[:unresolved].any?
               if difference.except(:unresolved).values.any?(&:any?)
                 bindings << { identity: object["identity"], scope: object["scope"], **difference.except(:unresolved) }
               end

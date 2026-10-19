@@ -166,6 +166,8 @@ Hillstone SNMPv3 根据 [StoneOS CLI 手册](https://kb.hillstonenet.com/en/wp-c
 
 PAN-OS NTP 对象修正使用 `ntp.associations`、`primary-ntp-server` / `secondary-ntp-server` 名称及显式空作用域（`managed_scopes: [{}]`）。地址更新保留槽位认证子树；已认证地址变化须提供 `ntp_peer_key_compatibility_verified: true`。新增槽位须明确 `authenticated: false`；新建或变更认证材料仍列为人工前提。删除仅作用于批准槽位；未知选项或删除后丢失启用认证规则所需证据时受阻。见[离线示例](examples/remediation_palo_alto_ntp.rb)。命令不提交候选配置。
 
+PAN-OS `syslog.destinations` 还可明确要求 `syslog.device`、`syslog.forwarding` 绑定，区分服务器定义、设备日志直接引用，以及共享转发 profile 到本机或指定 vsys 安全规则的引用链。profile、匹配项和规则名保持大小写；明确要求的 `disabled`、`log_start`、`log_end` 必须有显式证据。过滤式及动作内容不导出，也不作为投递成功证明。未知引用、模板及不完整输入保持未知；引用迁移列出人工前提，暂不生成迁移命令。见[配置引用示例](examples/palo_alto_syslog_bindings.rb)。
+
 ## 开发与测试
 
 共享类按实际职责命名，平台信息放在命名空间中。直接对应设备命令的解析器保留文件名和类名。

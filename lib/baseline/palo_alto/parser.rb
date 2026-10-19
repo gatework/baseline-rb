@@ -5,11 +5,14 @@ require_relative "../parser"
 require "shellwords"
 require_relative "document"
 require_relative "command_index"
+require_relative "syslog_references"
 
 module Baseline
   module PaloAlto
     # 将 PAN-OS set 语法归纳为与配置块平台一致的事实。
     class Parser < Baseline::Parser
+      include SyslogReferences
+      BINDING_KINDS = { "syslog.destination" => %w[syslog.device syslog.forwarding].freeze }.freeze
       # 原生管理端点没有 VTY 模型；未建模能力保留未知，不改变规则适用范围。
       UNSUPPORTED_FACTS = {
         "ssh.versions" => :ssh_version_unmodeled,
@@ -21,7 +24,8 @@ module Baseline
       PARTIAL_FACTS = { "services" => :service_states_partially_modeled }.freeze
 
       MANAGEMENT_SERVICES = %w[ssh telnet http https].freeze
-      RELEVANT = /\Aset (?:deviceconfig system |network (?:profiles interface-management-profile |interface )|shared (?:server-profile tacplus |authentication-profile |authentication-sequence |log-settings syslog )|mgt-config users )/
+      RELEVANT = /\Aset (?:deviceconfig system |network (?:profiles interface-management-profile |interface )|shared (?:server-profile tacplus |authentication-profile |authentication-sequence |log-settings )|mgt-config users )/
+      SYSLOG_REFERENCES = /\Aset (?:rulebase|vsys)\b.*\b(?:log-settings|log-setting|log-start|log-end|disabled)\b/
 
       private
 
@@ -35,7 +39,7 @@ module Baseline
       # 仅对管理配置子集分词一次，不处理无关的安全规则。
       def prepare_configuration
         statements = roots.filter_map do |entry|
-          next unless RELEVANT.match?(entry.text)
+          next unless RELEVANT.match?(entry.text) || SYSLOG_REFERENCES.match?(entry.text)
           { entry: entry, tokens: Shellwords.shellsplit(entry.text).drop(1) }
         rescue ArgumentError
           @fact_builder.mark_incomplete!(code: :invalid_set_statement, lines: [ entry.line ])
@@ -194,6 +198,7 @@ module Baseline
           record_syslog_resource(definitions, value) if value
           value
         end
+        record_syslog_bindings
         record_fact("syslog.servers", servers.uniq, entries.map { |row| row[:entry] })
         record_configured_scalar("syslog.source", %w[deviceconfig system route service syslog source interface])
         record_route_source_address_presence("syslog")
@@ -208,7 +213,7 @@ module Baseline
       # 命名配置对象按叶子最后值归约，未知字段不进入公开资源数据。
       def record_syslog_resource(definitions, address)
         profile, name = definitions.first[:tokens].values_at(3, 5)
-        unless [ profile, name ].all? { |value| ResourceSchema.token?(value) }
+        unless [ profile, name ].all? { |value| ResourceSchema.name?(value) }
           record_unknown_fact("syslog.destinations", definitions.map { |row| row[:entry] }, code: :unsupported_resource_identity)
           return
         end

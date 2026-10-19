@@ -56,6 +56,16 @@ NTP 与 Syslog 的配置资源保留了用于后续生成的对象参数。NTP �
 
 语法依据：[PAN-OS 11.2 配置命令层级](https://docs.paloaltonetworks.com/ngfw/pan-os-cli-quick-start/cli-command-hierarchy/pan-os-11-2-configure-cli-command-hierarchy) 与 [修改配置](https://docs.paloaltonetworks.com/ngfw/pan-os-cli-quick-start/use-the-cli/modify-the-configuration)。适用本机完整 set 导出，不涵盖 XML、Panorama 模板继承或实际设备提交验证。独立测试状态模型按路径应用命令并重新审计，覆盖保留未修改原文、认证依赖及再次零变更。
 
+## PAN-OS Syslog 配置引用链
+
+服务器资源可声明 `bindings` 精确集合：`syslog.device` 身份为 `kind/log_type/match`；`syslog.forwarding` 身份为 `kind/forwarding_profile/match/log_type/context/rulebase/rule`。设备日志类型覆盖已建模的 system、config、userid、iptag、globalprotect、hipmatch、correlation；规则转发日志类型覆盖 traffic、threat、wildfire、url、data、tunnel、auth、decryption。名称按原文匹配；当前 CLI 上下文使用 `context: local`，显式虚拟系统使用 `context: vsys` 并额外要求 `vsys` 身份。两者不能通过同名哨兵合并；security/default-security-rules 也分别保留。
+
+转发 profile 只定义匹配项但未挂接规则时，不计为规则使用链。规则选用的最终 profile 生效，列表 set 引用累加。`disabled/log_start/log_end` 是可选批准谓词；省略不比较，缺少显式事实时要求这些字段的检查返回 unknown。只证明配置引用，不证明规则命中、过滤式覆盖、日志启用默认值或实际投递。完整且已建模的空引用可与 `bindings: []` 匹配；省略 bindings 仍仅核验对象定义。
+
+`syslog.profile_references` 保存非秘密引用，`syslog.reference_inventory_complete` 表示此库存是否完整。未知命令族、损坏列表、未解析转发目标、vsys 本地日志对象、模板/设备组或多行引用均不能证明没有使用关系。引用证据未知不把独立对象定义伪装成引用合规。过滤式、描述和动作载荷不进入公开资源；每个资源保留参与证据的行号。引用修正仍要求明确批准迁移范围、保留过滤条件和已验证的厂商命令，当前不生成原生引用迁移。
+
+语法依据：[PAN-OS 11.2 命令层级](https://docs.paloaltonetworks.com/ngfw/pan-os-cli-quick-start/cli-command-hierarchy/pan-os-11-2-configure-cli-command-hierarchy) 和 [官方转发配置示例](https://docs.paloaltonetworks.com/vm-series/deployment/public-cloud/set-up-the-vm-series-firewall-on-oracle-cloud-infrastructure/oracle-cloud-infrastructure-logging)。后者的 Kafka/插件与运行验证不属于本库能力。
+
 ## H3C VTY 继承证据
 
 Comware 的范围级 `authentication-mode` 和 `protocol inbound` 相互绑定：任一范围级非默认设置都会使两项采用范围值；不能分别从 class 补齐另一项并判通过。范围级两项均为默认或未配置时，才保留 class 设置。未显式出现的范围默认值在当前审计中保留未知，避免跨版本推定。损坏的范围撤销命令不能被 class 覆盖掩盖。
@@ -154,7 +164,7 @@ bindings:
 
 显式 `bindings` 数组是该对象的完整期望域引用集合，报告缺失、多余及选择状态变化。`[]` 要求已知未引用；只有完整输入、相关职责的域/方法和引用库存均确定时，才提供可比较的空数组。省略 `bindings` 只核验对象定义，不修改、不清除现有引用。JSON 使用 `details.verification_scope` 明确范围，文字报告直接提示“仅对象定义，未核验使用链”。
 
-资源 `.bindings == nil` 或对象事实中缺少 bindings 表示未知，不是未绑定。未选中域、重新进入及撤销后的关系纳入库存；匿名/损坏域和未知方法不允许证明引用集合完整。按职责记录完整程度，未知计费引用不应掩盖已解析的认证引用。其他厂商尚未建模的绑定保持 unknown；Syslog/NTP 的绑定类型尚未开放此字段。`Audit.capabilities` 的资源项通过独立 `bindings` 子项列出已支持类型及 conditional/unsupported，不改变对象定义层面的原能力含义。
+资源 `.bindings == nil` 或对象事实中缺少 bindings 表示未知，不是未绑定。未选中域、重新进入及撤销后的关系纳入库存；匿名/损坏域和未知方法不允许证明引用集合完整。按职责记录完整程度，未知计费引用不应掩盖已解析的认证引用。其他厂商尚未建模的绑定保持 unknown；PAN-OS Syslog 的独立绑定类型见前文，NTP 尚未开放此字段。`Audit.capabilities` 的资源项通过独立 `bindings` 子项列出已支持类型及 conditional/unsupported，不改变对象定义层面的原能力含义。
 
 绑定比较不等于引用改写。当前方案展示实际共享引用和差异，要求批准变更范围、保留或迁移关系、有序方法及本地后备，并完成厂商命令验证；不会因省略 bindings 或提供空数组自动删除共享对象。尚未生成 TACACS 绑定切换命令。域引用检查也不替代 VTY、密钥和真实后备访问验证。[完整离线示例](../examples/resource_bindings.rb) 使用独立合成前后配置演示对象存在但引用错误的失败，以及正确域引用的通过。
 

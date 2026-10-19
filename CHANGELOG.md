@@ -4,6 +4,9 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+- Audit typed PAN-OS Syslog device-log and forwarding-profile/security-rule bindings, preserving virtual-system, rulebase and exact name identity plus explicitly required logging flags. Keep missing, unused and unresolved references distinct without exporting filters or action payloads.
+- Expose concrete manual prerequisites for Syslog binding changes; keep unsupported references and multiline values unknown. Restrict rule token indexing to relevant logging fields rather than unrelated policy statements.
+
 - Generate PAN-OS NTP primary/secondary slot additions, removals and address leaf updates with explicit scope and authentication choices; preserve other slots and existing authentication material.
 - Require external peer compatibility evidence before retaining authenticated material for a changed address, reject unmodelled slot options, and retain authentication-rule evidence when planning removals. New or changed authentication material remains a manual prerequisite.
 

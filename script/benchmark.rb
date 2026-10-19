@@ -103,3 +103,24 @@ end
     raise "Missing complete NTP key evidence" unless report.compliant? && bindings.size == size && bindings.all? { |binding| binding[:configured_ready] }
   end
 end
+
+# 无关策略行不进入日志词元索引；完整审计仍须解析并验证实际使用链。
+[ 200, 800 ].each do |size|
+  rules = size.times.map do |index|
+    %w[source destination application service].map { |field| "set vsys LAB rulebase security rules RULE#{index} #{field} any\n" }.join
+  end.join
+  configuration = "set deviceconfig system hostname LAB\nset shared log-settings syslog LOGS server FIRST server 192.0.2.20\n#{rules}" \
+    "set shared log-settings profiles FORWARD match-list TRAFFIC log-type traffic\n" \
+    "set shared log-settings profiles FORWARD match-list TRAFFIC send-syslog LOGS\n" \
+    "set vsys LAB rulebase security rules RULE1 log-setting FORWARD\nset vsys LAB rulebase security rules RULE1 log-end yes\n"
+  object = { "identity" => { "name" => "FIRST" }, "scope" => { "profile" => "LOGS" }, "bindings" => [
+    { "kind" => "syslog.forwarding", "forwarding_profile" => "FORWARD", "match" => "TRAFFIC", "log_type" => "traffic",
+      "context" => "vsys", "vsys" => "LAB", "rulebase" => "security", "rule" => "RULE1", "log_end" => true }
+  ] }
+  policy = Baseline::Policy.new("version" => 1, "checks" => { "syslog.destinations" => { "expected" => [ object ] } })
+  audit = Baseline::Audit.new(policy: policy)
+  measure("PAN-OS Syslog references with unrelated rules #{size}") do
+    report = audit.call(configuration: configuration, platform: :palo_alto, complete: true)
+    raise "Missing configured output chain" unless report.compliant? && report.configuration.resources.first.bindings.one?
+  end
+end

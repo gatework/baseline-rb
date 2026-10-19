@@ -156,6 +156,8 @@ Internal pipeline steps use `parse_*`; writers use `record_*`; regex providers u
 
 PAN-OS NTP object planning uses `ntp.associations` with `primary-ntp-server` / `secondary-ntp-server` names and explicit empty managed scope (`managed_scopes: [{}]`). Address updates preserve the slot's authentication subtree; authenticated address changes require `ntp_peer_key_compatibility_verified: true`. New slots require an explicit `authenticated: false`; creation or changes of authentication material remain blocked. Removal deletes only the approved slot and is blocked for unmodelled options or if it would erase evidence required by an enabled authentication rule. See the [offline example](examples/remediation_palo_alto_ntp.rb). Commands do not commit the candidate configuration.
 
+PAN-OS `syslog.destinations` can also require typed `syslog.device` and `syslog.forwarding` bindings. These distinguish a server definition from device-log references and shared forwarding profiles attached to local or explicit-vsys security rules. Profile, match and rule names retain case; requested `disabled`, `log_start` and `log_end` flags need explicit evidence. Filters and action payloads are not exported or interpreted as delivery proof. Unsupported references, templates or partial input remain unknown. Binding changes return manual prerequisites and do not generate forwarding migrations. See the [configured-reference example](examples/palo_alto_syslog_bindings.rb).
+
 ## Development and tests
 
 Name shared classes by their responsibility and use the namespace for platform context. Preserve filenames and class names that directly match device commands.
