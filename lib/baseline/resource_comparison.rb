@@ -8,6 +8,8 @@ module Baseline
     # 返回评估状态和结构化差异，损坏外部事实不能冒充已知空集。
     def self.call(kind:, actual:, expected:, managed_scopes:)
       ResourceSchema.validate_expected!(kind, actual)
+      ResourceSchema.validate_expected!(kind, expected)
+      expected = ResourceSchema.normalize_objects(kind, expected)
       actual = ResourceSchema.normalize_objects(kind, actual)
       actual_by_key = actual.to_h { |object| [ [ object["scope"], object["identity"] ], object ] }
       expected_keys = expected.to_h { |object| [ [ object["scope"], object["identity"] ], true ] }

@@ -134,8 +134,16 @@ module Baseline
           record_unknown_fact(scope, [ entry ], code: :unsupported_server_options)
           next
         end
-        analyze(entry) { address }
-        negative ? values.delete(identity) : values[identity] = address
+        canonical = ServerAddress.normalize(address)
+        identity = if identity.is_a?(Array) && identity.first == address
+          [ canonical, *identity.drop(1) ]
+        elsif identity == address
+          canonical
+        else
+          identity
+        end
+        analyze(entry) { canonical }
+        negative ? values.delete(identity) : values[identity] = canonical
       end
       values.values.uniq
     end

@@ -11,6 +11,7 @@ module Baseline
     # 复制安全的领域字段；未知语法保留不完整标记供规划器拒绝变更。
     def initialize(kind:, identity:, scope: {}, attributes: {}, lines: [], complete: true, bindings: nil)
       ResourceSchema.validate!(kind: kind, identity: identity, scope: scope, attributes: attributes, lines: lines, complete: complete)
+      identity, attributes = ServerAddress.normalize_fields(identity), ServerAddress.normalize_fields(attributes)
       @kind, @identity, @scope, @attributes, @lines = CtxParser::Immutable.copy([ kind, identity, scope, attributes, lines.uniq.sort ])
       ResourceBindings.validate!(kind, bindings) unless bindings.nil?
       @bindings = bindings.nil? ? nil : CtxParser::Immutable.copy(ResourceBindings.normalize(bindings))

@@ -49,6 +49,14 @@ module Baseline
         return finding(attributes, :unknown, reason)
       end
       actual = configuration.fact(rule.fact)
+      if ServerAddress::FACTS.include?(rule.fact)
+        begin
+          actual = ServerAddress.normalize_set(actual)
+        rescue ArgumentError
+          attributes[:actual] = actual
+          return finding(attributes, :unknown, :fact_type_mismatch)
+        end
+      end
       attributes[:actual] = actual
       status, reason, details = compare(rule, actual, expected)
       attributes[:details] = details if rule.operator == :resources_match && details

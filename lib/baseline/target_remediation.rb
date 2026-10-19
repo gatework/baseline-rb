@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require "ipaddr"
 require_relative "configuration_operation"
 
 module Baseline
@@ -102,12 +101,12 @@ module Baseline
       end
     end
 
-    # 只确认 IP 别名等价，名称型身份、职责和作用域保持原有厂商契约。
+    # 地址字段使用公共身份规则，名称型身份、职责和作用域保持原有厂商契约。
     def native_address_key(object)
       identity = object["identity"]
       return key(object) unless identity.key?("address")
-      [ object["scope"], identity.merge("address" => IPAddr.new(identity["address"]).to_s) ]
-    rescue IPAddr::Error
+      [ object["scope"], identity.merge("address" => ServerAddress.normalize(identity["address"])) ]
+    rescue ArgumentError
       key(object)
     end
 

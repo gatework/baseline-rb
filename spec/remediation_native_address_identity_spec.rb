@@ -15,7 +15,7 @@ RSpec.describe "Native address identity during target transitions" do
     { "identity" => { "address" => address, "role" => role }, "scope" => { "vrf" => "default" } }
   end
 
-  it "refuses an NTP add/remove pair that addresses the same native IPv6 endpoint" do
+  it "produces no NTP add/remove pair for equivalent native IPv6 endpoints" do
     sources = {
       "h3c" => "sysname LAB\nntp-service ipv6 unicast-server 2001:db8::10\n",
       "huawei" => "sysname LAB\nntp-service ipv6 unicast-server 2001:db8::10\n",
@@ -25,8 +25,7 @@ RSpec.describe "Native address identity during target transitions" do
     sources.each do |platform, text|
       service = Baseline::Remediation.new(policy: ntp_policy([ association("2001:0db8:0:0:0:0:0:10") ]))
       result = service.call(configuration: text, platform: platform, complete: true)
-      expect(result.status).to eq(:blocked)
-      expect(result.checks.first.reason).to eq(:native_resource_identity_unresolved)
+      expect(result.status).to eq(:noop)
       expect(result.operations).to be_empty
     end
   end
@@ -34,11 +33,10 @@ RSpec.describe "Native address identity during target transitions" do
   it "does not count aliases as independent current capacity or independent approved targets" do
     text = "sysname LAB\nntp-service ipv6 unicast-server 2001:db8::10\nntp-service ipv6 unicast-server 2001:0db8:0:0:0:0:0:10\n"
     result = Baseline::Remediation.new(policy: ntp_policy([ association("2001:db8::11") ])).call(configuration: text, platform: "h3c", complete: true)
-    expect(result.checks.first.reason).to eq(:native_resource_identity_unresolved)
+    expect(result.status).to eq(:ready)
+    expect(result.checks.first.details[:initial_targets]).to eq(1)
     targets = [ association("2001:db8::11"), association("2001:0db8:0:0:0:0:0:11") ]
-    result = Baseline::Remediation.new(policy: ntp_policy(targets)).call(configuration: "sysname LAB\n", platform: "h3c", complete: true)
-    expect(result.checks.first.reason).to eq(:policy_conflict)
-    expect(result.operations).to be_empty
+    expect { ntp_policy(targets) }.to raise_error(ArgumentError)
   end
 
   it "protects syslog native aliases without merging different NTP roles" do
@@ -47,7 +45,7 @@ RSpec.describe "Native address identity during target transitions" do
       "expected" => [ object ], "managed_scopes" => [ { "vrf" => "default" } ], "remediation" => { "maximum_targets" => 2 }
     } })
     result = Baseline::Remediation.new(policy: policy).call(configuration: "sysname LAB\ninfo-center loghost ipv6 2001:db8::10\n", platform: "h3c", complete: true)
-    expect(result.checks.first.reason).to eq(:native_resource_identity_unresolved)
+    expect(result.status).to eq(:noop)
     mixed = ntp_policy([ association("2001:db8::10"), association("2001:0db8:0:0:0:0:0:10", "peer") ])
     result = Baseline::Remediation.new(policy: mixed).call(configuration: "sysname LAB\nntp-service ipv6 unicast-server 2001:db8::10\n", platform: "h3c", complete: true)
     expect(result.status).to eq(:ready)

@@ -119,6 +119,8 @@ module Baseline
     def normalize_expected(value)
       if value_type == :resource_set && !value.nil?
         ResourceSchema.normalize_objects(ResourceSchema::FACTS.key(id), value)
+      elsif ServerAddress::FACTS.include?(id) && !value.nil?
+        ServerAddress.normalize_set(value)
       elsif %w[ntp.source syslog.source].include?(id)
         ResourceSchema.interface_name(value) || value
       else
@@ -145,6 +147,7 @@ module Baseline
         true
       end
       raise ArgumentError, "Invalid baseline expected value for #{id}" unless valid
+      ServerAddress.normalize_set(value) if ServerAddress::FACTS.include?(id)
       value.each { |network| Acl.ipv4_range(network) } if value_type == :network_set
     end
 

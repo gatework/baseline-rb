@@ -131,11 +131,10 @@ RSpec.describe "H3C TACACS target remediation" do
     expect(plan(sole, targets.first(1)).checks.first.reason).to eq(:tacacs_transition_would_disconnect)
   end
 
-  it "blocks secondary address aliases that name the same native endpoint" do
+  it "recognizes secondary address aliases as the same native endpoint" do
     text = source("192.0.2.30", [ "ipv6 2001:db8::31" ])
     result = plan(text, [ target("192.0.2.30"), target("2001:0db8:0:0:0:0:0:31", "secondary") ])
-    expect(result.status).to eq(:blocked)
-    expect(result.checks.first.reason).to eq(:tacacs_context_unresolved)
+    expect(result.status).to eq(:noop)
     expect(result.operations).to be_empty
   end
 
@@ -219,7 +218,11 @@ RSpec.describe "H3C TACACS target remediation" do
     text = source("192.0.2.30", [ "ipv6 2001:db8::31", "ipv6 2001:0db8:0:0:0:0:0:31" ])
       .lines.reject { |line| line.start_with?(" primary authentication") }.join
     result = plan(text, [ target("192.0.2.32", "secondary") ])
-    expect(result.checks.first.reason).to eq(:native_resource_identity_unresolved)
+    expect(result.checks.first.reason).to eq(:tacacs_transition_would_disconnect)
     expect(result.operations).to be_empty
+    expanded = plan(text, [ target("192.0.2.32", "secondary") ], options: { "maximum_targets" => 2 })
+    expect(expanded.status).to eq(:ready)
+    expect(expanded.checks.first.details[:initial_targets]).to eq(1)
+    expect(expanded.configuration_commands).to include("secondary authentication 192.0.2.32 49", "undo secondary authentication ipv6 2001:db8::31 49")
   end
 end

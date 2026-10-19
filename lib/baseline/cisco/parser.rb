@@ -1,11 +1,13 @@
 # frozen_string_literal: true
 
 require_relative "../parser"
+require_relative "tacacs_groups"
 
 module Baseline
   module Cisco
     # 复用 Cisco 管理服务、IPv4 ACL、SNMP 和 AAA 的公共语法。
     class Parser < Baseline::Parser
+      include TacacsGroups
       SNMP_ROLE_WRITE = { "network-admin" => true, "vdc-admin" => true,
         "network-operator" => false, "vdc-operator" => false }.freeze
 
@@ -170,7 +172,7 @@ module Baseline
         complete &&= !attributes.key?("protocol") || %w[udp tcp].include?(attributes["protocol"])
         complete &&= !attributes.key?("facility") || /\A(?:local[0-7]|auth|authpriv|cron|daemon|ftp|kernel|lpr|mail|news|syslog|user|uucp)\z/.match?(attributes["facility"])
         unless nxos?
-          identity = [ scope, match[1] ]
+          identity = [ scope, ServerAddress.normalize(match[1]) ]
           explicit_vrf = entry.text[/\bvrf\s+(\S+)/, 1]
           if explicit_vrf == "default"
             complete = false
@@ -327,8 +329,8 @@ module Baseline
 
       # 解析实际生效的认证方法及外部服务器引用。
       def parse_authentication
-        servers, aliases, keyed = [], {}, []
-        global_key = matching_blocks(/\Atacacs-server key\s+/)
+        servers, named_servers = [], {}
+        global_key = [ final_tacacs_key(roots, "tacacs-server key") ].compact
         global_key.each { |entry| record_tacacs_key("tacacs", entry.text.sub(/\Atacacs-server key\s+/, ""), entry) }
         legacy_hosts = matching_blocks(/\A(?:no )?tacacs-server host(?:\s|\z)/)
         hosts = configured_server_addresses("tacacs", /\Atacacs-server host\s+(\S+)/, legacy_hosts, negate: "no") do |_text, match, negative, entry|
@@ -340,39 +342,78 @@ module Baseline
         legacy_hosts.each do |entry|
           host = entry.text[/\A(?:no )?tacacs-server host\s+(\S+)/, 1]
           next unless server_address?(host)
+          host = ServerAddress.normalize(host)
           entry.text.start_with?("no ") ? active_hosts.delete(host) : active_hosts[host] = entry
         end
         active_hosts.each do |host, entry|
           key = entry.text[/\bkey\s+(.+)\z/, 1]
           if key
             record_tacacs_key("tacacs:#{host}", key, entry)
-            keyed << host
           end
         end
-        matching_blocks(/\Atacacs server\s+/).each do |section|
-          hosts = configured_server_addresses("tacacs", /\Aaddress ipv[46]\s+(\S+)/, matching_blocks(/\A(?:no )?address ipv[46](?:\s|\z)/, section.children), negate: "no") do |text, match, negative, entry|
-            identity = { "name" => section.text.split.last, "family" => text.split[1] }
-            keyed_section = matching_blocks(/\Akey\s+/, section.children).any? || global_key.any?
+        tacacs_named_server_entries.each do |name, entries|
+          key_entry = final_tacacs_key(entries, "key")
+          key_present = !key_entry.nil?
+          keyed_section = key_present || global_key.any?
+          addresses = matching_blocks(/\A(?:no )?address ipv[46](?:\s|\z)/, entries).group_by { |entry| entry.text[/\bipv[46]\b/] }.values.map(&:last)
+          addresses.select { |entry| entry.text.start_with?("no ") }.each do |entry|
+            match = /\Ano address ipv[46] (\S+)\z/.match(entry.text)
+            record_unknown_fact("tacacs", [ entry ], code: :tacacs_address_withdrawal_unresolved) unless match && server_address?(match[1])
+          end
+          hosts = configured_server_addresses("tacacs", /\Aaddress ipv[46]\s+(\S+)/, addresses.reject { |entry| entry.text.start_with?("no ") }, negate: "no") do |text, match, negative, entry|
+            identity = { "name" => name, "family" => text.split[1] }
             record_tacacs_endpoint(identity, match, entry, negative: negative, keyed: keyed_section)
             match[1]
           end
-          aliases[section.text.split.last] = hosts
+          named_servers[name] = hosts
           servers |= hosts
-          matching_blocks(/\Akey\s+/, section.children).each do |entry|
-            record_tacacs_key("tacacs:#{section.text.split.last}", entry.text.delete_prefix("key "), entry)
-            keyed |= hosts
+          if key_present
+            record_tacacs_key("tacacs:#{name}", key_entry.text.delete_prefix("key "), key_entry)
           end
         end
-        groups = matching_blocks(/\Aaaa group server tacacs\+\s+/).to_h do |section|
-          members = configured_values(/\Aserver(?: name)?\s+(\S+)/, section.children)
-          [ section.text.split.last, members.flat_map { |member| aliases.fetch(member, [ member ]) } ]
-        end
+        inventory = parse_tacacs_groups(named_servers, servers)
+        groups = inventory.groups
         record_fact("tacacs.servers", servers.uniq)
         record_fact("tacacs.groups", groups)
-        record_tacacs_login_usage(servers, groups)
-        %w[authorization accounting].each { |kind| record_tacacs_action_usage(kind, servers, groups) }
-        record_fact("tacacs.keys_present", global_key.any? || (servers - keyed).empty?) unless servers.empty?
+        record_fact("tacacs.group_references", inventory.references)
+        record_fact("tacacs.group_inventory_complete", inventory.closed && inventory.references.values.all? { |rows| rows.all? { |row| row[:complete] } })
+        record_tacacs_login_usage(servers, inventory)
+        %w[authorization accounting].each { |kind| record_tacacs_action_usage(kind, servers, inventory) }
+        unless servers.empty?
+          endpoints = @fact_builder.resources_for("tacacs.endpoint")
+          record_fact("tacacs.keys_present", endpoints.all? { |endpoint| endpoint.fetch(:attributes)["key_present"] == true })
+        end
         parse_local_accounts
+      end
+
+      # 最后有效密钥声明独占证据；撤销和缺失材料不能继承旧值或把编码标识当成秘密。
+      def final_tacacs_key(entries, command)
+        prefix = Regexp.escape(command)
+        entry = entries.reverse.find { |candidate| /\A(?:no )?#{prefix}(?:\s|\z)/.match?(candidate.text) }
+        return unless entry
+        return if entry.text == "no #{command}"
+        return entry if entry.text.start_with?("#{command} ") && tacacs_key_material(entry.text.delete_prefix("#{command} "))
+
+        record_unknown_fact("tacacs", [ entry ], code: :tacacs_key_material_unresolved)
+        nil
+      end
+
+      # 命名对象按原名合并重新进入，整对象撤销先清空地址和材料，再提取最终证据。
+      def tacacs_named_server_entries
+        active = {}
+        matching_blocks(/\A(?:no )?tacacs server(?:\s|\z)/).each do |section|
+          match = /\A(no )?tacacs server (\S+)\z/.match(section.text)
+          unless match
+            record_unknown_fact("tacacs", [ section ], code: :tacacs_server_unresolved)
+            next
+          end
+          if match[1]
+            active.delete(match[2])
+          else
+            (active[match[2]] ||= []).concat(section.children)
+          end
+        end
+        active
       end
 
       # 旧式主机及命名服务器保留各自身份，内联 key 只提取存在性。
@@ -383,13 +424,13 @@ module Baseline
         options = parse_server_options(options_text, flags: [ "single-connection" ], integers: { "port" => 1..65_535, "timeout" => 1..65_535 })
         attributes = (options || {}).transform_keys { |name| name == "single-connection" ? "single_connection" : name }
         attributes["address"] = match[1] unless identity.key?("address")
-        attributes["key_present"] = keyed || !key.nil?
+        attributes["key_present"] = keyed || (key && !tacacs_key_material(key[1]).nil?) || false
         record_tacacs_resource(identity: identity, scope: {}, attributes: attributes,
-          entry: entry, negative: negative, complete: !options.nil?)
+          entry: entry, negative: negative, complete: !options.nil? && (key.nil? || !tacacs_key_material(key[1]).nil?))
       end
 
       # 授权和计费按动作及命令级别分别覆盖，只有全部最终声明都首选 TACACS 才确认使用。
-      def record_tacacs_action_usage(kind, servers, groups)
+      def record_tacacs_action_usage(kind, servers, inventory)
         pattern = /\A(?:no )?aaa #{kind} (?:(exec|commands(?: \d+)?) )?default(?:\s|\z)/
         entries = matching_blocks(pattern).group_by { |entry| entry.text[pattern, 1] }.values.map(&:last)
         results = entries.map do |entry|
@@ -401,7 +442,7 @@ module Baseline
             next analyze(entry) { false } if methods == "none"
             methods = methods.sub(/\A(?:start-stop|stop-only)\s+/, "")
           end
-          analyze(entry) { tacacs_login_method_state(methods, servers, groups) }
+          analyze(entry) { tacacs_login_method_state(methods, servers, inventory) }
         end
         if (reason = results.find { |value| value.is_a?(Symbol) })
           record_unknown_fact("tacacs.#{kind}", entries, code: reason)
@@ -412,7 +453,7 @@ module Baseline
       end
 
       # 解析各 VTY 实际选用的登录列表，包括命名列表。
-      def record_tacacs_login_usage(servers, groups)
+      def record_tacacs_login_usage(servers, inventory)
         pattern = /\Aaaa authentication login\s+(\S+)\s+(.+)\z/
         family = /\A(?:no )?aaa authentication login\s+(\S+)(?:\s|\z)/
         lists = matching_blocks(family).each_with_object({}) do |entry, result|
@@ -429,7 +470,7 @@ module Baseline
           elsif vty[:authentication] != "aaa"
             false
           elsif (list = lists[vty[:authentication_list]])
-            list[:methods] ? tacacs_login_method_state(list[:methods], servers, groups) : :authentication_list_unresolved
+            list[:methods] ? tacacs_login_method_state(list[:methods], servers, inventory) : :authentication_list_unresolved
           else
             :authentication_list_unresolved
           end
@@ -445,7 +486,7 @@ module Baseline
       end
 
       # 仅当首选认证方法引用可解析的 TACACS 组时，才确认使用 TACACS。
-      def tacacs_login_method_state(methods, servers, groups)
+      def tacacs_login_method_state(methods, servers, inventory)
         tokens = methods.split
         outcomes = []
         until tokens.empty?
@@ -456,8 +497,11 @@ module Baseline
               outcomes << false
               next
             end
-            return :tacacs_group_unresolved unless name == "tacacs+" || groups.key?(name)
-            selected = name == "tacacs+" ? servers : groups.fetch(name)
+            return :tacacs_group_unresolved unless name == "tacacs+" || inventory.groups.key?(name)
+            if name != "tacacs+" && (!inventory.closed || inventory.references.fetch(name).any? { |reference| !reference[:complete] })
+              return :tacacs_group_unresolved
+            end
+            selected = name == "tacacs+" ? servers : inventory.groups.fetch(name)
             return :tacacs_group_unresolved unless (selected - servers).empty?
             outcomes << selected.any?
           when "local", "local-case", "none", "enable", "line"
@@ -469,10 +513,20 @@ module Baseline
         outcomes.first
       end
 
-      # 提取已配置的凭据编码方式，不保留秘密值。
+      # 所有 TACACS 密钥入口共用完整材料语法，孤立格式码不得降级为明文。
+      def tacacs_key_material(text)
+        match = /\A(?:(\d+)\s+)?(\S+)\z/.match(text)
+        match if match && (match[1] || !/\A\d+\z/.match?(match[2]))
+      end
+
+      # 提取已配置的凭据编码方式，不保留秘密值；未解析材料不能证明密钥存在。
       def record_tacacs_key(owner, text, entry)
-        match = /\A(?:(\d+)\s+)?(\S+)/.match(text)
-        record_credential(owner, "tacacs", match&.[](1) || "plain", match&.[](2), entry)
+        match = tacacs_key_material(text)
+        unless match
+          record_unknown_fact("tacacs", [ entry ], code: :tacacs_key_material_unresolved)
+          return
+        end
+        record_credential(owner, "tacacs", match[1] || "plain", match[2], entry)
       end
 
       # 提取本地账号角色及凭据存储属性。

@@ -95,7 +95,7 @@ module Baseline
           end
           record_ntp_resource(address: parts[2], role: "server", vrf: options["vrouter"], options: options, entry: entry)
           sources << options["source"]
-          analyze(entry) { parts[2] }
+          analyze(entry) { ServerAddress.normalize(parts[2]) }
         end
         record_fact("ntp.servers", servers.uniq, entries)
         record_configured_state("ntp.authentication", /\Antp authentication\z/, /\Ano ntp authentication\z/)
@@ -137,7 +137,7 @@ module Baseline
             record_unknown_fact("syslog.destinations", [ entry ], code: :unsupported_resource_identity)
           end
           sources << source
-          analyze(entry) { parts[2] }
+          analyze(entry) { ServerAddress.normalize(parts[2]) }
         end
         record_fact("syslog.servers", servers.uniq, entries)
         record_fact("syslog.source", sources.first, entries) if sources.any? && sources.first && sources.uniq.one?
@@ -244,7 +244,7 @@ module Baseline
             if server_address?(values[1]) && (values.size == 2 || values.size == 4 && values[2] == "vrouter")
               record_tacacs_resource(identity: { "address" => values[1], "priority" => values[0] },
                 scope: { "group" => parts[1], "vrf" => values[3] || "default" }, attributes: {}, entry: entry)
-              analyze(entry) { values[1] }
+              analyze(entry) { ServerAddress.normalize(values[1]) }
             else
               record_unknown_fact("tacacs", [ entry ])
               nil

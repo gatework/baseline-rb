@@ -62,6 +62,7 @@ module Baseline
     def record_fact(path, value, lines: [])
       return false if value.nil? || (!complete? && value.respond_to?(:empty?) && value.empty?)
 
+      value = canonical_server_fact(path, value)
       @values[path] = CtxParser::Immutable.copy(value)
       if lines.empty?
         @sources.delete(path)
@@ -96,7 +97,7 @@ module Baseline
 
     # 只为库存中的不可变对象补充绑定，不经身份查找成功就不能创建新资源。
     def record_resource_bindings(kind:, identity:, scope:, bindings:, lines:)
-      resource = @resources.fetch([ kind, scope, identity ])
+      resource = @resources.fetch([ kind, scope, ServerAddress.normalize_fields(identity) ])
       @resources[resource.key] = resource.with_bindings(bindings: bindings, lines: lines)
     end
 
@@ -220,6 +221,13 @@ module Baseline
     end
 
     private
+
+    # 地址事实只计算一次身份；错误外部类型保留给评估器作类型诊断，不能静默转为空集。
+    def canonical_server_fact(path, value)
+      ServerAddress::FACTS.include?(path) ? ServerAddress.normalize_set(value) : value
+    rescue ArgumentError
+      value
+    end
 
     # 旧地址事实损坏时也阻止对象级通过，不将失败提取误当成已知空集。
     def record_resource_facts

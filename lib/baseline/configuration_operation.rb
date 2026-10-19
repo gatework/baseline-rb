@@ -37,6 +37,9 @@ module Baseline
           ResourceSchema.validate!(kind: kind, identity: identity, scope: scope, attributes: attributes, lines: [], complete: true)
         end
       end
+      if ResourceSchema::FACTS.key?(kind) || TacacsOperationSchema::KINDS.include?(kind)
+        identity, before, after = [ identity, before, after ].map { |fields| ServerAddress.normalize_fields(fields) }
+      end
       @kind, @identity, @scope, @before, @after, @risk = CtxParser::Immutable.copy([ kind, identity, scope, before, after, risk ])
       @action, @phase = action, phase
       @id = Digest::SHA256.hexdigest(JSON.generate(canonical([ @kind, @action, @identity, @scope, @before, @after, @phase, @risk ]))).freeze

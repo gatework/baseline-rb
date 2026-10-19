@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "ipaddr"
+require_relative "server_address"
 require_relative "resource_bindings"
 
 module Baseline
@@ -31,7 +31,7 @@ module Baseline
         (identity.key?("address") ^ identity.key?("name")) &&
         (!identity.key?("role") || roles.include?(identity["role"])) &&
         (kind != "ntp.association" || identity.key?("name") || identity.key?("role")) &&
-        identity.all? { |key, value| !attributes.key?(key) || attributes[key] == value }
+        identity.all? { |key, value| !attributes.key?(key) || (key == "address" ? ServerAddress.normalize(attributes[key]) == ServerAddress.normalize(value) : attributes[key] == value) }
       raise ArgumentError, "Invalid configuration resource identity" unless valid_identity
 
       [ identity, scope, attributes ].each do |fields|
@@ -87,7 +87,7 @@ module Baseline
         end
         validate!(kind: kind, identity: object["identity"], scope: object["scope"], attributes: object.fetch("attributes", {}), lines: [], complete: true)
         ResourceBindings.validate!(kind, object["bindings"]) if object.key?("bindings")
-        [ normalize_scope(kind, object["identity"], object["scope"]), object["identity"] ]
+        [ normalize_scope(kind, object["identity"], object["scope"]), ServerAddress.normalize_fields(object["identity"]) ]
       end
       raise ArgumentError, "Duplicate baseline resource identity" unless keys.uniq.size == keys.size
       true
@@ -104,7 +104,8 @@ module Baseline
     # 归一化只创建新容器，调用方的批准参数及已解析资源不被修改。
     def self.normalize_objects(kind, objects)
       objects.map do |object|
-        normalized = object.merge("scope" => normalize_scope(kind, object["identity"], object["scope"]))
+        normalized = object.merge("scope" => normalize_scope(kind, object["identity"], object["scope"]), "identity" => ServerAddress.normalize_fields(object["identity"]))
+        normalized["attributes"] = ServerAddress.normalize_fields(object["attributes"]) if object.key?("attributes")
         normalized["bindings"] = ResourceBindings.normalize(object["bindings"]) if object.key?("bindings")
         normalized
       end
@@ -123,14 +124,6 @@ module Baseline
     end
 
     # 地址与 DNS 名沿用同一校验契约，资源和旧事实不能对非法目标判断不同。
-    def self.address?(value)
-      return false unless value.is_a?(String) && !value.empty?
-      IPAddr.new(value)
-      !value.include?("/")
-    rescue IPAddr::Error
-      value.bytesize <= 253 && !/\A[\d.]+\z/.match?(value) && value.delete_suffix(".").split(".", -1).all? do |label|
-        /\A[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\z/i.match?(label)
-      end
-    end
+    def self.address?(value) = ServerAddress.valid?(value)
   end
 end

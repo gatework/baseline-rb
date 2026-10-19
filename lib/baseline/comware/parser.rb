@@ -390,7 +390,7 @@ module Baseline
 
         endpoints = matching_blocks(/\Asecondary (?:authentication|authorization|accounting)\s+/, children).filter_map do |entry|
           match = tacacs_server_pattern.match(entry.text)
-          [ entry.text.split[1], match[1], match.post_match[/\A\s*(\d+)(?:\s|\z)/, 1] || "49" ] if match
+          [ entry.text.split[1], ServerAddress.normalize(match[1]), match.post_match[/\A\s*(\d+)(?:\s|\z)/, 1] || "49" ] if match && server_address?(match[1])
         end
         endpoints.group_by { |role, address, _| [ role, address ] }.values.none? { |values| values.map(&:last).uniq.size > 1 }
       end

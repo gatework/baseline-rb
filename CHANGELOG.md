@@ -2,7 +2,15 @@
 
 Changes to the public contract are recorded here. Versions follow Semantic Versioning.
 
-## Unreleased
+## 0.4.0 (2026-10-19)
+
+- Keep Cisco TACACS key evidence per endpoint identity, preventing another named object at the same canonical address from supplying missing material.
+- Treat malformed Cisco TACACS key material and address withdrawals as unresolved evidence rather than certifying a complete active inventory.
+- Reduce Cisco named TACACS server deletion, recreation, address replacement and object/global key withdrawal before deriving references, resources or credentials.
+- Resolve Cisco TACACS group address members canonically while keeping named server references distinct; reject missing-object/DNS-name collisions, fold group reentry/withdrawal, and retain unresolved membership evidence without secret tails.
+
+- Canonicalize server address identity across resource fields, resolved approvals, legacy address/count rules, withdrawals, reference inventories and typed operation fingerprints; fold IPv6 spellings and ASCII DNS case without changing named objects or scopes.
+- Reject canonical duplicate structured approvals and malformed legacy address policies before planning, retain absolute/relative DNS distinctions, and prevent invalid-input text leaking through nested address validation exceptions.
 
 - Block Syslog/NTP IP alias transitions and duplicate native identities before capacity planning, preventing an add/remove pair from deleting the approved endpoint; preserve distinct roles and scopes. Protect TACACS observed fallback/capacity counts against the same aliases. Explicit unresolved NTP authentication evidence also blocks new unkeyed targets.
 

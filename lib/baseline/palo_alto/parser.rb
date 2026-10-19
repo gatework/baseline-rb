@@ -387,7 +387,7 @@ module Baseline
       def configured_server_address(prefix)
         value = configured_scalar(prefix)
         return if value.nil?
-        return value if server_address?(value)
+        return ServerAddress.normalize(value) if server_address?(value)
 
         @fact_builder.mark_incomplete!(code: :invalid_server_address, lines: statements_with_prefix(*prefix).map { |row| row[:entry].line })
         nil

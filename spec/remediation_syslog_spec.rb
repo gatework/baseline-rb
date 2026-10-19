@@ -112,8 +112,7 @@ RSpec.describe "Syslog object remediation" do
   end
 
   it "keeps invalid and unsupported targets atomic without leaking unknown options" do
-    engine = service("syslog.servers" => { "expected" => %W[192.0.2.40 invalid\ncommand] })
-    expect(run_plan(engine, "sysname LAB\ninfo-center loghost 192.0.2.20\n").operations).to be_empty
+    expect { service("syslog.servers" => { "expected" => %W[192.0.2.40 invalid\ncommand] }) }.to raise_error(ArgumentError)
     engine = service("syslog.servers" => { "expected" => [ "192.0.2.40" ] })
     plan = run_plan(engine, "sysname LAB\ninfo-center loghost 192.0.2.20 unknown PRIVATE-OPTION\n")
     expect(plan.checks.first.reason).to eq(:resource_unresolved)

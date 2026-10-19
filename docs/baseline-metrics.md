@@ -184,3 +184,23 @@ H3C profile 支持 md5 与文档中的 hmac-sha-1/256/384/512 拼写及显式 ci
 新的批准关联可引用已有、完整、可信材料，并要求 `ntp_peer_key_compatibility_verified: true` 外部核验 ID、算法及材料。规划器传给呈现器的 `verified_ntp_key_ids` 是本次方案内的非秘密依赖证据；独立呈现不自行假定可信材料存在。不生成材料命令，不改变认证开关或可信声明。独立测试模型应用原生命令后核对对象审计、配置就绪图、无关文本及第二次零变更；这些不是设备/NTP 对端测试。
 
 依据：[H3C 密钥及可靠声明](https://www.h3c.com/en/Support/Resource_Center/EN/Home/Public/00-Public/Technical_Documents/Reference_Guides/Command_References/H3C_CR-28394/15/202508/2623951_294551_0.htm)、[H3C 可靠声明与密钥删除联动](https://www.h3c.com/en/d_202112/1504433_294551_0.htm)、[Huawei NTP 认证配置及算法](https://info.support.huawei.com/hedex/api/pages/EDOC1100277644/AEM10221/03/resources/software/nev8r10_vrpv8r16/user/galaxy/vrp_ntp_cfg_0025.html)。其他产品/版本需对应 profile 证据，不能从语法相近推断已覆盖。
+
+
+## 服务器地址身份与数量
+
+服务器目标统一使用 `ServerAddress` 计算地址身份：IPv6 规范为 Ruby `IPAddr#to_s` 形式，DNS ASCII 标签忽略大小写，但保留末尾点及相对/绝对名称区别，不查询 DNS。IPv4 与 IPv4 映射 IPv6 不自动合并，也不推断两个不同地址/名称是否指向同一设备。域名仅接收已支持的 ASCII 主机标签；Unicode 名称需先由应用提供有效的 ASCII IDNA 形式。URI 方括号、网段和带 zone 的字面量不是本 profile 支持的目标地址。
+
+地址归一化覆盖配置资源的 address 身份/属性、策略解析结果、旧 ntp/syslog/tacacs.servers 集合、撤销键、厂商地址库存及操作指纹。模板/命名主备槽位等 `name` 字段、group/profile 标识、接口和 VRF 不套用 DNS 规则。相同地址在不同职责和作用域仍是不同资源，但旧最低服务器数量规则只计算不同地址，不用主备、VRF 或文本变体证明额外地址数量。字段类型或地址语法错误的外部事实返回未知，不转成空集。
+
+已知配置按源顺序归约，同一规范身份的后续声明覆盖其资源设置；规范身份重复的结构化批准对象在输入边界拒绝，避免冲突属性被静默选择。旧地址规则仍按集合语义归并重复批准值。策略原文及配置原文不被改写，策略指纹继续绑定实际批准文档；解析后的批准值和操作身份使用规范地址。新请求若仅改变地址写法，审计通过并返回零变更；属性确有变化时只更新同一端点。无原始输入的验证错误不保留底层 IPAddr 异常中的非法文本。
+
+依据：[RFC 5952 IPv6 文本表示](https://www.rfc-editor.org/rfc/rfc5952)、[RFC 4343 DNS 标签大小写](https://www.rfc-editor.org/rfc/rfc4343)。此处理不证明固件命令支持、目标可达、域名解析结果或服务器硬件独立性。
+
+
+Cisco `tacacs.group_references` 按 `named_server` 与 `address` 区分成员；命名服务器通过完整原名查找，不能用碰巧同名的 DNS 地址代替缺失对象。地址成员按同一规则规范化，与现有已解析服务器库存对照。组重新进入保留已有成员，成员撤销使用规范身份，整组撤销清除对应成员。未识别的成员形式仅保留 unresolved/来源行，不复制可能含秘密的尾部；未选中组的未知成员不掩盖已知选中组。`tacacs.group_inventory_complete` 描述已解析的组成员清单，不能用作完整 AAA 方法链、材料、VRF 或运行可用性证明；IOS/NX-OS 其他定义生命周期与引用类型仍需对应证据和实现。此增量不启用新的绑定策略种类或原生 AAA 切换命令。
+
+成员语法依据：[Cisco NX-OS 地址/主机名成员](https://www.cisco.com/c/en/us/td/docs/dcn/nx-os/nexus9000/106x/configuration/security/cisco-nexus-9000-series-nx-os-security-configuration-guide-release-106x/m-configuring-tacacs.html)、[Cisco IOS XE 命名服务器引用](https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/sec_usr_aaa/configuration/xe-3e/sec-usr-aaa-xe-3e-book/ip6-tacacs.html)。
+
+Cisco 命名 TACACS 定义按原名合并重新进入，整对象撤销后清除旧地址和材料；每个 IPv4/IPv6 槽位及对象 key 采用最终声明，撤销后重新创建不能继承旧证据。这不证明完整 AAA 链、其他厂商 key 生命周期或实际服务器可用。
+
+Cisco 全局、命名对象和旧式 host 内联 key 共用材料语法校验；孤立编码标识保留未知，不能作为明文秘密。全局 key 的最终撤销生效；不同命名端点即使地址相同，也不能互相借用对象 key 证明材料存在。
