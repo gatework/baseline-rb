@@ -54,13 +54,13 @@ module Baseline
         version = effective_configured_value(/\Aip ssh version\s+([12])\z/,
           family: /\A(?:no )?ip ssh version\b/, fact: "ssh.versions", reset: /\Ano ip ssh version(?: [12])?\z/)
         record_fact("ssh.versions", [ version ]) if version
-        ssh = nxos? ? configured_state(/\Afeature ssh\z/, /\Ano feature ssh\z/) : version ? true : nil
+        ssh = nxos? ? nxos_feature_state("ssh", default: true) : version ? true : nil
         record_fact("ssh.enabled", ssh, matching_blocks(/\A(?:ip ssh|(?:no )?feature ssh)/))
         default_aaa = nxos? || configured_state(/\Aaaa new-model\z/, /\Ano aaa new-model\z/) == true
         vtys = matching_blocks(/\Aline vty(?:\s|\z)/).map do |section|
           login = configured_vty_login(section, default_aaa: default_aaa)
           acl_entries = section.children.reject { |entry| /\A(?:no )?access-class\s+\S+\s+out(?:\s|\z)/.match?(entry.text) }
-          { name: section.text, protocols: effective_configured_value(/\Atransport input\s+((?:all|none|ssh|telnet)(?:\s+(?:ssh|telnet))*)\z/, entries: section.children,
+          { name: section.text, protocols: nxos? ? nxos_remote_protocols : effective_configured_value(/\Atransport input\s+((?:all|none|ssh|telnet)(?:\s+(?:ssh|telnet))*)\z/, entries: section.children,
               family: /\A(?:no )?transport input\b/, fact: "ssh.vty_ssh_only", reset: /\Ano transport input(?:\s+\S+)*\z/)&.split,
             authentication: login[:authentication], authentication_list: login[:authentication_list],
             acl_vrf_also: acl_entries.reverse.find { |entry| /\A(?:no )?access-class\b/.match?(entry.text) }&.text&.end_with?(" vrf-also") == true,
@@ -77,7 +77,7 @@ module Baseline
           ssh_port: rotary.empty? ? listener_port("ssh port", default: 22, scope: "management.acl", negate: "no") : nil,
           telnet_port: telnet_ports.empty? ? 23 : nil)
         telnet = if nxos?
-          configured_state(/\Afeature telnet\z/, /\Ano feature telnet\z/)
+          nxos_feature_state("telnet")
         elsif vtys.any? && vtys.all? { |entry| entry[:protocols] }
           vtys.any? { |entry| (entry[:protocols] & %w[all telnet]).any? }
         end

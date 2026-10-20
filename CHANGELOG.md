@@ -2,6 +2,14 @@
 
 Changes to the public contract are recorded here. Versions follow Semantic Versioning.
 
+## 0.9.0 (2026-10-20)
+
+- Generate explicitly approved NX-OS default-login, command/config-command authorization and accounting corrections with native ordered groups and separate local error fallback; preserve console, shared groups and existing materials.
+- Require resolved native role evidence, peer/consumer/recovery approval and existing endpoint keys before activating remote methods. Bind rendering to complete operation fingerprints and withhold coupled authorization changes if rendering fails.
+
+- Audit NX-OS management authentication with native global method lists, independent local error fallback and separate command/config-command authorization; retain sanitized typed evidence instead of applying IOS line-login syntax.
+- Respect native SSH defaults and explicit feature state, reject malformed replacements, and prevent disabled TACACS from certifying remote AAA usage. Telnet defaults remain unknown without product-specific or explicit evidence.
+
 ## 0.8.0 (2026-10-20)
 
 - Generate explicitly approved Huawei S-series VTY AAA-mode corrections with native UI/profile proofs while preserving shared schemes, templates, methods and ACLs.

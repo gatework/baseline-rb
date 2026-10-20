@@ -51,7 +51,7 @@ RSpec.describe "Cisco TACACS group address and object references" do
   end
 
   it "normalizes NX-OS DNS address references without treating them as object names" do
-    text = "hostname LAB\nfeature tacacs+\ntacacs-server host Time.EXAMPLE.TEST\n"       "aaa group server tacacs+ OPS\n server time.example.test\n!\naaa authentication login default group OPS local\nline vty\n!\n"
+    text = "hostname LAB\nfeature tacacs+\ntacacs-server host Time.EXAMPLE.TEST\n"       "aaa group server tacacs+ OPS\n server time.example.test\n!\naaa authentication login default group OPS\nline vty\n!\n"
     policy = Baseline::Policy.new("version" => 1, "checks" => { "tacacs.login" => { "expected" => true } })
     result = Baseline::Audit.new(policy: policy).call(configuration: text, platform: "cisco_nxos", complete: true)
     expect(result).to be_compliant

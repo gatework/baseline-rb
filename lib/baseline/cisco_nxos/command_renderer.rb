@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "../cisco/command_renderer"
+require_relative "../nxos_aaa_schema"
 
 module Baseline
   module CiscoNxos
@@ -13,6 +14,30 @@ module Baseline
       RESOURCE_KINDS = %w[syslog.destination ntp.association].freeze
       NTP_STYLE = :nxos
       SSH_DISABLE_COMMAND = "no feature ssh"
+
+      def supports?(id) = NxosAaaSchema::IDS.key?(id) || super
+
+      def render(operation, verified_aaa_operation_ids: [], **options)
+        return super unless operation.kind == NxosAaaSchema::KIND
+        unless verified_aaa_operation_ids.is_a?(Array) && verified_aaa_operation_ids.all? { |id| id.is_a?(String) && /\A[0-9a-f]{64}\z/.match?(id) } && verified_aaa_operation_ids.include?(operation.id)
+          raise UnsupportedOperation, "management_method_preconditions_unverified"
+        end
+        NxosAaaSchema.validate!(identity: operation.identity, scope: operation.scope, before: operation.before, after: operation.after, action: operation.action, phase: operation.phase)
+        role = operation.identity.fetch("role")
+        methods = operation.after.fetch("methods")
+        native = methods == [ { "kind" => "local" } ] ? "local" : "group #{methods.select { |method| method['kind'] == 'tacacs' }.map { |method| method.fetch('group') }.join(' ')}#{role == 'authorization' ? ' local' : ''}"
+        prefix = case role
+        when "authentication" then "aaa authentication login default"
+        when "authorization" then "aaa authorization #{operation.identity.fetch('function')} default"
+        when "accounting" then "aaa accounting default"
+        end
+        commands = []
+        if role == "authentication" && operation.before["fallback_on_error"] != operation.after["fallback_on_error"]
+          commands << "aaa authentication login default fallback error local"
+        end
+        commands << "#{prefix} #{native}" unless operation.before["methods"] == methods
+        commands.map { |command| CommandStep.new(view: [], command: command, phase: operation.phase, operation_id: operation.id) }
+      end
 
       private
 

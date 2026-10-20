@@ -32,6 +32,8 @@ module Baseline
         TacacsOperationSchema.validate!(kind: kind, identity: identity, scope: scope, before: before, after: after, action: action, phase: phase)
       elsif kind == VtyAuthenticationSchema::KIND
         VtyAuthenticationSchema.validate!(identity: identity, scope: scope, before: before, after: after, action: action, phase: phase)
+      elsif kind == NxosAaaSchema::KIND
+        NxosAaaSchema.validate!(identity: identity, scope: scope, before: before, after: after, action: action, phase: phase)
       elsif kind == AaaChainSchema::KIND
         AaaChainSchema.validate!(identity: identity, scope: scope, before: before, after: after, action: action, phase: phase)
       elsif kind == "syslog.reference"

@@ -6,6 +6,7 @@ require_relative "resource_schema"
 require_relative "syslog_reference_schema"
 require_relative "snmp_group_migration_schema"
 require_relative "aaa_chain_schema"
+require_relative "nxos_aaa_schema"
 require_relative "vty_authentication_schema"
 
 require "ctx_parser/immutable"
@@ -85,6 +86,7 @@ module Baseline
       end
       @managed_scopes = CtxParser::Immutable.copy(options["managed_scopes"])
       @remediation = CtxParser::Immutable.copy(options.fetch("remediation", {}))
+      native_aaa_keys = remediation.is_a?(Hash) && [ nil, "nxos" ].include?(remediation["syntax_profile"]) ? NxosAaaSchema::APPROVALS : []
       remediation_keys = if id == "snmp.versions"
         %w[existing_v3_access_verified]
       elsif id == "snmp.write_enabled"
@@ -102,9 +104,9 @@ module Baseline
       elsif %w[syslog.minimum_servers syslog.servers syslog.destinations ntp.minimum_servers ntp.servers].include?(id)
         %w[maximum_targets order]
       elsif id == "ssh.vty_aaa"
-        AaaChainSchema::APPROVALS + %w[vty_ranges temporary_vty_protocol_rebind_approved]
+        (AaaChainSchema::APPROVALS + native_aaa_keys + %w[vty_ranges temporary_vty_protocol_rebind_approved]).uniq
       elsif AaaChainSchema::IDS.key?(id)
-        AaaChainSchema::APPROVALS
+        (AaaChainSchema::APPROVALS + native_aaa_keys).uniq
       elsif id == "tacacs.endpoints"
         %w[maximum_targets order syntax_profile local_fallback_access_verified tacacs_key_compatibility_verified]
       else []
@@ -120,7 +122,8 @@ module Baseline
       syntax_profiles = case id
       when "ntp.authentication" then %w[comware_legacy comware7 vrp_s_series]
       when "snmp.write_enabled" then SnmpGroupMigrationSchema::PROFILES
-      when "ssh.vty_aaa" then VtyAuthenticationSchema::PROFILES.keys
+      when "ssh.vty_aaa" then VtyAuthenticationSchema::PROFILES.keys + [ "nxos" ]
+      when *AaaChainSchema::IDS.keys then %w[comware7 nxos]
       else [ "comware7" ]
       end
       unless (!remediation.key?("ntp_peer_key_compatibility_verified") || [ true, false ].include?(remediation["ntp_peer_key_compatibility_verified"])) &&
@@ -131,7 +134,11 @@ module Baseline
       AccessApproval.validate!(remediation["access_targets"], domain: id.start_with?("snmp.") ? :snmp : :management) if remediation.key?("access_targets")
       SyslogReferenceSchema.validate_migrations!(remediation["binding_migrations"]) if remediation.key?("binding_migrations")
       SnmpGroupMigrationSchema.validate_approvals!(remediation["group_migrations"]) if remediation.key?("group_migrations")
-      AaaChainSchema.validate_approval!(remediation) if AaaChainSchema::IDS.key?(id) || id == "ssh.vty_aaa"
+      if remediation["syntax_profile"] == "nxos" && NxosAaaSchema::IDS.key?(id)
+        NxosAaaSchema.validate_approval!(remediation, id: id)
+      elsif AaaChainSchema::IDS.key?(id) || id == "ssh.vty_aaa"
+        AaaChainSchema.validate_approval!(remediation)
+      end
       if remediation.key?("vty_ranges") && !VtyAuthenticationSchema.ranges?(remediation["vty_ranges"], syntax_profile: remediation["syntax_profile"])
         raise ArgumentError, "Invalid approved VTY scope"
       end

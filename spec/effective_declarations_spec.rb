@@ -109,7 +109,6 @@ RSpec.describe "Baseline effective declarations" do
 
   {
     "cisco_ios" => [ "hostname LAB", "line vty 0 4", "transport input", "no" ],
-    "cisco_nxos" => [ "hostname LAB", "line vty 0 4", "transport input", "no" ],
     "h3c" => [ "sysname LAB", "line vty 0 4", "protocol inbound", "undo" ],
     "huawei" => [ "sysname LAB", "user-interface vty 0 4", "protocol inbound", "undo" ]
   }.each do |platform, (hostname, section, command, negate)|
@@ -160,9 +159,9 @@ RSpec.describe "Baseline effective declarations" do
     end
   end
 
-  it "does not reuse Cisco TACACS login lists after cancellation or malformed replacement" do
+  it "does not reuse IOS TACACS login lists after cancellation or malformed replacement" do
     body = "hostname LAB\naaa new-model\ntacacs-server host 192.0.2.10\n"
-    %w[cisco_ios cisco_nxos].each do |platform|
+    %w[cisco_ios].each do |platform|
       %w[default OPERATORS].each do |name|
         selected = "aaa authentication login #{name} group tacacs+\n"
         vty = "line vty 0 4\n transport input ssh\n login authentication #{name}\n"

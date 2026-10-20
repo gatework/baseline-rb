@@ -24,7 +24,12 @@ module Baseline
       CtxParser::Immutable.copy(Audit.capabilities(platform: name).to_h do |id, capability|
         supported = capability[:status] != :unsupported && renderer.supports?(id)
         requirements = RemediationPlanner::REQUIREMENTS.fetch(id, [ "supported_rule_handler" ])
-        if supported && id == "ssh.vty_aaa"
+        if supported && name == "cisco_nxos" && NxosAaaSchema::IDS.key?(id)
+          requirements = %w[native_management_method_syntax_profile approved_ordered_native_methods resolved_native_management_method_scope
+            resolved_management_login_roles local_fallback_access_verified management_consumers_verified stable_approved_tacacs_endpoints
+            existing_enabled_tacacs_feature_for_remote_methods existing_tacacs_endpoint_keys_for_remote_methods tacacs_peer_compatibility_verified_for_remote_methods]
+          requirements << "local_fallback_on_error_for_remote_authentication" if NxosAaaSchema::IDS[id] == "authentication"
+        elsif supported && id == "ssh.vty_aaa"
           requirements = AaaChainSchema::APPROVALS + %w[vty_ranges complete_matching_vty_scope existing_approved_management_method_chain
             exact_existing_methods_including_local_case resolved_management_login_roles known_vty_authentication_and_protocols]
           requirements += name == "h3c" ? [ "temporary_vty_protocol_rebind_approved_for_inherited_protocol_changes" ] : [ "existing_shared_tacacs_key_for_remote_roles" ]

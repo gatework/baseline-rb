@@ -209,6 +209,8 @@ MIT，见 [LICENSE](LICENSE)。
 
 Comware/VRP TACACS 密钥按替换、撤销及方案重新进入后的最终状态归纳。`check.details[:key_slots]` 分别列出 H3C 认证/授权/计费及 Huawei 共享材料，关联已知端点并提示对端、AAA 引用和恢复前提。损坏状态需补证，检查仍受阻，不生成秘密命令。当前模型描述方案密钥，不代表已支持端点私有密钥继承。参见[TACACS 材料示例](examples/remediation_tacacs.rb)。
 
+NX-OS 管理 AAA 按原生全局登录方法、独立本地错误后备及命令/配置命令授权审计，非秘密 `aaa.nxos` 证据保留这些区别。禁用 TACACS 或损坏的最后声明不能证明远程使用；完整输入采用已确认的 SSH 默认，未明确的产品 Telnet 默认继续未知。明确的 `nxos` 批准可引用现有已核验组与密钥修正默认登录、两类授权及计费；登录本地错误后备需单独批准，控制台及共享对象保持原样。参见[离线示例](examples/remediation_nxos_aaa.rb)。参见[指标契约](docs/baseline-metrics.md)。
+
 Comware/VRP `aaa.bindings` 描述选中管理域的有序方法、TACACS 职责/组/端点引用、来源行及登录 VTY；本地后备与 `none` 分开记录，均不代表恢复访问已经可用。TACACS 使用检查复用这些证据，拒绝旧值和损坏引用。人工方案列出具体链路证据与批准前提，不自动挑选候选组；明确批准的 Comware 7 管理域 login 方法链可在完整核验后生成修正命令。`aaa.bindings` 保留选中域视角，`aaa.domain_bindings` 扩展覆盖已建模显式域的共享 TACACS 引用；实际用户路径、其他服务提供者及其他厂商绑定仍待分别补齐。参见[AAA 审核示例](examples/remediation_authentication.rb)。
 
 `tacacs.endpoints` 可声明 `bindings: [{kind: "aaa.domain", domain: "ADMIN", role: "authentication", position: "primary", selected: true}]`，在支持的 Comware/VRP 范围内核验完整域引用集合，包含未选中域的共享使用。position 是方法链优先级，与服务器主备不同。省略 bindings 只查定义；`[]` 需已知未绑定证据。局部/未建模引用保持未知，能力项区分对象与绑定支持。当前方案展示共享引用要求，不生成绑定切换命令。参见[绑定策略示例](examples/resource_bindings.rb)。

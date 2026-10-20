@@ -330,3 +330,27 @@ Huawei 的 local 与 local-case 用户名匹配规则不同。`aaa.bindings` 和
 域、共享认证/授权/计费方案、HWTACACS 模板、密钥、用户、其他范围及 ACL 均保留；恢复仍需独立认证规划，Huawei 的保存/commit 流程仍须按目标版本确认。独立状态模型验证原生 UI 命令、最终指标、共享配置保留及二次零变更。现有真实备份不含 Huawei 样本，当前 Huawei 证据来自原厂语法、合成配置及安装包验证，不能称为真机或该备份集上的 Huawei 验收。
 
 依据：[Huawei VTY 认证模式命令](https://support.huawei.com/enterprise/en/doc/EDOC1100214493/677f04d0)、[Huawei local/local-case 语义](https://info.support.huawei.com/hedex/api/pages/EDOC1100210438/AEK0901G/09/resources/dc/local-user_ap-group_view.html)、[Huawei HWTACACS、本地认证与计费故障说明](https://support.huawei.com/enterprise/en/doc/EDOC1100411502/5561445f/example-for-configuring-hwtacacs-and-local-authentication-command-authorization-and-command-auditing-for-administrators)。
+
+
+## NX-OS 原生管理认证审计
+
+NX-OS 使用全局 default/console 登录方法，不套用 IOS 的逐线命名登录列表。`aaa.nxos` 保留非秘密方法顺序、来源行、独立的 `fallback_on_error` 状态、commands/config-commands 两类授权、默认计费和 TACACS 功能状态。关闭本地错误后备不会清空服务器组；撤销方法列表回到本地默认，损坏的最后声明不能复用先前证据。组无法解析、未知方法或未建模 AAA 控制会保留不完整状态。该图是配置证据，不证明认证服务器可达或本地恢复可用。
+
+`ssh.vty_aaa` 依据原生默认登录链判断账户认证，`none` 不会通过；无需虚构数字 VTY 范围。`tacacs.authorization` 同时检查默认命令与配置命令授权，缺失一类不会被另一类已配置的 TACACS 掩盖。禁用 TACACS 功能时，三项 TACACS 使用检查不能通过。授权链中的 `none` 保留为无数据库后备证据，不表示本地账户恢复。
+
+完整输入可采用已确认的 SSH 默认启用状态；Telnet 默认随 Nexus 产品不同，缺少明确声明时不推导 SSH-only。显式 feature/no feature 按最终声明归约，损坏声明保留未知。IOS 的 login/transport input 不能作为 NX-OS 原生登录证明。原生 AAA 修正使用下节独立批准，不复用 IOS 命名列表；NX-OS VTY 协议修正命令仍未实现。
+
+依据：[NX-OS 原生 AAA 与本地后备](https://www.cisco.com/c/en/us/td/docs/dcn/nx-os/nexus9000/105x/configuration/security/cisco-nexus-9000-series-nx-os-security-configuration-guide-release-105x/m-configuring-aaa.html)、[原生授权方法与 none](https://www.cisco.com/c/en/us/td/docs/switches/datacenter/nexus5500/sw/command/reference/security/n5500-sec-cr/n5500-sec_cmds_a.html)、[SSH 默认状态](https://www.cisco.com/c/en/us/td/docs/dcn/nx-os/nexus9000/104x/configuration/security/cisco-nexus-9000-series-nx-os-security-configuration-guide-release-104x/m-configuring-ssh-and-telnet.html)、[Nexus 3600 的 Telnet 默认差异](https://www.cisco.com/c/en/us/td/docs/dcn/nx-os/nexus3600/102x/configuration/security/cisco-nexus-3600-nx-os-security-configuration-guide-102x/m-configuring-ssh-and-telnet.pdf)。官方语法、合成测试与备份形态验证不等同于实机登录验收。
+
+
+## NX-OS 原生管理 AAA 修正
+
+`tacacs.login`、`tacacs.authorization`、`tacacs.accounting` 及 `ssh.vty_aaa` 可使用 `remediation.syntax_profile: nxos`。作用域固定为当前配置上下文的全局 default，不能混用 management_domain 或数字 vty_ranges；console 登录与其后备控制保持原样。所有操作都需 `management_consumers_verified: true` 和 `local_fallback_access_verified: true`；这些是外部批准，不由备份或可用组自动填充。标量已满足时不强制迁移到另一组或修改后备。
+
+`methods` 必须明确指定。默认登录接受 `[{kind: local}]` 或一个及以上有序 `[{kind: tacacs, group: OPS}]`。远程登录还需 `local_fallback_on_error: true`；原生 fallback error local 在激活新登录组之前设置，不能误拼为 group OPS local。SSH 账户认证为 true 时可将 none 改为批准的本地或远程方法；其他已启用 TACACS/SSH 规则同时约束最终方法，不能为同一登录链批准不同目标。
+
+授权的远程 methods 为有序 TACACS 组后接 `{kind: local}`，分别规划 commands 与 config-commands；两者只修改不匹配项，整项校验和渲染完成后才公开操作。计费接受有序 TACACS 组，不拼接未核验的 local 尾部。三项 TACACS 规则为 false 时只支持明确批准的单个 local 替代，不从 false 推导 none、删除服务器或开放无认证访问。本地方法切换保留独立 fallback 声明。
+
+远程目标必须已有启用的 TACACS 功能、可解析的组地址成员和同身份端点密钥存在性，并具备 `tacacs_peer_compatibility_verified: true`。特殊 group tacacs+ 验证当前全体服务器；命名组逐成员验证。共享组的 VRF/source、其他使用者和材料保持原样，外部对端核验须涵盖既有路径。端点新增、删除、材料配置及未解析的原生引用不能由此偷偷完成；同一策略要求的端点变更须先处理。操作携带完整指纹，其他厂商呈现器或不同操作不能借用批准。
+
+参见[可直接运行的合成示例](../examples/remediation_nxos_aaa.rb)及上节原厂语法依据。备份形态故障注入与独立命令状态模型验证的是离线配置闭环，不能替代目标固件接受、远程职责、本地恢复和共享消费者的人工实测；保存仍是独立人工提示。
